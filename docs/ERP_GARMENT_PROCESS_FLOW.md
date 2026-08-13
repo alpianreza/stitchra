@@ -1,8 +1,8 @@
 # ERP GARMENT — PROCESS FLOW (detail per proses)
 
-> **Status:** DRAFT v0.2 — koreksi sitasi BR (F-2, F-3); menunggu approval kunci v1.0
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, MODULE_MAP v0.2, DEC-2026-08-13-01 & DEC-2026-08-13-02
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v1.0, MODULE_MAP v1.0, DEC-2026-08-13-01 s/d 03
 > **Notasi:** `[DOK]` = dokumen transaksi; `(STATUS)` = status yang di-set; `⇒` = efek stok via Inventory Transaction Service (BR-013).
 
 ---
@@ -104,7 +104,7 @@
 1. `[JW]` Job Work Order ke supplier tipe subcon (proses: print/bordir/washing/CMT), refer ke MO/operasi → approval.
 2. **Material out**: panel/bundle/bahan dikirim ⇒ ledger `TRANSFER` ke lokasi virtual **SUBCON** (kepemilikan tetap company; tidak mengubah valuation).
 3. **Return**: barang kembali → QC → qty bagus ⇒ `TRANSFER` balik ke WIP; qty reject → NCR + claim subcon.
-4. Invoice jasa subcon → match ke JW → **biaya masuk actual cost MO** (BR-009) + AP (PF-10).
+4. Invoice jasa subcon → match ke JW → **biaya masuk actual cost MO** (BR-009/BR-091) + AP (PF-10).
 5. Report: outstanding di subcon + aging (mitigasi risiko bahan hilang).
 
 ---
@@ -120,13 +120,13 @@
 
 ---
 
-## PF-10 FINANCE (AR/AP/Journal)
+## PF-10 FINANCE (Full GL — DEC-2026-08-13-03)
 
 1. **AR**: invoice dari CI/shipment → aging per buyer → payment receipt (currency + rate; selisih kurs ke journal).
 2. **AP**: dari supplier invoice (PO match) & invoice subcon → payment → aging per supplier.
-3. **Journal operasional** (otomatis dari event): GR (inventory vs accrued AP), invoice match (accrual → AP), shipment (COGS vs inventory), payment, adjustment stok, variance opname.
-4. **Period lock** (OBD-026): transaksi periode terkunci tidak bisa dibuat/diubah; koreksi via adjustment periode berjalan.
-5. **Ekspor journal** ke software akuntansi existing (OBD-024) via integration jobs (CSV/Excel).
+3. **Journal operasional otomatis** (dari event): GR (inventory vs accrued AP), invoice match (accrual → AP), shipment (COGS vs inventory), payment, adjustment stok, variance opname. Plus **journal umum/manual** untuk transaksi non-operasional.
+4. **Period closing & lock** (OBD-026): tutup buku per periode; transaksi periode terkunci tidak bisa dibuat/diubah; koreksi via adjustment periode berjalan.
+5. **Laporan keuangan dari GL** (BR-101): trial balance, P&L, balance sheet dasar. Ekspor journal ke sistem eksternal **opsional** (saat ini tidak ada software akuntansi eksternal).
 
 ---
 
@@ -158,7 +158,6 @@ Setiap panah = kolom `source_document` + `source_document_line` (I-05).
 
 ---
 
-## NEXT STEP
+## PENUTUP
 
-- Menjadi dasar `ERP_GARMENT_BUSINESS_RULES.md` (konsolidasi semua BR + default OBD) dan `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3).
-- Menunggu approval Anda untuk dikunci v1.0.
+Dokumen ini dikunci **v1.0** dan menjadi acuan alur untuk seluruh pengembangan modul. Perubahan alur hanya via OBD/DEC baru + persetujuan pemilik.
