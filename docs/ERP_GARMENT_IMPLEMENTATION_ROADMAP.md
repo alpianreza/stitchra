@@ -1,15 +1,15 @@
 # ERP GARMENT — IMPLEMENTATION ROADMAP
 
-> **Status:** DRAFT v0.2 — TD-01 resolved (DEC-2026-08-13-02), fix rujukan TD-02, subcon dipindah ke Phase 7; menunggu approval kunci v1.0
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** seluruh blueprint (FASE 0 → Database Blueprint) + BLUEPRINT_REVIEW, master prompt FASE 22
-> **Aturan:** satu fase selesai + teruji + direview sebelum fase berikutnya. Tidak ada coding sebelum dokumen ini disetujui.
+> **Dasar:** seluruh blueprint (FASE 0 → Database Blueprint) + BLUEPRINT_REVIEW, DECISION_LOG DEC-2026-08-13-01 s/d 03, master prompt FASE 22
+> **Aturan:** satu fase selesai + teruji + direview sebelum fase berikutnya. Blueprint dikunci v1.0; **coding Phase 1 menunggu instruksi eksplisit pemilik** (DEC-03).
 
 ---
 
 ## 1. KEPUTUSAN TEKNIS
 
-### TD-01 — Tech stack ✅ RESOLVED (DEC-2026-08-13-02)
+### TD-01 — Tech stack ✅ RESOLVED (DEC-2026-08-13-02 & 03)
 
 Stack pilihan pemilik (mengikat):
 
@@ -17,24 +17,25 @@ Stack pilihan pemilik (mengikat):
 |---|---|
 | Backend | Laravel 13 + PHP 8.5 (modular monolith, modul = Module Map) |
 | Frontend | React + Next.js 16 |
-| Database | PostgreSQL 18 (CHECK constraint stok ≥ 0, row locking) |
+| Database | **MySQL 8.x sementara** (DEC-03) → migrasi terjadwal ke PostgreSQL; aturan portabilitas mengikat (Database Blueprint §7) |
 | Cache / Queue | Redis 8 + Laravel Horizon (job berat: MRP, costing, report, import/export) |
 | Realtime | Laravel Reverb (WebSocket) — live dashboard produksi |
 | API / Auth | Laravel REST API + Sanctum (SPA + token perangkat shop floor) |
 | File | S3-compatible storage (tech pack, foto QC, invoice) |
-| Search | PostgreSQL FTS → OpenSearch bila perlu |
+| Search | **MySQL FULLTEXT** dulu (DEC-03) → OpenSearch bila perlu |
 | PDF / Excel | Browsershot (Chromium) / Laravel Excel |
 | Testing | Pest + PHPUnit + Playwright (E2E) |
 | Infra | Docker + Nginx + GitHub Actions CI/CD |
 | Monitoring | Sentry + Laravel Telescope (non-prod) / Pulse (prod) |
 
-Catatan pelaksanaan (dari DEC-2026-08-13-02): pin versi di composer/package.json; verifikasi kompatibilitas paket terhadap Laravel 13 di awal Phase 1; Telescope hanya non-prod; scope multi-company via global scope + middleware `company_id`; ITS (BR-013) sebagai domain service dengan DB transaction.
+Catatan pelaksanaan: pin versi di composer/package.json; verifikasi kompatibilitas paket terhadap Laravel 13 di awal Phase 1; Telescope hanya non-prod; scope multi-company via global scope + middleware `company_id`; ITS (BR-013) sebagai domain service dengan DB transaction; dilarang fitur DB spesifik-engine (aturan portabilitas §7 Database Blueprint).
 
-### TD-02 — Deployment `DECISION REQUIRED` (terkait pertanyaan discovery FASE 0 no. 33)
-- OPSI A: Cloud (Docker di VPS/managed) — maintenance ringan, akses multi-site mudah.
-- OPSI B: On-premise di pabrik — tahan internet putus, beban maintenance sendiri.
-- OPSI C: Hybrid (app on-prem + backup/sync cloud).
-- Rekomendasi: mulai **OPSI A** dengan requirement offline-tolerance untuk modul shop floor di fase 6 (queue lokal saat scan).
+### TD-02 — Deployment ✅ RESOLVED (DEC-2026-08-13-03)
+
+**On-premise di pabrik untuk tahap awal**; kemungkinan pindah ke cloud di masa depan.
+- Seluruh stack berjalan di Docker on-prem (Laravel, Next.js, MySQL, Redis, Nginx).
+- Arsitektur tetap **cloud-ready** (config via env, S3-compatible storage, stateless app) agar migrasi ke cloud nanti tanpa rewrite.
+- Offline-tolerance shop floor (queue lokal saat scan) tetap requirement Phase 6 — makin penting karena on-prem.
 
 ### TD-03 — Perangkat shop floor (OBD-031) `DECISION REQUIRED` sebelum Phase 6
 - Browser-based (tablet/HP + kamera/scan gun USB) direkomendasikan: tanpa instalasi, murah.
@@ -47,9 +48,9 @@ Catatan pelaksanaan (dari DEC-2026-08-13-02): pin versi di composer/package.json
 > Estimasi dalam *minggu kerja tim kecil (1–2 dev)* — indikatif, direvisi setelah Phase 1.
 
 ### PHASE 1 — Core Foundation (±3–4 minggu)
-**Scope:** organization, user+auth (Sanctum), RBAC, approval engine, numbering, audit log, settings, notification dasar, layout app + i18n skeleton.
-- Deliverable: login, manajemen user/role/permission, approval engine terdaftar sebagai shared service, numbering service concurrency-safe (test: 100 request paralel → 100 nomor unik), audit interceptor otomatis (Laravel observer/middleware).
-- Keputusan dibutuhkan: TD-02.
+**Scope:** infra on-prem (Docker: MySQL 8, Redis, Nginx, S3-compatible), organization, user+auth (Sanctum), RBAC, approval engine, numbering, audit log, settings, notification dasar, layout app + i18n skeleton.
+- Deliverable: environment dev/staging on-prem jalan; login; manajemen user/role/permission; approval engine terdaftar sebagai shared service; numbering service concurrency-safe (test: 100 request paralel → 100 nomor unik); audit interceptor otomatis (Laravel observer/middleware).
+- Keputusan dibutuhkan: — (TD-01 & TD-02 resolved).
 - Risiko: fondasi salah → semua fase rework. Mitigasi: review arsitektur di akhir fase.
 
 ### PHASE 2 — Master Data (±3–4 minggu)
@@ -75,16 +76,16 @@ Catatan pelaksanaan (dari DEC-2026-08-13-02): pin versi di composer/package.json
 **Scope:** cut plan → cutting order → marker/efficiency → lay + roll allocation (shade validation) → cut output → bundling + barcode ticket → WIP transfer; line assignment; line output harian (+struktur siap operator scan); downtime; finishing + repair; leftover return → inventory; wastage → costing hook; live progress via Reverb.
 - Test: leftover per roll benar (100 − 92 = 8 kembali ke stok), barcode unik, efisiensi = (SAM×output)/(manpower×menit)×100.
 - Keputusan: TD-03 (perangkat), OBD-013 (bundle size), OBD-015 (koreksi output) sebelum mulai.
-- UX khusus: halaman operator scan-first, keyboard/barcode friendly, mobile responsive (FASE 18).
+- UX khusus: halaman operator scan-first, keyboard/barcode friendly, mobile responsive (FASE 18); offline-tolerance (queue lokal saat scan) — penting untuk on-prem.
 
 ### PHASE 7 — QC, Rework, Packing, Shipment, Subcontracting (±4–5 minggu)
 **Scope:** inline/endline inspection, defect library enforcement; **AQL engine ISO 2859-1 G-II** (code letter → sample size → Ac/Re; default 2.5/4.0; per buyer config); NCR + disposition + rework counter + re-inspection; packing instruction validation; carton + packing list; shipment plan + toleransi short/excess; container; commercial invoice; dokumen ekspor; FG receipt & shipment stock-out; **subcontracting: job work order + material out/in lokasi SUBCON + aging vendor (OBD-002/BR-092)**.
 - Test: lot 1.200 @AQL2.5 → sample 80, Ac 5 / Re 6 (sesuai tabel); hanya QC_PASS masuk carton; toleransi buyer ditegakkan; stok di lokasi SUBCON tidak mengubah valuation (BR-090).
 - Keputusan: OBD-002, OBD-017, OBD-018, OBD-019, OBD-020, OBD-021.
 
-### PHASE 8 — Costing & Finance (±4–6 minggu)
-**Scope:** biaya jasa subcon → actual cost MO (BR-091); actual cost per MO (material dari ledger, labor, OH per SAM-minute, subcon, wastage) + variance vs standard + margin per SO/style/buyer; AR (dari CI) + aging + payment + selisih kurs; AP + payment; journal operasional + period lock; **ekspor journal** ke software akuntansi (OBD-024).
-- Keputusan: OBD-024 (jawaban software akuntansi), OBD-025, OBD-026 sebelum mulai fase.
+### PHASE 8 — Costing & Finance / Full GL (±4–6 minggu)
+**Scope:** biaya jasa subcon → actual cost MO (BR-091); actual cost per MO (material dari ledger, labor, OH per SAM-minute, subcon, wastage) + variance vs standard + margin per SO/style/buyer; **Finance full GL (BR-101):** COA, journal operasional otomatis (dari event GR/shipment/payment/adjustment) + journal umum/manual, AR (dari CI) + aging + payment + selisih kurs, AP + payment, cash/bank, **period closing**, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar); ekspor journal **opsional** (bila kelak perlu integrasi).
+- Keputusan: OBD-025 (multi-currency operasional), OBD-026 (period lock) sebelum mulai fase.
 
 ### PHASE 9 — Dashboard, Reporting, Hardening (±3–4 minggu)
 **Scope:** dashboard Management/PPIC/Warehouse/Production/QC (data nyata dari ledger/summary, live via Reverb); report per domain (FASE 1 §13) + export Excel/PDF; traceability viewer (roll→carton; MRP trace); performance tuning (index, summary tables, partition ledger bila perlu); security review; regression test menyeluruh (Playwright); UAT + pilot 1–3 style + 1 line.
@@ -97,14 +98,14 @@ Catatan pelaksanaan (dari DEC-2026-08-13-02): pin versi di composer/package.json
 
 | Fase | Keputusan yang harus sudah dijawab |
 |---|---|
-| 1 | TD-02 (deployment) |
+| 1 | — (TD-01 & TD-02 resolved via DEC-02/03) |
 | 2 | — (data profil bisnis membantu: jumlah warehouse/line/operator) |
 | 3 | OBD-012 (pemilik SAM) |
 | 4 | OBD-006 (shade), OBD-014 (backflush trim) |
 | 5 | OBD-010 (alokasi shortage) |
 | 6 | TD-03 (perangkat), OBD-013, OBD-015 |
 | 7 | OBD-002, OBD-017, OBD-018, OBD-019, OBD-020, OBD-021 |
-| 8 | **OBD-024** (software akuntansi existing), OBD-025, OBD-026 |
+| 8 | OBD-025 (multi-currency operasional), OBD-026 (period lock) |
 | 9 | OBD-030 (multi-language operasional) |
 
 ## 4. DEFINITION OF DONE PER FASE
@@ -115,11 +116,11 @@ Catatan pelaksanaan (dari DEC-2026-08-13-02): pin versi di composer/package.json
 4. Dokumen teknis modul (README per modul) + update blueprint bila ada deviasi (via OBD/DEC baru).
 5. Demo ke pemilik + approval sebelum fase berikutnya.
 
-## 5. STRUKTUR REPO (mengikuti DEC-2026-08-13-02)
+## 5. STRUKTUR REPO (mengikuti DEC-2026-08-13-02 & 03)
 
 ```
 stitchra/
-├─ docs/                    # seluruh blueprint (folder ini)
+├─ docs/                    # seluruh blueprint (folder ini) — LOCKED v1.0
 ├─ apps/
 │  ├─ api/                  # Laravel 13 — modular monolith (modul = Module Map)
 │  └─ web/                  # Next.js 16 (React) — SPA via Sanctum
@@ -132,6 +133,4 @@ stitchra/
 
 ## NEXT STEP
 
-1. Anda review seluruh dokumen blueprint (9 dokumen di `docs/`).
-2. Jawab **TD-02** (deployment) — satu-satunya keputusan tersisa sebelum Phase 1; bila bisa sekalian **OBD-024** (software akuntansi) & profil bisnis FASE 0 no. 1–4.
-3. Setelah roadmap disetujui → kunci semua dokumen **v1.0** → mulai **Phase 1 coding** (Core Foundation).
+Blueprint **dikunci v1.0** (DEC-2026-08-13-03). Coding **belum dimulai** — menunggu instruksi eksplisit pemilik untuk memulai **Phase 1 (Core Foundation)**. Keputusan berikutnya yang dibutuhkan: TD-03 (sebelum Phase 6), OBD per fase sesuai tabel §3.
