@@ -1,8 +1,8 @@
 # ERP GARMENT — MODULE MAP (FASE 2)
 
-> **Status:** DRAFT v0.1 — menunggu review
+> **Status:** DRAFT v0.2 — koreksi sitasi BR (F-1) & TD-01 resolved; menunggu approval kunci v1.0
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, DECISION_LOG DEC-2026-08-13-01
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, DECISION_LOG DEC-2026-08-13-01 & DEC-2026-08-13-02
 > **Tujuan:** Memetakan domain → modul → tanggung jawab → kepemilikan data → dependensi, sebagai dasar arsitektur & database blueprint (FASE 3).
 
 ---
@@ -88,7 +88,7 @@
 
 | Modul | Tanggung jawab | Data yang dimiliki | Dependensi |
 |---|---|---|---|
-| `receiving.gr` | GR + lines; **roll-level untuk fabric** (BR-003/005), status awal `QUALITY_HOLD` (BR-004) | `goods_receipts`, `gr_lines`, `fabric_rolls` | purchasing.po, inventory (via ITS) |
+| `receiving.gr` | GR + lines; **roll-level untuk fabric** (BR-003/052), status awal `QUALITY_HOLD` (BR-004) | `goods_receipts`, `gr_lines`, `fabric_rolls` | purchasing.po, inventory (via ITS) |
 | `receiving.inspection` | Fabric/trim inspection: 4-point, shrinkage, GSM, shade; PASS → release hold, FAIL → claim/return | `inward_inspections`, `inspection_lines`, `supplier_returns` | receiving.gr, quality (defect lib) |
 
 ### 2.8 INVENTORY (core engine)
@@ -230,13 +230,14 @@ REPORTING membaca semua (read-only)
 
 ---
 
-## 5. KEPUTUSAN ARSITEKTUR YANG MASIH TERBUKA (non-blocking)
+## 5. KEPUTUSAN ARSITEKTUR
 
 | Item | Status | Catatan |
 |---|---|---|
-| Tech stack ( bahasa/framework/DB ) | ⏳ diputuskan sebelum implementasi Phase 1 | Rekomendasi menyusul di roadmap (PostgreSQL untuk relational + constraint stok) |
-| Monolith-modular vs microservices | ⏳ | Rekomendasi: **modular monolith** dulu (single deploy, module boundaries ketat) — microservices hanya bila skala menuntut |
-| Message broker untuk domain events | ⏳ | Awal: in-process events; interface siap broker |
+| Tech stack | ✅ RESOLVED (DEC-2026-08-13-02) | Laravel 13/PHP 8.5 (backend) + React/Next.js 16 (frontend) + PostgreSQL 18 + Redis 8 + Horizon/Reverb/Sanctum |
+| Monolith-modular vs microservices | ✅ RESOLVED | **Modular monolith** (single deploy, module boundaries ketat); ekstraksi microservice dimungkinkan nanti karena I-01..I-08 |
+| Message broker untuk domain events | ⏳ | Awal: in-process events (Laravel Events + Horizon queue); interface siap broker |
+| Deployment (TD-02) | ⏳ diputuskan sebelum Phase 1 | Rekomendasi di roadmap |
 | Buyer portal (OBD-003) | ⏳ fase lanjut | — |
 
 ---
@@ -244,4 +245,4 @@ REPORTING membaca semua (read-only)
 ## 6. NEXT STEP
 
 - Modul map ini menjadi dasar `ERP_GARMENT_PROCESS_FLOW.md` (detail alur per proses) dan `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3: ERD + tabel per modul).
-- Menunggu review/approval Anda sebelum dikunci v1.0.
+- Menunggu approval Anda untuk dikunci v1.0.
