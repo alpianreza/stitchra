@@ -1,15 +1,15 @@
 # ERP GARMENT — BUSINESS RULES (konsolidasi)
 
-> **Status:** DRAFT v0.1 — menunggu review
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Spec v0.1, MODULE_MAP v0.1, PROCESS_FLOW v0.1, DECISION_LOG DEC-2026-08-13-01
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Spec v1.0, MODULE_MAP v0.2, PROCESS_FLOW v0.2, DECISION_LOG DEC-2026-08-13-01 s/d 03
 > **Tujuan:** Satu dokumen berisi SELURUH business rule yang mengikat implementasi. Setiap rule punya kode, status, dan sumber keputusan. Developer hanya boleh mengimplementasikan rule yang tercantum di sini; rule baru harus ditambahkan lewat OBD + approval.
 
 ---
 
 ## 0. LEGENDA STATUS
 
-- ✅ **LOCKED** — diputuskan (via DEC-2026-08-13-01), wajib diimplementasikan persis seperti tertulis.
+- ✅ **LOCKED** — diputuskan (via DEC), wajib diimplementasikan persis seperti tertulis.
 - 🟡 **DEFAULT** — belum diputuskan eksplisit (OBD non-P0); implementasi mengikuti default ini sampai diganti keputusan resmi.
 - ⚙️ **CONFIGURABLE** — nilai/ambang diatur via master data/settings, bukan hard-code.
 
@@ -105,7 +105,7 @@
 |---|---|---|
 | BR-090 | ✅ LOCKED | Material ke subcon = transfer ke lokasi virtual SUBCON (kepemilikan tetap company; tidak mengubah valuation); outstanding + aging dilacak. |
 | BR-091 | ✅ LOCKED | Biaya jasa subcon masuk **actual cost MO** terkait dan AP. |
-| BR-092 | 🟡 DEFAULT (OBD-002) | Modul subcon in-scope desain; implementasi fase 6–7. |
+| BR-092 | 🟡 DEFAULT (OBD-002) | Modul subcon in-scope desain; implementasi di Phase 7 (flow) & Phase 8 (costing). |
 
 ## 10. COSTING & FINANCE
 
@@ -113,7 +113,7 @@
 |---|---|---|
 | BR-009 | ✅ LOCKED | Estimated per style (revisi per SO); **actual per MO**; laporan per SO. Overhead = Σ(SAM × output) × OH rate per menit (rate per company per periode, ⚙️). Labor = output × rate (piece-rate/line; formula ⚙️). |
 | BR-100 | ✅ LOCKED | Estimated cost sheet yang APPROVED menjadi **standard cost** untuk variance. |
-| BR-101 | 🟡 DEFAULT (OBD-024) | Finance awal: AR/AP + journal operasional + valuation + COGS + **ekspor journal**; full GL menunggu info software akuntansi existing. |
+| BR-101 | ✅ LOCKED (OBD-024 RESOLVED, DEC-2026-08-13-03) | Finance di ERP = **full General Ledger internal**: COA, journal (operasional otomatis + umum/manual), AR/AP, cash/bank, period closing, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar). Perusahaan sebelumnya Excel/manual → tidak ada integrasi akuntansi eksternal; modul ekspor journal bersifat **opsional**. |
 | BR-102 | 🟡 DEFAULT (OBD-025) | Schema multi-currency sejak awal: dokumen menyimpan currency + exchange rate; selisih kurs ke journal. |
 | BR-103 | 🟡 DEFAULT (OBD-026) | Period lock: transaksi di periode terkunci tidak bisa dibuat/diubah; koreksi via adjustment periode berjalan. |
 
@@ -137,10 +137,10 @@
 
 ## RINGKASAN
 
-- **LOCKED:** 24 rule (BR-001..BR-121 bertanda ✅).
-- **DEFAULT (menunggu keputusan resmi):** 15 rule bertanda 🟡 — diimplementasikan sesuai default, mudah diubah karena ⚙️ configurable.
+- **LOCKED:** 25 rule bertanda ✅ (termasuk BR-101 yang dikunci via DEC-2026-08-13-03).
+- **DEFAULT (menunggu keputusan resmi):** 14 rule bertanda 🟡 — diimplementasikan sesuai default, mudah diubah karena ⚙️ configurable.
 - Rule baru/perubahan → tambah baris di dokumen ini via OBD + approval (master prompt aturan 25).
 
-## NEXT STEP
+## PENUTUP
 
-`ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3) akan menerjemahkan seluruh rule ini menjadi ERD, tabel, constraint, dan index.
+Dokumen ini dikunci **v1.1** (kunci awal v1.0 + kunci BR-101 via DEC-03 dalam kesempatan yang sama). Menjadi acuan tunggal business rule untuk seluruh implementasi.

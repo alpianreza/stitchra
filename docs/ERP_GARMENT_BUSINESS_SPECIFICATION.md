@@ -1,8 +1,8 @@
 # ERP GARMENT — BUSINESS SPECIFICATION (FASE 1)
 
-> **Status:** DRAFT v0.1 — menunggu review pemilik proyek
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 Business Discovery (LOCKED v1.0) + DECISION_LOG DEC-2026-08-13-01
+> **Dasar:** FASE 0 Business Discovery (LOCKED v1.0) + DECISION_LOG DEC-2026-08-13-01, DEC-2026-08-13-02, DEC-2026-08-13-03
 > **Aturan:** Dokumen ini adalah sumber kebenaran bisnis. Kode mengikuti dokumen ini, bukan sebaliknya. Item yang belum diputuskan ditandai `OBD-NNN` (lihat FASE 0 & DECISION_LOG).
 
 ---
@@ -37,11 +37,10 @@ Prinsip sistem:
 - Shipping/Export: shipment plan, container, commercial invoice, dokumen ekspor (LC-ready).
 - Subcontracting/Job Work: material out → tracking → return, biaya jasa ke costing.
 - Costing: estimated/standard/actual, variance, margin per style/order.
-- Finance: AR (invoice buyer), AP (supplier/subcon), journal operasional, inventory valuation, COGS, ekspor journal.
+- **Finance — FULL GL (OBD-024 RESOLVED, DEC-2026-08-13-03):** COA, journal (operasional + umum/manual), AR (invoice buyer), AP (supplier/subcon), cash/bank, period closing, inventory valuation, COGS, revenue, expense, laporan keuangan (trial balance, P&L, balance sheet dasar). Perusahaan sebelumnya Excel/manual → tidak ada integrasi akuntansi eksternal; ekspor journal bersifat opsional.
 - Reporting & Dashboard per domain.
 
 ### Out-of-scope (fase awal, hook disiapkan)
-- Full General Ledger & financial statement lengkap (menunggu keputusan akhir OBD-024; interface ekspor disediakan).
 - Payroll & HR lengkap (data employee/operator tetap ada untuk produksi).
 - Buyer portal eksternal (OBD-003).
 - Integrasi CAD/marker software (impor manual/CSV dulu).
@@ -72,7 +71,7 @@ Mengacu FASE 0 bagian 3 (18 aktor): Owner/Management, Admin Sistem, Sales/Mercha
 | Packing | packinglist.*, carton.* |
 | Shipping | shipment.*, exportdoc.* |
 | Finance | invoice.*, payment.*, journal.*, valuation.view |
-| Accounting | finance + period.lock, cogs.* |
+| Accounting | finance + period.lock, journal.approve, financial report |
 | Management | *.view semua domain, dashboard, approval level akhir |
 
 Aturan: permission dicek **server-side** di setiap endpoint; frontend hanya menyembunyikan UI. Approval action (`*.approve`) terpisah dari `*.update`.
@@ -97,9 +96,9 @@ Mengadopsi peta modul master prompt (FASE 2) dengan penyesuaian hasil discovery:
 15. **Shipping** — Shipment, Container, CommercialInvoice, ExportDocument.
 16. **Subcontracting** — JobWorkOrder, MaterialOut, JobReturn, SubconCost.
 17. **Costing** — StandardCost, ActualCost (per MO), Variance, Margin.
-18. **Finance** — COA, Journal (operasional), AR, AP, CashBank, Valuation, COGS, ExportInterface.
+18. **Finance** — COA, Journal (operasional + umum), AR, AP, CashBank, PeriodClosing, Valuation, COGS, Financial Reports (full GL), ExportInterface (opsional).
 19. **Reporting** — per domain + Management dashboard.
-20. **Integration** — Barcode/QR, import/export (CSV/Excel), hook akuntansi.
+20. **Integration** — Barcode/QR, import/export (CSV/Excel).
 
 ## 6. BUSINESS PROCESSES
 
@@ -182,6 +181,7 @@ Approval engine terpusat (sequential & parallel, rejection, revision, delegation
 | Packing List | QC Final | Shipping |
 | Shipment / Commercial Invoice | Shipping Manager | Finance |
 | Payment | Finance Manager | Management |
+| Period Closing (GL) | Accounting | Finance Manager |
 
 Semua threshold nilai berasal dari **approval matrix (master data)**, bukan kode.
 
@@ -223,8 +223,8 @@ Minimum per domain (rinci di FASE 16 master prompt), ditambah hasil discovery:
 - **Warehouse:** stock balance per item/warehouse/lot/roll, aging, valuation (moving average), akurasi opname.
 - **Production:** plan vs actual, efficiency (SAM), WIP per proses, reject & downtime Pareto, leftover & wastage per marker.
 - **QC:** defect Pareto per kategori/proses/supplier kain, AQL pass rate per buyer, rework rate.
-- **Costing:** cost sheet estimated vs actual per MO/SO, variance (material/labor/OH), margin per style/buyer.
-- **Finance:** AR aging, AP aging, outstanding PO vs GR, COGS per periode.
+- **Costing:** cost sheet estimated vs actual per MO/SO, variance (material/labor/OH/subcon), margin per style/buyer.
+- **Finance:** AR aging, AP aging, outstanding PO vs GR, COGS per periode, **trial balance, P&L, balance sheet dasar (full GL — DEC-03)**.
 - Semua report: filter per company/periode/buyer/style; export Excel/PDF; data dari ledger/view — bukan query langsung tabel transaksi untuk report berat.
 
 ## 14. AUDIT REQUIREMENTS
@@ -245,11 +245,12 @@ Minimum per domain (rinci di FASE 16 master prompt), ditambah hasil discovery:
 ## 16. OPEN BUSINESS DECISIONS (SISA)
 
 Terbuka dengan default sementara (detail & rekomendasi di FASE 0 §7), target keputusan per fase implementasi:
-OBD-002 (subcon in-scope), OBD-003 (buyer portal), OBD-006 (shade rule), OBD-010 (alokasi shortage), OBD-012 (pemilik SAM & target), OBD-013 (bundle size), OBD-014 (backflush trim), OBD-015 (koreksi output), OBD-017/018 (batas rework & second grade), OBD-019 (toleransi shipment %), OBD-020 (aturan assortment), OBD-021 (batas amendment), OBD-024 (keputusan akhir GL — menunggu info software akuntansi existing), OBD-025 (multi-currency operasional), OBD-026 (period lock), OBD-030 (multi-language), OBD-031 (perangkat shop floor), OBD-032 (integrasi existing).
+OBD-002 (subcon in-scope), OBD-003 (buyer portal), OBD-006 (shade rule), OBD-010 (alokasi shortage), OBD-012 (pemilik SAM & target), OBD-013 (bundle size), OBD-014 (backflush trim), OBD-015 (koreksi output), OBD-017/018 (batas rework & second grade), OBD-019 (toleransi shipment %), OBD-020 (aturan assortment), OBD-021 (batas amendment), OBD-025 (multi-currency operasional), OBD-026 (period lock), OBD-030 (multi-language), OBD-031 (perangkat shop floor), OBD-032 (integrasi existing).
+
+**RESOLVED sejak draft v0.1:** OBD-024 → full GL di ERP (DEC-2026-08-13-03).
 
 ---
 
-## NEXT STEP (menunggu persetujuan Anda)
-1. Review dokumen ini → setujui / koreksi → dikunci sebagai **v1.0**.
-2. Lanjut berurutan: `ERP_GARMENT_MODULE_MAP.md` (FASE 2) → `ERP_GARMENT_PROCESS_FLOW.md` → `ERP_GARMENT_BUSINESS_RULES.md` → `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3) → `ERP_GARMENT_ROLES_PERMISSIONS.md` → `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`.
-3. Satu info yang masih dibutuhkan: **software akuntansi yang dipakai saat ini** (untuk menutup OBD-024).
+## PENUTUP
+
+Dokumen ini dikunci **v1.0**. Perubahan berikutnya hanya via OBD/DEC baru + persetujuan pemilik (master prompt aturan 25: kode mengikuti business specification).
