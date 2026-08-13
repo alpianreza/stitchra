@@ -1,8 +1,8 @@
 # ERP GARMENT — MODULE MAP (FASE 2)
 
-> **Status:** DRAFT v0.2 — koreksi sitasi BR (F-1) & TD-01 resolved; menunggu approval kunci v1.0
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, DECISION_LOG DEC-2026-08-13-01 & DEC-2026-08-13-02
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v1.0, DECISION_LOG DEC-2026-08-13-01 s/d 03
 > **Tujuan:** Memetakan domain → modul → tanggung jawab → kepemilikan data → dependensi, sebagai dasar arsitektur & database blueprint (FASE 3).
 
 ---
@@ -32,7 +32,7 @@
 | `core.audit` | Audit log append-only: who/what/when/before/after/IP/device | `audit_logs` | (dipanggil semua modul) |
 | `core.settings` | System settings, feature flags, konfigurasi formula | `settings` | organization |
 | `core.notification` | Notifikasi in-app/email (approval pending, shortage, dst.) | `notifications` | user |
-| `core.integration` | Import/export (CSV/Excel), barcode payload, hook akuntansi (OBD-024) | `integration_jobs` | — |
+| `core.integration` | Import/export (CSV/Excel), barcode payload | `integration_jobs` | — |
 
 **Catatan:** approval, numbering, audit adalah *shared service* — dipanggil modul bisnis, tidak pernah di-bypass.
 
@@ -175,14 +175,14 @@
 | `costing.actual` | Actual cost per MO (BR-009): material (dari ledger issue), labor (output×rate), OH (Σ SAM×output × OH rate), subcon, wastage | `actual_costs`, `actual_cost_lines` | inventory.ledger (read), sewing.output, subcon.cost, master.finance |
 | `costing.variance` | Estimated vs actual per MO/SO; margin per style/buyer | (view/report) | costing.standard, costing.actual |
 
-### 2.18 FINANCE
+### 2.18 FINANCE (full GL — DEC-2026-08-13-03)
 
 | Modul | Tanggung jawab | Data yang dimiliki | Dependensi |
 |---|---|---|---|
 | `finance.ar` | AR invoice ke buyer, payment receipt, aging | `ar_invoices`, `ar_payments` | shipping.docs (CI), master.customer |
 | `finance.ap` | AP dari supplier invoice, payment, aging | `ap_payments` | purchasing.invoice |
-| `finance.journal` | Journal operasional (inventory valuation, COGS, accrual), period lock (OBD-026) | `journals`, `journal_lines`, `accounting_periods` | master.finance (COA), inventory.ledger (read), costing.actual (read) |
-| `finance.export` | Interface ekspor ke software akuntansi existing (OBD-024) | `export_batches` | finance.journal |
+| `finance.journal` | **Full GL internal**: journal operasional otomatis (dari event) + journal umum/manual, period closing, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar), period lock (OBD-026) | `journals`, `journal_lines`, `accounting_periods` | master.finance (COA), inventory.ledger (read), costing.actual (read) |
+| `finance.export` | **Opsional** — ekspor journal ke sistem eksternal (hanya bila kelak dibutuhkan; saat ini tidak ada software akuntansi eksternal) | `export_batches` | finance.journal |
 
 ### 2.19 REPORTING & DASHBOARD
 
@@ -202,7 +202,7 @@
 | I-04 | Audit lewat **core.audit** | Dipanggil otomatis di service layer (interceptor), bukan manual per controller |
 | I-05 | Traceability via `source_document`/`source_document_line` | Setiap dokumen turunan menyimpan referensi sumber (SO→MO→CUT→bundle→carton→shipment) |
 | I-06 | MRP & costing membaca via query service, bukan menulis | planning & costing adalah *consumer*; tidak menulis tabel milik sales/inventory/production |
-| I-07 | Domain events untuk decoupling | Contoh: `MO_RELEASED` → reservation; `INSPECTION_PASSED` → release QUALITY_HOLD; `SHIPMENT_CONFIRMED` → ledger SHIPMENT + AR draft. Implementasi awal boleh in-process events, interface siap message broker |
+| I-07 | Domain events untuk decoupling | Contoh: `MO_RELEASED` → reservation; `INSPECTION_PASSED` → release QUALITY_HOLD; `SHIPMENT_CONFIRMED` → ledger SHIPMENT + AR draft. Implementasi awal: in-process events (Laravel Events + Horizon queue) |
 | I-08 | Tidak ada sharing tabel tulis lintas modul | Satu tabel satu penulis (single-writer per aggregate) |
 
 ---
@@ -225,6 +225,7 @@ PRODUCTION (MO) ──► CUTTING ──► SEWING ──► FINISHING ──►
                        └── leftover ─┴── rework loop ─────────┘
 SUBCONTRACTING keluar/masuk di titik proses terkait (via INVENTORY lokasi SUBCON)
 COSTING membaca: BOM, ledger, output, rates ──► variance
+FINANCE: full GL internal (journal dari event + manual, period closing, laporan keuangan)
 REPORTING membaca semua (read-only)
 ```
 
@@ -234,15 +235,16 @@ REPORTING membaca semua (read-only)
 
 | Item | Status | Catatan |
 |---|---|---|
-| Tech stack | ✅ RESOLVED (DEC-2026-08-13-02) | Laravel 13/PHP 8.5 (backend) + React/Next.js 16 (frontend) + PostgreSQL 18 + Redis 8 + Horizon/Reverb/Sanctum |
+| Tech stack (TD-01) | ✅ RESOLVED (DEC-2026-08-13-02) | Laravel 13/PHP 8.5 + React/Next.js 16 + Redis 8 + Horizon/Reverb/Sanctum |
+| Database engine | ✅ RESOLVED (DEC-2026-08-13-03) | **MySQL 8.x sementara** → migrasi terjadwal ke PostgreSQL; aturan portabilitas mengikat (Database Blueprint §7) |
+| Deployment (TD-02) | ✅ RESOLVED (DEC-2026-08-13-03) | **On-premise** di pabrik (Docker), arsitektur cloud-ready untuk migrasi nanti |
 | Monolith-modular vs microservices | ✅ RESOLVED | **Modular monolith** (single deploy, module boundaries ketat); ekstraksi microservice dimungkinkan nanti karena I-01..I-08 |
-| Message broker untuk domain events | ⏳ | Awal: in-process events (Laravel Events + Horizon queue); interface siap broker |
-| Deployment (TD-02) | ⏳ diputuskan sebelum Phase 1 | Rekomendasi di roadmap |
+| Message broker untuk domain events | ✅ RESOLVED | In-process events (Laravel Events + Horizon queue); interface siap broker bila perlu |
+| Perangkat shop floor (TD-03) | ⏳ sebelum Phase 6 | Rekomendasi browser-based (tablet/HP + scan gun) |
 | Buyer portal (OBD-003) | ⏳ fase lanjut | — |
 
 ---
 
-## 6. NEXT STEP
+## 6. PENUTUP
 
-- Modul map ini menjadi dasar `ERP_GARMENT_PROCESS_FLOW.md` (detail alur per proses) dan `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3: ERD + tabel per modul).
-- Menunggu approval Anda untuk dikunci v1.0.
+Dokumen ini dikunci **v1.0**. Menjadi dasar struktur modul backend Laravel (`apps/api`) — satu modul per baris pada peta di atas, dengan boundary sesuai aturan I-01..I-08.
