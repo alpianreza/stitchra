@@ -32,12 +32,48 @@
 
 ### Catatan
 - OBD-024: keputusan akhir "full GL vs integrasi software akuntansi existing" **masih menunggu info software akuntansi yang dipakai saat ini** (pertanyaan FASE 0 no. 27). Sementara desain memakai pendekatan: AR/AP/journal operasional di ERP + interface ekspor journal.
-- OBD non-P0 (002, 003, 006, 010, 012–015, 017–021, 025, 026, 028, 030–032) tetap terbuka dan dijadwalkan keputusannya per fase di `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md` (FASE lanjutan). Rekomendasi pada FASE 0 menjadi default sementara sampai diganti keputusan resmi.
+- OBD non-P0 (002, 003, 006, 010, 012–015, 017–021, 025, 026, 028, 030–032) tetap terbuka dan dijadwalkan keputusannya per fase di `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`. Rekomendasi pada FASE 0 menjadi default sementara sampai diganti keputusan resmi.
 
 ### Referensi riset tambahan yang diadopsi
 - AQL: ISO 2859-1 single sampling, General Inspection Level II; code letter dari lot size; switching rules (normal → tightened → reduced) dicatat sebagai fitur lanjutan.
 - Costing: struktur cost sheet FOB = Fabric + Trim + CM; CM dihitung dari **SMV × cost-per-minute**; landed cost = FOB + freight + duty + handling.
 - Fabric consumption tahap sampling memakai formula estimasi (pattern-based), tahap bulk memakai marker actual — keduanya disimpan terpisah (estimated vs actual consumption).
+
+---
+
+## DEC-2026-08-13-02 — Tech Stack (TD-01 RESOLVED)
+
+- **Tanggal:** 13 Agustus 2026
+- **Diputuskan oleh:** Pemilik proyek (Agen)
+- **Keputusan:** TD-01 diputuskan memakai stack pilihan pemilik (varian OPSI B: backend Laravel, frontend React/Next.js — bukan NestJS):
+
+| Layer | Keputusan | Catatan implementasi |
+|---|---|---|
+| Backend | **Laravel 13 + PHP 8.5** | Business logic, modular monolith (modul per Module Map) |
+| Frontend | **React + Next.js 16** | UI ERP: tabel kompleks, dashboard, workflow interaktif |
+| Database | **PostgreSQL 18** | Transaction-heavy; CHECK constraint stok ≥ 0, row locking untuk reservasi/numbering |
+| Cache | **Redis 8** | Cache, queue, session, locking |
+| Queue | **Laravel Horizon + Redis** | Job berat: MRP run, actual costing, report, import/export |
+| Realtime | **Laravel Reverb (WebSocket)** | Live dashboard produksi (output line, line loading) |
+| API | **Laravel API / REST** | Integrasi mobile, barcode scanner, mesin, sistem eksternal |
+| Auth | **Laravel Sanctum** | SPA (Next.js) + API token untuk perangkat shop floor |
+| File storage | **S3-compatible** | Tech pack, foto QC, invoice, dokumen ekspor |
+| Search | **PostgreSQL FTS → OpenSearch bila perlu** | Tidak menambah search engine di awal |
+| PDF | **Browsershot/Chromium** | Packing list, commercial invoice, report |
+| Excel | **Laravel Excel** | Import/export (master data, report) |
+| Testing | **Pest + PHPUnit + Playwright** | Unit → feature → E2E (sesuai FASE 21 master prompt) |
+| Container | **Docker** | Dev/staging/production konsisten |
+| Reverse Proxy | **Nginx** | Production |
+| CI/CD | **GitHub Actions** | Automated test/deploy |
+| Monitoring | **Sentry + Laravel Telescope/Pulse** | Error & application monitoring |
+
+- **Catatan pelaksanaan (mengikat Phase 1):**
+  1. Pin versi pasti di `composer.json`/`package.json`; verifikasi kompatibilitas paket (Horizon, Laravel Excel, Browsershot) terhadap Laravel 13 di awal Phase 1.
+  2. Telescope hanya aktif di local/staging; production memakai Pulse + Sentry.
+  3. Scope multi-company (BR-011) diimplementasikan via **global scope + middleware `company_id`** di Laravel.
+  4. Inventory Transaction Service (BR-013) diimplementasikan sebagai domain service Laravel dengan DB transaction (dokumen + lines + ledger + saldo atomic).
+- **Dampak:** `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md` v0.2 — TD-01 resolved, struktur repo disesuaikan (`apps/api` = Laravel, `apps/web` = Next.js).
+- **Masih terbuka:** TD-02 (deployment cloud/on-prem/hybrid), TD-03 (perangkat shop floor, sebelum Phase 6).
 
 ---
 
