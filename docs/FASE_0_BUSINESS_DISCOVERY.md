@@ -1,9 +1,9 @@
 # FASE 0 — BUSINESS DISCOVERY: ERP GARMENT (STITCHRA)
 
-> **Status:** DRAFT v0.1 — menunggu keputusan bisnis (lihat bagian 7 & 9)
+> **Status:** ✅ LOCKED v1.0 — OBD P0 disetujui 13 Agustus 2026 (lihat `DECISION_LOG.md`, DEC-2026-08-13-01). OBD non-P0 tetap terbuka dengan default sementara.
 > **Tanggal:** 13 Agustus 2026
 > **Penyusun:** AI Agent (peran: Senior ERP Architect + Garment Business Analyst)
-> **Sumber riset eksternal:** INTACS ERP+ (intacsindo.com), Infor CloudSuite Fashion (infor.com), Absolute ERP (erpabsolute.com)
+> **Sumber riset eksternal:** INTACS ERP+ (intacsindo.com), Infor CloudSuite Fashion (infor.com), Absolute ERP (erpabsolute.com) + riset tambahan: ISO 2859-1 AQL sampling, garment cost sheet (FOB/CM/SMV costing)
 > **Aturan:** Tidak ada business rule yang dikunci sebelum ada keputusan. Semua yang belum jelas ditandai `OPEN BUSINESS DECISION` (OBD).
 
 ---
@@ -188,6 +188,7 @@ Buyer PO
 | INTACS ERP+ | Variant management (style×warna×ukuran) adalah inti; BOM harus memuat waste factor & shrinkage; resistensi operator → mulai dari modul berdampak cepat; kualitas master data BOM/routing menentukan kebenaran MRP & costing; subkontrak umum di garment Indonesia |
 | Infor CloudSuite Fashion | PLM/Product development terintegrasi dengan sourcing; demand forecast per channel; traceability & sustainability makin diminta buyer; multi-currency & multi-language adalah standar |
 | Absolute ERP | Cut plan auto dari PO; inward QC kain (shrinkage, shade, GSM) sebelum release ke produksi; fabric lot tracking end-to-end; AQL report sesuai format buyer; export document automation (PL, CI, LC); hourly output per operator via mobile; job-work tracking keluar/masuk |
+| Riset tambahan (ISO 2859-1, garment costing) | AQL: single sampling General Level II, code letter dari lot size, default 2.5 major/4.0 minor, critical=0; Cost sheet FOB = Fabric + Trim + CM; CM = SMV × cost-per-minute; fabric consumption estimated (formula) vs actual (marker) disimpan terpisah |
 
 ---
 
@@ -315,136 +316,118 @@ Semua dokumen transaksi: nomor unik, concurrency-safe, configurable, tidak berga
 
 > Format: **OBD-NNN — topik.** Konteks. **OPSI A / OPSI B** + konsekuensi. **Rekomendasi.** `DECISION REQUIRED`.
 > Yang bertanda **[P0]** wajib diputuskan sebelum desain database (FASE 3).
+> **UPDATE 13 Agu 2026:** seluruh OBD [P0] telah DIPUTUSKAN (DEC-2026-08-13-01 di `DECISION_LOG.md`); kolom status di bawah menandai hasilnya. OBD non-P0 tetap terbuka dengan default = rekomendasi.
 
 ### Kelompok A — Model Bisnis
 
-**OBD-001 [P0] — Model bisnis: CMT, FOB, atau keduanya?**
+**OBD-001 [P0] — Model bisnis: CMT, FOB, atau keduanya?** ✅ **DIPUTUSKAN: desain siap keduanya (flag ownership stok COMPANY|BUYER), implementasi awal FOB.**
 CMT = buyer supply bahan, pabrik jual jasa. FOB = pabrik beli bahan & jual barang jadi.
 - OPSI A: FOB saja → material selalu milik pabrik; costing penuh.
 - OPSI B: Keduanya → perlu konsep *buyer-owned/consignment stock* (stok kain milik buyer, tidak boleh tercampur valuasinya).
 - Konsekuensi B: tabel stok butuh flag kepemilikan; MRP tidak boleh netting stok buyer ke order buyer lain.
-- Rekomendasi: desain siap keduanya (flag ownership), implement FOB dulu. `DECISION REQUIRED`
 
-**OBD-002 [P0] — Subcontracting in-scope sejak awal?**
+**OBD-002 — Subcontracting in-scope sejak awal?** ⏳ Default: in-scope di desain, implement fase 6–7.
 Proses umum disubkontrakkan: printing, bordir, washing, kadang CMT penuh.
 - OPSI A: in-scope → perlu modul Job Work (material out, tracking, return, biaya jasa → costing).
 - OPSI B: nanti → desain costing & inventory tetap sisakan hook (lokasi "subcon in-transit").
-- Rekomendasi: in-scope di desain, implement fase 6–7. `DECISION REQUIRED`
 
-**OBD-003 — Buyer portal / akses eksternal?** (buyer lihat status order & inspection report)
-Konsekuensi: arsitektur multi-tenant read-only, security tambahan. Rekomendasi: fase lanjut. `DECISION REQUIRED`
+**OBD-003 — Buyer portal / akses eksternal?** ⏳ Default: fase lanjut.
+(buyer lihat status order & inspection report) Konsekuensi: arsitektur multi-tenant read-only, security tambahan.
 
 ### Kelompok B — Material & Inventory
 
-**OBD-004 [P0] — Satuan kain: kg, meter, atau yard?**
+**OBD-004 [P0] — Satuan kain: kg, meter, atau yard?** ✅ **DIPUTUSKAN: dual UOM tersimpan (qty beli + meter) dengan konversi GSM×lebar per roll/lot + toleransi selisih (default ±0,5%).**
 Praktik umum: beli per kg (knit) atau per meter/yard (woven), konsumsi BOM per meter.
 - OPSI A: satu UOM kebenaran (meter), konversi dari kg via GSM×lebar **per lot** → akurat tapi butuh data GSM/width per lot saat GR.
 - OPSI B: dual UOM tersimpan (kg + meter) dengan konversi per lot → fleksibel, risiko selisih pembulatan.
-- Rekomendasi: OPSI B dengan konversi tersimpan per roll/lot + toleransi selisih. `DECISION REQUIRED`
 
-**OBD-005 [P0] — Tracking kain sampai level roll atau cukup lot?**
+**OBD-005 [P0] — Tracking kain sampai level roll atau cukup lot?** ✅ **DIPUTUSKAN: roll-level untuk fabric (barcode per roll), lot-level untuk trim.**
 - OPSI A (roll): traceability penuh (4-point, shade, leftover per roll) — wajib untuk ekspor besar; effort input tinggi (barcode per roll).
 - OPSI B (lot): lebih ringan, kehilangan detail shade/leftover per roll.
-- Rekomendasi: roll-level untuk fabric, lot-level untuk trim. `DECISION REQUIRED`
 
-**OBD-006 — Shade band control saat cutting?**
-Rule umum: satu lay tidak boleh campur shade berbeda untuk panel yang sama.
-- Konsekuensi: alokasi roll ke lay harus validasi shade group.
-- Rekomendasi: aktifkan sebagai rule configurable per buyer. `DECISION REQUIRED`
+**OBD-006 — Shade band control saat cutting?** ⏳ Default: rule configurable per buyer.
+Rule umum: satu lay tidak boleh campur shade berbeda untuk panel yang sama. Konsekuensi: alokasi roll ke lay harus validasi shade group.
 
-**OBD-007 [P0] — Kapan stok diakui tersedia: saat GR atau setelah lulus Inward QC?**
+**OBD-007 [P0] — Kapan stok diakui tersedia: saat GR atau setelah lulus Inward QC?** ✅ **DIPUTUSKAN: OPSI B — stok masuk `QUALITY_HOLD`, available setelah inspeksi PASS (trim boleh auto-pass per kategori).**
 - OPSI A (GR langsung available): cepat, tapi bahan belum tentu lolos uji.
 - OPSI B (status `QUALITY_HOLD` sampai inspeksi PASS): aman, butuh status stok tambahan.
-- Rekomendasi: OPSI B — stok masuk dengan status HOLD, available setelah inspeksi. `DECISION REQUIRED`
 
-**OBD-008 [P0] — Metode inventory valuation (Finance)?**
+**OBD-008 [P0] — Metode inventory valuation (Finance)?** ✅ **DIPUTUSKAN: Moving Average; ledger menyimpan cost per transaksi agar migrasi metode memungkinkan.**
 - OPSI A: Moving Average — sederhana, umum di manufaktur Indonesia.
 - OPSI B: FIFO per lot — akurat untuk kain per lot, lebih kompleks.
 - OPSI C: Standard Cost + variance — cocok jika costing mature.
-- Rekomendasi: Moving Average di awal; desain ledger menyimpan cost per transaksi agar migrasi metode memungkinkan. `DECISION REQUIRED`
 
-**OBD-009 [P0] — Stock reservation: kapan dan seberapa ketat?**
-- Kapan: saat SO confirm / saat MO release / saat cut plan? 
+**OBD-009 [P0] — Stock reservation: kapan dan seberapa ketat?** ✅ **DIPUTUSKAN: hard reservation saat MO release; shortage report sejak SO confirm.**
 - OPSI A: hard reservation (stok terkunci eksklusif untuk MO) — aman, bisa menimbulkan deadlock stok.
 - OPSI B: soft reservation (indikatif, first-come saat issue) — fleksibel, risiko shortage saat issue.
-- Rekomendasi: hard reservation saat MO release; laporan kekurangan saat SO confirm. `DECISION REQUIRED`
 
-**OBD-010 — Alokasi bahan saat shortage antar order?**
-Prioritas by delivery date / by buyer / manual planner? Rekomendasi: manual planner dengan rekomendasi sistem (by delivery date). `DECISION REQUIRED`
+**OBD-010 — Alokasi bahan saat shortage antar order?** ⏳ Default: manual planner dengan rekomendasi sistem (by delivery date).
 
 ### Kelompok C — Produksi
 
-**OBD-011 [P0] — Granularitas pencatatan sewing: per operator per jam, atau per line per hari?**
+**OBD-011 [P0] — Granularitas pencatatan sewing: per operator per jam, atau per line per hari?** ✅ **DIPUTUSKAN: desain mendukung per operator/jam (scan bundle); implementasi bertahap mulai per line/hari.**
 - OPSI A (per operator/jam, scan bundle): data kaya (efisiensi per operator, insentif piece-rate) — butuh perangkat scan & disiplin.
 - OPSI B (per line/hari): ringan, kehilangan detail insentif.
-- Rekomendasi: desain mendukung A, implementasi bertahap mulai dari per line/hari → per bundle scan. `DECISION REQUIRED`
 
-**OBD-012 — Formula efisiensi & target.**
-Efisiensi = (SAM × output) / (manpower × menit kerja) × 100. Siapa pemilik SAM (IE?), apakah target per style per line configurable? Rekomendasi: configurable, versioned, pemilik IE. `DECISION REQUIRED`
+**OBD-012 — Formula efisiensi & target.** ⏳ Default: formula SAM configurable & versioned, pemilik IE.
+Efisiensi = (SAM × output) / (manpower × menit kerja) × 100. Siapa pemilik SAM (IE?), apakah target per style per line configurable?
 
-**OBD-013 — Bundle size & ticket.** Ukuran bundle standar (mis. 10–20 pcs)? Satu bundle satu operasi scan? Rekomendasi: bundle size per style configurable, barcode per bundle. `DECISION REQUIRED`
+**OBD-013 — Bundle size & ticket.** ⏳ Default: bundle size per style configurable, barcode per bundle. Ukuran bundle standar (mis. 10–20 pcs)? Satu bundle satu operasi scan?
 
-**OBD-014 — Backflush atau issue aktual?**
+**OBD-014 — Backflush atau issue aktual?** ⏳ Default: aktual untuk fabric, backflush boleh untuk trim murah (configurable per material class).
 - OPSI A (aktual per marker/issue): akurat untuk kain (konsumsi nyata dari lay).
 - OPSI B (backflush dari output × BOM): ringan tapi menyembunyikan waste.
-- Rekomendasi: aktual untuk fabric, backflush boleh untuk trim murah (configurable per material class). `DECISION REQUIRED`
 
-**OBD-015 — Cut-off output harian & koreksi.** Bolehkah supervisor mengoreksi output kemarin? Rekomendasi: koreksi hanya via adjustment ber-approval + audit. `DECISION REQUIRED`
+**OBD-015 — Cut-off output harian & koreksi.** ⏳ Default: koreksi hanya via adjustment ber-approval + audit.
 
 ### Kelompok D — Quality
 
-**OBD-016 [P0] — Pakai AQL? Level berapa?**
+**OBD-016 [P0] — Pakai AQL? Level berapa?** ✅ **DIPUTUSKAN: AQL engine ISO 2859-1 General Level II, default 2.5 major / 4.0 minor, critical = 0; per buyer configurable.**
 Buyer ekspor umumnya minta AQL 2.5 (major) / 4.0 (minor) — berbeda per buyer.
 - Konsekuensi: perlu tabel sampling plan (lot size → sample size → accept/reject number) + AQL per buyer configurable.
-- Rekomendasi: AQL engine configurable per buyer; default 2.5/4.0. `DECISION REQUIRED`
 
-**OBD-017 — Alur reject & batas rework.** Berapa kali satu pcs/bundle boleh rework sebelum jadi reject final/second grade? Siapa disposition (QC manager)? `DECISION REQUIRED`
+**OBD-017 — Alur reject & batas rework.** ⏳ Terbuka: berapa kali satu pcs/bundle boleh rework sebelum jadi reject final/second grade? Siapa disposition (QC manager)?
 
-**OBD-018 — Second grade / reject sale?** Apakah barang reject dijual (butuh stok & transaksi tersendiri)? `DECISION REQUIRED`
+**OBD-018 — Second grade / reject sale?** ⏳ Terbuka: apakah barang reject dijual (butuh stok & transaksi tersendiri)?
 
 ### Kelompok E — Sales, Packing, Shipment
 
-**OBD-019 — Toleransi qty shipment (short/excess %)?** Umum di ekspor: ±3–5% per PO, diatur per buyer. Rekomendasi: field toleransi di buyer/SO, validasi saat packing & shipment. `DECISION REQUIRED`
+**OBD-019 — Toleransi qty shipment (short/excess %)?** ⏳ Default: field toleransi di buyer/SO (umum ekspor ±3–5%), validasi saat packing & shipment.
 
-**OBD-020 — Aturan assortment packing.** Solid color/size vs ratio pack vs mixed — apakah instruksi packing berasal dari SO per buyer? Rekomendasi: packing instruction master per SO. `DECISION REQUIRED`
+**OBD-020 — Aturan assortment packing.** ⏳ Default: packing instruction master per SO (solid / ratio pack / mixed).
 
-**OBD-021 — Order amendment setelah produksi jalan.** Batas: sampai kapan qty boleh turun (mis. sebelum cutting)? Konsekuensi ke MRP & PO bahan (cancel/return). `DECISION REQUIRED`
+**OBD-021 — Order amendment setelah produksi jalan.** ⏳ Default: terkunci setelah cutting dimulai; sebelum itu via amendment + MRP delta.
 
 ### Kelompok F — Costing & Finance
 
-**OBD-022 [P0] — Level costing: per style, per SO, atau per MO?**
-- Rekomendasi: estimated per style (+revisi per SO), actual per MO, laporan per SO. `DECISION REQUIRED`
+**OBD-022 [P0] — Level costing: per style, per SO, atau per MO?** ✅ **DIPUTUSKAN: estimated per style (revisi per SO), actual per MO, laporan per SO.**
 
-**OBD-023 [P0] — Basis alokasi overhead.**
+**OBD-023 [P0] — Basis alokasi overhead.** ✅ **DIPUTUSKAN: per menit SAM terpakai (OPSI A), configurable; rate per company per periode.**
 - OPSI A: per menit SAM terpakai (umum di garment) — adil antar style.
 - OPSI B: per pcs — sederhana, bias terhadap style kompleks.
 - OPSI C: per line-day — cocok jika line dedicated.
-- Rekomendasi: OPSI A, configurable. `DECISION REQUIRED`
 
-**OBD-024 [P0] — Scope Finance: full accounting (journal, GL) atau cukup AR/AP + costing?**
+**OBD-024 [P0] — Scope Finance: full accounting (journal, GL) atau cukup AR/AP + costing?** ✅ **DIPUTUSKAN SEMENTARA: desain hook integrasi + AR/AP/journal operasional di ERP; keputusan akhir full GL menunggu info software akuntansi existing (pertanyaan no. 27).**
 - OPSI A: full GL di ERP — beban besar, perlu COA, periode, closing.
 - OPSI B: AR/AP/costing di ERP, GL di software akuntansi existing (integrasi/ekspor).
-- Rekomendasi: putuskan sekarang karena memengaruhi blueprint; jika ragu, desain hook integrasi, implement B dulu. `DECISION REQUIRED`
 
-**OBD-025 — Multi-currency sejak awal?** Jika buyer ekspor (USD) & supplier lokal (IDR): ya minimal di dokumen + revaluation sederhana. Rekomendasi: schema multi-currency sejak awal. `DECISION REQUIRED`
+**OBD-025 — Multi-currency sejak awal?** ⏳ Default: schema multi-currency sejak awal; dokumen menyimpan currency + rate.
 
-**OBD-026 — Periode akuntansi & lock transaksi?** Apakah transaksi bulan lalu boleh diubah? Rekomendasi: period lock + adjustment ber-approval. `DECISION REQUIRED`
+**OBD-026 — Periode akuntansi & lock transaksi?** ⏳ Default: period lock + adjustment ber-approval.
 
 ### Kelompok G — Sistem
 
-**OBD-027 [P0] — Document numbering: reset per tahun atau bulan? Per company/branch?**
-Rekomendasi: per company + prefix + tahun (+bulan opsional), counter tersendiri, concurrency-safe. `DECISION REQUIRED`
+**OBD-027 [P0] — Document numbering: reset per tahun atau bulan? Per company/branch?** ✅ **DIPUTUSKAN: per company + prefix + tahun, counter terpisah, concurrency-safe; nomor batal tidak reuse.**
 
-**OBD-028 — Status flow standar dokumen.** Usulan baseline: `DRAFT → SUBMITTED → APPROVED → (IN_PROGRESS) → CLOSED` dengan cabang `REJECTED / CANCELLED`. Siapa boleh cancel setelah ada dokumen turunan (mis. PO sudah ada GR)? Rekomendasi: cancel terkunci jika ada turunan; gunakan reversal/return document. `DECISION REQUIRED`
+**OBD-028 — Status flow standar dokumen.** ⏳ Default dipakai: baseline `DRAFT → SUBMITTED → APPROVED → (IN_PROGRESS) → CLOSED` + cabang `REJECTED / CANCELLED`; cancel terkunci jika ada dokumen turunan (pakai reversal/return).
 
-**OBD-029 — Multi-company/multi-factory: dibangun siap sejak awal atau nanti?**
-Rekomendasi: schema siap (kolom company_id/factory_id di semua tabel transaksi & stok), operasional 1 company dulu. `DECISION REQUIRED`
+**OBD-029 — Multi-company/multi-factory: dibangun siap sejak awal atau nanti?** ✅ **DIPUTUSKAN: schema siap (company_id/factory_id di semua tabel transaksi & stok), operasional 1 company dulu.**
 
-**OBD-030 — Multi-language (ID/EN)?** Rekomendasi: UI i18n-ready sejak awal; label master data tetap satu bahasa + terjemahan opsional. `DECISION REQUIRED`
+**OBD-030 — Multi-language (ID/EN)?** ⏳ Default: UI i18n-ready sejak awal; label master data satu bahasa + terjemahan opsional.
 
-**OBD-031 — Perangkat shop floor.** Barcode scanner / tablet / mobile? Menentukan desain UI input produksi. `DECISION REQUIRED`
+**OBD-031 — Perangkat shop floor.** ⏳ Terbuka: barcode scanner / tablet / mobile? Menentukan desain UI input produksi.
 
-**OBD-032 — Integrasi existing.** Software CAD/marker, payroll, akuntansi yang sudah dipakai? Ekspor/impor apa saja? `DECISION REQUIRED`
+**OBD-032 — Integrasi existing.** ⏳ Terbuka: software CAD/marker, payroll, akuntansi yang sudah dipakai? Ekspor/impor apa saja?
 
 ---
 
@@ -477,22 +460,22 @@ Rekomendasi: schema siap (kolom company_id/factory_id di semua tabel transaksi &
 2. Produk utama: woven, knit, atau keduanya? Kategori (kemeja, kaos, celana, jaket)?
 3. Buyer domestik, ekspor, atau keduanya? Negara tujuan utama? Mata uang invoice?
 4. Rata-rata order per bulan & qty per order? Order terbesar/terkecil?
-5. Model: CMT, FOB, atau campur? (OBD-001)
+5. Model: CMT, FOB, atau campur? ✅ (OBD-001: siap keduanya, FOB dulu)
 6. Apakah ada proses subcon (print/bordir/washing)? Seberapa sering? (OBD-002)
-7. Apakah buyer mensyaratkan AQL & format report tertentu? (OBD-016)
+7. Apakah buyer mensyaratkan AQL & format report tertentu? ✅ (OBD-016: AQL 2.5/4.0 configurable)
 8. Apakah buyer boleh akses status order (portal)? (OBD-003)
 
 ### Material & Inventory
-9. Kain dibeli per kg, meter, atau yard? Apakah GSM & lebar selalu diketahui saat beli? (OBD-004)
-10. Perlukah tracking per roll (dengan barcode)? (OBD-005)
-11. Apakah gudang sudah pakai location/bin? Berapa gudang fisik? (OBD location)
-12. Apakah ada inspeksi kain masuk (4-point/shrinkage) saat ini? Siapa yang melakukan? (OBD-007)
-13. Apakah stok trim juga perlu lot tracking, atau cukup agregat?
-14. Metode penilaian persediaan yang dipakai akuntansi sekarang? (OBD-008)
+9. Kain dibeli per kg, meter, atau yard? Apakah GSM & lebar selalu diketahui saat beli? ✅ (OBD-004: dual UOM per roll)
+10. Perlukah tracking per roll (dengan barcode)? ✅ (OBD-005: roll-level fabric)
+11. Apakah gudang sudah pakai location/bin? Berapa gudang fisik?
+12. Apakah ada inspeksi kain masuk (4-point/shrinkage) saat ini? Siapa yang melakukan? ✅ (OBD-007: quality hold)
+13. Apakah stok trim juga perlu lot tracking, atau cukup agregat? ✅ (OBD-005: trim lot-level)
+14. Metode penilaian persediaan yang dipakai akuntansi sekarang? ✅ (OBD-008: moving average)
 15. Safety stock per bahan: ada kebijakannya?
 
 ### Produksi
-16. Bagaimana output jahit dicatat hari ini (manual, per jam)? Ada rencana scan barcode? (OBD-011, 031)
+16. Bagaimana output jahit dicatat hari ini (manual, per jam)? Ada rencana scan barcode? (OBD-011✅, 031)
 17. Apakah SMV/SAM per operasi sudah ada datanya? Siapa yang maintain? (OBD-012)
 18. Ukuran bundle & apakah bundle ticket sudah dipakai? (OBD-013)
 19. Bagaimana perhitungan upah operator: bulanan, piece-rate, atau insentif campuran? (memengaruhi kebutuhan data per operator)
@@ -507,9 +490,9 @@ Rekomendasi: schema siap (kolom company_id/factory_id di semua tabel transaksi &
 26. Dokumen ekspor apa yang wajib (PL, CI, COO, LC)?
 
 ### Finance & Costing
-27. Software akuntansi yang dipakai sekarang? ERP harus full GL atau integrasi? (OBD-024)
-28. Struktur costing yang dipakai: bagaimana overhead dialokasikan saat ini? (OBD-023)
-29. Costing dibuat per style atau per order? (OBD-022)
+27. **Software akuntansi yang dipakai sekarang? ERP harus full GL atau integrasi? (OBD-024 — masih menunggu jawaban ini)**
+28. Struktur costing yang dipakai: bagaimana overhead dialokasikan saat ini? ✅ (OBD-023: per menit SAM)
+29. Costing dibuat per style atau per order? ✅ (OBD-022)
 30. Kebijakan lock periode & koreksi transaksi? (OBD-026)
 
 ### Sistem & Teknis
@@ -522,16 +505,14 @@ Rekomendasi: schema siap (kolom company_id/factory_id di semua tabel transaksi &
 
 ---
 
-## 10. KESIMPULAN & NEXT STEP
+## 10. KESIMPULAN & STATUS
 
-FASE 0 ini memetakan 20 domain, alur end-to-end + 8 jalur alternatif, 18 aktor, 30 dokumen, 24 master data, dan **32 Open Business Decisions (9 di antaranya P0 — penentu desain database)**.
+FASE 0 ini memetakan 20 domain, alur end-to-end + 8 jalur alternatif, 18 aktor, 30 dokumen, 24 master data, dan 32 Open Business Decisions.
 
-Sebelum FASE 1 (`ERP_GARMENT_BUSINESS_SPECIFICATION.md`), dibutuhkan:
-1. Jawaban atas seluruh OBD **[P0]** (OBD-001, 004, 005, 007, 008, 009, 011, 016, 022, 023, 024, 027, 029).
-2. Jawaban pertanyaan profil bisnis minimal no. 1–8.
-3. Konfirmasi scope Finance (OBD-024) — paling berpengaruh ke roadmap.
-
-Setelah keputusan diberikan, dokumen ini direvisi ke **v1.0 (LOCKED)** dan FASE 1 dimulai.
+**Status 13 Agustus 2026:**
+- ✅ Seluruh OBD P0 DIPUTUSKAN (DEC-2026-08-13-01) → FASE 0 LOCKED v1.0.
+- ✅ FASE 1 (`ERP_GARMENT_BUSINESS_SPECIFICATION.md`) telah dibuat (DRAFT v0.1, menunggu review).
+- ⏳ OBD non-P0 berjalan dengan default sementara; pertanyaan operasional (no. 1–4, 6, 8, 11, 15–22, 24–27, 31–36) dapat dijawab bertahap — jawaban akan mempertajam blueprint database (FASE 3) tanpa menghalangi FASE 2.
 
 ---
 *Dokumen ini adalah sumber kebenaran sementara untuk discovery. Setiap perubahan business rule harus melalui OBD baru dan persetujuan, sesuai master prompt aturan ke-25: kode mengikuti business specification, bukan sebaliknya.*
