@@ -1,8 +1,8 @@
 # ERP GARMENT — ROLES & PERMISSIONS
 
-> **Status:** DRAFT v0.1 — menunggu review
+> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 1 Business Spec §4, BUSINESS_RULES v0.1 (BR-110)
+> **Dasar:** FASE 1 Business Spec §4, BUSINESS_RULES v1.1 (BR-110), DEC-2026-08-13-01 s/d 03
 > **Model:** RBAC granular. Permission format: `domain.entity.action`. Dicek **server-side**; scope data per `company_id`. Permission baru default **deny**.
 
 ---
@@ -92,7 +92,7 @@
 - `reporting.finance.view`
 
 ### Accounting
-- Semua permission Finance **plus**: `finance.period.lock`, `finance.journal.approve`, `finance.export.execute`, `master.finance.*` (COA, rates)
+- Semua permission Finance **plus**: `finance.period.lock`, `finance.journal.approve`, `finance.period-closing.execute`, `finance.report.view` (trial balance, P&L, balance sheet — full GL DEC-03), `master.finance.*` (COA, rates)
 
 ### Management
 - `*.view` semua domain + `*.export`
@@ -109,6 +109,7 @@
 | `inventory.adjustment.approve` | Warehouse Manager → Finance | Dua level (BR audit) |
 | `quality.disposition.execute` | QC Manager | Disposition NCR (BR-070) |
 | `finance.period.lock` | Accounting | Lock periode (BR-103) |
+| `finance.period-closing.execute` | Accounting | Tutup buku per periode (BR-101) |
 | `core.audit.view` | Super Admin, Management | Audit log read-only |
 | `costing.margin.view` | Management, Merchandiser (own buyer), Finance | Data margin sensitif — tidak semua role boleh lihat |
 | `pd.costing.view` | Sales/Merchandiser | Harga/cost sensitif: scope terbatas |
@@ -123,12 +124,12 @@
 
 ## 5. CONTOH DENY-BY-DEFAULT
 
-- Operator produksi (bukan role sistem, memakai akun Production) **tidak bisa** melihat harga/cost/margin.
+- Operator produksi (memakai akun Production) **tidak bisa** melihat harga/cost/margin.
 - Warehouse tidak bisa `purchasing.po.view` harga (hanya qty untuk receiving) → diimplementasikan sebagai field-level masking pada fase UI.
 - QC tidak bisa mengubah output produksi; Production tidak bisa mengubah hasil inspeksi.
 
 ---
 
-## NEXT STEP
+## PENUTUP
 
-Matrix ini dijadikan tabel seed (`roles`, `permissions`, `role_permissions`) di `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3).
+Dokumen ini dikunci **v1.0**. Matrix ini dijadikan tabel seed (`roles`, `permissions`, `role_permissions`) saat Phase 1 (Core Foundation) diimplementasikan.
