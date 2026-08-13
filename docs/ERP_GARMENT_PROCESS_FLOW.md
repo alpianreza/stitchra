@@ -1,8 +1,8 @@
 # ERP GARMENT — PROCESS FLOW (detail per proses)
 
-> **Status:** DRAFT v0.1 — menunggu review
+> **Status:** DRAFT v0.2 — koreksi sitasi BR (F-2, F-3); menunggu approval kunci v1.0
 > **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, MODULE_MAP v0.1, DEC-2026-08-13-01
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Specification v0.1, MODULE_MAP v0.2, DEC-2026-08-13-01 & DEC-2026-08-13-02
 > **Notasi:** `[DOK]` = dokumen transaksi; `(STATUS)` = status yang di-set; `⇒` = efek stok via Inventory Transaction Service (BR-013).
 
 ---
@@ -45,7 +45,7 @@
 2. (Opsional) `[RFQ]` → quotation beberapa supplier → comparison → pilih.
 3. `[PO]` ke supplier: item, qty (UOM beli), harga, currency, delivery date, term. Approval berjenjang by nilai (approval matrix) → `(APPROVED)` → kirim ke supplier.
 4. Barang datang → `[GR]`:
-   - **Fabric: satu line per roll** (BR-003/005): roll no, batch/lot, shade (bila ada), qty beli (kg/yard) **dan** panjang meter aktual → konversi per roll disimpan (BR-002).
+   - **Fabric: satu line per roll** (BR-003/052): roll no, batch/lot, shade (bila ada), qty beli (kg/yard) **dan** panjang meter aktual → konversi per roll disimpan (BR-002).
    - Semua line masuk dengan `(QUALITY_HOLD)` (BR-004) ⇒ ledger: `PURCHASE_RECEIPT` (+qty ke status hold, +cost).
    - Update `po_lines.received_qty` (partial allowed).
 5. **Inward QC** `[FQC]` per GR line:
@@ -72,7 +72,7 @@
 2. **Marker**: catat marker length & efficiency = (panjang pola terpakai / panjang lay) — efficiency di bawah threshold (setting) → warning ke PPIC.
 3. **Cut output**: qty per size/color dari lay → `(CUT)`.
 4. **Bundling**: potongan dikelompokkan per bundle (size per style, OBD-013) → tiap bundle dapat **barcode ticket** (bundle id + CUT + style/color/size + qty).
-5. **Leftover & wastage** per roll: `panjang_awal − Σ pemakaian lay = leftover` → leftover return ⇒ ledger `PRODUCTION_RETURN` ke RM (status available/hold sesuai QC); wastage (end bits) dicatat → masuk actual cost (BR-014).
+5. **Leftover & wastage** per roll: `panjang_awal − Σ pemakaian lay = leftover` → leftover return ⇒ ledger `PRODUCTION_RETURN` ke RM (status available/hold sesuai QC); wastage (end bits) dicatat → masuk actual cost (BR-014/BR-042).
 6. WIP transfer bundle → sewing `[WIP]` ⇒ ledger: pindah WIP-cutting → WIP-sewing.
 
 ---
@@ -161,4 +161,4 @@ Setiap panah = kolom `source_document` + `source_document_line` (I-05).
 ## NEXT STEP
 
 - Menjadi dasar `ERP_GARMENT_BUSINESS_RULES.md` (konsolidasi semua BR + default OBD) dan `ERP_GARMENT_DATABASE_BLUEPRINT.md` (FASE 3).
-- Menunggu review/approval Anda.
+- Menunggu approval Anda untuk dikunci v1.0.
