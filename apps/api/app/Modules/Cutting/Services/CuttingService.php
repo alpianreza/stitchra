@@ -35,7 +35,7 @@ class CuttingService
         return DB::transaction(function () use ($mo, $lines, $user): CutOrder {
             $cutOrder = CutOrder::create([
                 'company_id' => $mo->company_id,
-                'doc_no' => $this->numbering->next($mo->company_id, 'OUT'),   // prefix CUT
+                'doc_no' => $this->numbering->next($mo->company_id, 'CUT'),
                 'production_order_id' => $mo->id,
                 'cut_date' => now()->toDateString(),
                 'status' => 'IN_PROGRESS',
@@ -131,6 +131,7 @@ class CuttingService
             // BR-031: consumption aktual = total meter dipakai / qty cut
             $totalUsed = (float) $cutOrder->markerLogs()->sum('qty_fabric_used_m');
             $totalCut = (float) $cutOrder->lines()->sum('qty_cut');
+            $actualPerPcs = null;
 
             if ($totalUsed > 0 && $totalCut > 0) {
                 $actualPerPcs = round($totalUsed / $totalCut, 6);
@@ -143,7 +144,7 @@ class CuttingService
 
             $cutOrder->update(['status' => 'COMPLETED', 'updated_by' => $user->id]);
 
-            $this->audit->record('update', $cutOrder, after: ['status' => 'COMPLETED', 'consumption_actual' => $actualPerPcs ?? null]);
+            $this->audit->record('update', $cutOrder, after: ['status' => 'COMPLETED', 'consumption_actual' => $actualPerPcs]);
 
             return $cutOrder->fresh(['lines', 'markerLogs']);
         });
