@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Core\Http\Controllers\AuthController;
 
 // Health check sederhana (tanpa auth) untuk monitoring on-prem.
 Route::get('/health', fn () => response()->json([
@@ -9,5 +10,10 @@ Route::get('/health', fn () => response()->json([
     'time' => now()->toIso8601String(),
 ]));
 
-// Modul Core (auth, rbac, approval, numbering, audit, settings) — diregistrasi
-// oleh CoreServiceProvider di batch berikutnya.
+// Auth — BR-111
+Route::post('/auth/login', [AuthController::class, 'login']);
+
+Route::middleware(['auth:sanctum', 'company'])->group(function () {
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/auth/me', [AuthController::class, 'me']);
+});
