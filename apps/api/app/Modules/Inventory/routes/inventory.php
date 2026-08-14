@@ -7,6 +7,7 @@ Route::middleware(['auth:sanctum', 'company'])
     ->prefix('inventory')
     ->group(function () {
         Route::get('stock', [InventoryOpsController::class, 'stock']);
+        Route::get('rolls', [InventoryOpsController::class, 'rolls']);
 
         Route::post('transfers', [InventoryOpsController::class, 'createTransfer']);
         Route::post('transfers/{stockTransfer}/post', [InventoryOpsController::class, 'postTransfer']);
