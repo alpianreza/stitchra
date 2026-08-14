@@ -4,32 +4,65 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Modules\Core\Models\Company;
+use Modules\Core\Models\DocNumberingConfig;
+use Modules\Core\Models\Role;
 use Modules\Core\Models\User;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Company default (implement awal 1 company — BR-011/OBD-029)
+        // Company default (single-company dulu; multi siap via schema)
         $company = Company::firstOrCreate(
             ['code' => 'DEFAULT'],
-            ['name' => 'Perusahaan Default', 'base_currency' => 'IDR'],
+            ['name' => 'Default Company', 'base_currency' => 'IDR', 'timezone' => 'Asia/Jakarta', 'locale' => 'id']
         );
 
-        // Super admin awal — ganti password setelah login pertama!
-        $admin = User::withoutGlobalScopes()->firstOrCreate(
-            ['company_id' => $company->id, 'email' => 'admin@stitchra.local'],
-            ['name' => 'Super Admin', 'password' => 'ChangeMe!123'],
-        );
-        $admin->companies()->syncWithoutDetaching([$company->id]);
-
+        // RBAC: permissions + 16 role (dari Roles & Permissions blueprint)
         $this->call(RbacSeeder::class);
 
-        // Assign role super_admin ke user admin
-        $role = \Modules\Core\Models\Role::withoutGlobalScopes()
-            ->where('company_id', $company->id)->where('code', 'super_admin')->first();
-        if ($role) {
-            $admin->roles()->syncWithoutDetaching([$role->id]);
+        // Super admin awal — GANTI PASSWORD SETELAH LOGIN PERTAMA (BR-111)
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@stitchra.local'],
+            ['company_id' => $company->id, 'name' => 'Administrator', 'password' => 'ChangeMe!123', 'is_active' => true]
+        );
+        $superAdmin = Role::where('code', 'super_admin')->first();
+        if ($superAdmin) {
+            $admin->roles()->syncWithoutDetaching([$superAdmin->id]);
+        }
+
+        // BR-010: numbering per doc type — PREFIX-YYYY-NNNNNN, counter per tahun
+        // Daftar lengkap prefix yang dipakai seluruh modul
+        $prefixes = [
+            'SO',   // Sales Order
+            'PR',   // Purchase Request
+            'PO',   // Purchase Order
+            'RFQ',  // Request for Quotation
+            'GR',   // Goods Receipt
+            'FQC',  // Inward Inspection (Fabric/QC)
+            'MO',   // Manufacturing Order
+            'MI',   // Material Issue (+ fabric return)
+            'CUT',  // Cut Order
+            'WIP',  // Transfer WIP
+            'QC',   // QC Inspection
+            'PL',   // Packing List
+            'SHP',  // Shipment
+            'JW',   // Subcon Order (Jasa Kerja)
+            'OUT',  // Production Receipt (FG)
+            'ADJ',  // Stock Adjustment (+ OPENING movement)
+            'OPN',  // Stock Opname
+            'INV',  // Invoice (AR & supplier)
+            'PAY',  // Payment (AR/AP)
+            'JE',   // Journal Entry
+            'SMPL', // Sample
+            'COST', // Cost Sheet
+        ];
+
+        foreach ($prefixes as $prefix) {
+            DocNumberingConfig::firstOrCreate(
+                ['company_id' => $company->id, 'prefix' => $prefix],
+                ['doc_type' => $prefix, 'padding' => 6, 'reset_period' => 'YEARLY']
+            );
         }
     }
 }
