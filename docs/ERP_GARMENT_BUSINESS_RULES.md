@@ -1,8 +1,8 @@
 # ERP GARMENT — BUSINESS RULES (konsolidasi)
 
-> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
-> **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Spec v1.0, MODULE_MAP v0.2, PROCESS_FLOW v0.2, DECISION_LOG DEC-2026-08-13-01 s/d 03
+> **Status:** ✅ LOCKED v1.2 — v1.0 disetujui 13 Agu 2026; v1.1: BR-101 (DEC-03); v1.2: + BR-104 BEP (DEC-2026-08-14-01)
+> **Tanggal:** 14 Agustus 2026
+> **Dasar:** FASE 0 v1.0 (LOCKED), FASE 1 Business Spec v1.0, MODULE_MAP v1.0, PROCESS_FLOW v1.0, DECISION_LOG DEC-2026-08-13-01 s/d DEC-2026-08-14-01
 > **Tujuan:** Satu dokumen berisi SELURUH business rule yang mengikat implementasi. Setiap rule punya kode, status, dan sumber keputusan. Developer hanya boleh mengimplementasikan rule yang tercantum di sini; rule baru harus ditambahkan lewat OBD + approval.
 
 ---
@@ -116,6 +116,7 @@
 | BR-101 | ✅ LOCKED (OBD-024 RESOLVED, DEC-2026-08-13-03) | Finance di ERP = **full General Ledger internal**: COA, journal (operasional otomatis + umum/manual), AR/AP, cash/bank, period closing, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar). Perusahaan sebelumnya Excel/manual → tidak ada integrasi akuntansi eksternal; modul ekspor journal bersifat **opsional**. |
 | BR-102 | 🟡 DEFAULT (OBD-025) | Schema multi-currency sejak awal: dokumen menyimpan currency + exchange rate; selisih kurs ke journal. |
 | BR-103 | 🟡 DEFAULT (OBD-026) | Period lock: transaksi di periode terkunci tidak bisa dibuat/diubah; koreksi via adjustment periode berjalan. |
+| BR-104 | ✅ LOCKED (DEC-2026-08-14-01) | **BEP (Break-Even Point) analysis adalah report milik Accounting** (bukan Costing). Formula: `BEP (pcs) = Fixed Cost per periode ÷ (Harga jual rata-rata per pcs − Variable cost per pcs)`. Variable cost dari costing (material + labor + variable OH, standard/actual); fixed cost dari GL (overhead tetap per periode). Level: **factory-wide per bulan** (utama) + **per style** (sekunder). Computed report — tanpa tabel baru. |
 
 ## 11. SECURITY & AUDIT
 
@@ -137,10 +138,10 @@
 
 ## RINGKASAN
 
-- **LOCKED:** 25 rule bertanda ✅ (termasuk BR-101 yang dikunci via DEC-2026-08-13-03).
+- **LOCKED:** 26 rule bertanda ✅ (terbaru: BR-104 BEP, DEC-2026-08-14-01).
 - **DEFAULT (menunggu keputusan resmi):** 14 rule bertanda 🟡 — diimplementasikan sesuai default, mudah diubah karena ⚙️ configurable.
 - Rule baru/perubahan → tambah baris di dokumen ini via OBD + approval (master prompt aturan 25).
 
 ## PENUTUP
 
-Dokumen ini dikunci **v1.1** (kunci awal v1.0 + kunci BR-101 via DEC-03 dalam kesempatan yang sama). Menjadi acuan tunggal business rule untuk seluruh implementasi.
+Dokumen ini dikunci **v1.2**. Menjadi acuan tunggal business rule untuk seluruh implementasi.
