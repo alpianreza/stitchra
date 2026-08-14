@@ -17,6 +17,9 @@ const NAV = [
   { href: "/shopfloor/scan", label: "Stasiun Scan" },
   { href: "/receiving/grs/new", label: "Goods Receipt" },
   { href: "/qc/inspections", label: "Inspeksi QC" },
+  { href: "/finance/journals", label: "Jurnal" },
+  { href: "/finance/costing", label: "Costing Aktual" },
+  { href: "/finance/bep", label: "BEP" },
   { href: "/reports", label: "Laporan" },
 ];
 
@@ -47,7 +50,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <aside className="w-56 shrink-0 border-r bg-slate-900 text-slate-100">
         <div className="px-4 py-5 text-lg font-bold">Stitchra ERP</div>
-        <nav className="flex flex-col gap-1 px-2 text-sm">
+        <nav className="flex max-h-[calc(100vh-80px)] flex-col gap-1 overflow-y-auto px-2 text-sm">
           {NAV.map((item) => (
             <Link
               key={item.href}
