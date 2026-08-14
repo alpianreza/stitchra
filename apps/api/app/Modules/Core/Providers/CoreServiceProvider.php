@@ -2,8 +2,11 @@
 
 namespace Modules\Core\Providers;
 
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Modules\Core\Approval\ApprovalEngine;
+use Modules\Core\Approval\Events\DocumentApproved;
+use Modules\Core\Listeners\HandleDocumentApproved;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Services\NumberingService;
 
@@ -19,7 +22,7 @@ class CoreServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Load routes & views modul Core bila ada
-        // $this->loadRoutesFrom(__DIR__.'/../../routes/core.php');
+        // BR-015: approval APPROVED → aksi domain (SO confirm, BOM approve, dst.)
+        Event::listen(DocumentApproved::class, HandleDocumentApproved::class);
     }
 }
