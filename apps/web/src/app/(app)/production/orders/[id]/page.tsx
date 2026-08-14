@@ -17,12 +17,17 @@ interface MoDetail {
   line?: { name: string } | null;
   bom_version?: { version_no: number; status: string; lines: { material?: { code: string; name: string }; qty_per_pcs: string; wastage_pct: string }[] };
   routing_version?: { version_no: number; total_sam: string; operations: { seq: number; smv: string; operation?: { name: string } }[] };
-  material_allocations?: { material_id: number; qty_required: string; qty_reserved: string; qty_issued: string; is_backflush: boolean; material?: { code: string; name: string } }[];
+  material_allocations?: {
+    material_id: number; qty_required: string; qty_reserved: string; qty_issued: string; is_backflush: boolean;
+    material?: { code: string; name: string; tracking_level: string; use_uom_id: number | null };
+  }[];
 }
 
 interface Warehouse { id: number; code: string; name: string; type: string }
+interface Roll { id: number; roll_no: string; qty_remaining_meter: string; lot_no: string | null }
+interface IssueInput { qty: string; roll_id: string }
 
-/** Detail MO: snapshot BOM/Routing, alokasi material, aksi release/unrelease (BR-060) */
+/** Detail MO: snapshot BOM/Routing, alokasi material, release/unrelease (BR-060), issue material (BR-041) */
 export default function MoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -30,7 +35,11 @@ export default function MoDetailPage() {
   const [mo, setMo] = useState<MoDetail | null>(null);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState("");
+  const [issueWarehouseId, setIssueWarehouseId] = useState("");
+  const [issueInputs, setIssueInputs] = useState<Record<number, IssueInput>>({});
+  const [rollsByMaterial, setRollsByMaterial] = useState<Record<number, Roll[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -44,11 +53,27 @@ export default function MoDetailPage() {
       .catch(() => {});
   }, [id]);
 
+  // Ambil roll RELEASED untuk material fabric yang dialokasikan
+  useEffect(() => {
+    if (!mo?.material_allocations) return;
+    const fabricIds = mo.material_allocations
+      .filter((a) => a.material?.tracking_level === "ROLL")
+      .map((a) => a.material_id);
+
+    for (const mid of [...new Set(fabricIds)]) {
+      if (rollsByMaterial[mid]) continue;
+      api.get<{ data: Roll[] }>(`/inventory/rolls?material_id=${mid}`)
+        .then((r) => setRollsByMaterial((prev) => ({ ...prev, [mid]: r.data })))
+        .catch(() => {});
+    }
+  }, [mo]);
+
   async function release() {
     if (!warehouseId) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setMessage(null);
     try {
       await api.post(`/production/orders/${id}/release`, { warehouse_id: Number(warehouseId) });
+      setMessage("MO RELEASED — material ter-reservasi (BR-060).");
       load();
     } catch (e: any) {
       setError(e.message);   // shortage → pesan BR-040 dari server
@@ -59,9 +84,43 @@ export default function MoDetailPage() {
 
   async function unrelease() {
     if (!window.confirm("Lepaskan semua reservasi MO ini?")) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setMessage(null);
     try {
       await api.post(`/production/orders/${id}/unrelease`, {});
+      setMessage("Reservasi dilepas — MO kembali PLANNED.");
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function issueMaterials() {
+    if (!issueWarehouseId) { setError("Pilih gudang sumber issue dulu."); return; }
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      const allocations = mo!.material_allocations ?? [];
+      const lines = allocations
+        .filter((a) => {
+          const inp = issueInputs[a.material_id];
+          return inp && Number(inp.qty) > 0;
+        })
+        .map((a) => ({
+          material_id: a.material_id,
+          qty: Number(issueInputs[a.material_id].qty),
+          uom_id: a.material?.use_uom_id ?? 1,
+          roll_id: issueInputs[a.material_id].roll_id ? Number(issueInputs[a.material_id].roll_id) : undefined,
+        }));
+
+      if (lines.length === 0) { setError("Isi qty issue untuk minimal 1 material."); setBusy(false); return; }
+
+      const res = await api.post<{ doc_no: string }>(`/production/orders/${id}/issues`, {
+        warehouse_id: Number(issueWarehouseId),
+        lines,
+      });
+      setMessage(`Material issue ${res.doc_no} diposting (BR-041/060).`);
+      setIssueInputs({});
       load();
     } catch (e: any) {
       setError(e.message);
@@ -74,6 +133,7 @@ export default function MoDetailPage() {
   if (!mo) return <p className="text-slate-500">Memuat…</p>;
 
   const fmt = (v: string | number) => Number(v).toLocaleString("id-ID", { maximumFractionDigits: 4 });
+  const canIssue = ["RELEASED", "CUTTING", "SEWING"].includes(mo.status);
 
   return (
     <div className="space-y-4">
@@ -91,6 +151,7 @@ export default function MoDetailPage() {
       </div>
 
       {error && <pre className="whitespace-pre-wrap rounded bg-red-50 p-3 text-sm text-red-700">{error}</pre>}
+      {message && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
 
       {/* Aksi release (BR-060) */}
       {(mo.status === "PLANNED" || mo.status === "RELEASED") && (
@@ -156,9 +217,22 @@ export default function MoDetailPage() {
         </section>
       </div>
 
-      {/* Alokasi material (BR-060) */}
+      {/* Alokasi material + issue (BR-060/041) */}
       <section className="rounded-xl border bg-white p-4">
-        <h2 className="mb-2 font-semibold">Alokasi Material</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-semibold">Alokasi Material</h2>
+          {canIssue && (
+            <div className="flex items-center gap-2">
+              <select value={issueWarehouseId} onChange={(e) => setIssueWarehouseId(e.target.value)} className="rounded border px-2 py-1 text-xs">
+                <option value="">— gudang issue (RM) —</option>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code}</option>)}
+              </select>
+              <button onClick={issueMaterials} disabled={busy || !issueWarehouseId} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                {busy ? "Memproses…" : "Issue Terpilih"}
+              </button>
+            </div>
+          )}
+        </div>
         <table className="w-full text-sm">
           <thead className="border-b text-left text-xs text-slate-500">
             <tr>
@@ -166,24 +240,68 @@ export default function MoDetailPage() {
               <th className="py-1 text-right">Dibutuhkan</th>
               <th className="py-1 text-right">Reserved</th>
               <th className="py-1 text-right">Issued</th>
+              <th className="py-1 text-right">Sisa Reservasi</th>
               <th className="py-1">Mode</th>
+              {canIssue && <th className="py-1">Issue qty / roll</th>}
             </tr>
           </thead>
           <tbody>
-            {(mo.material_allocations ?? []).map((a) => (
-              <tr key={a.material_id} className="border-b last:border-0">
-                <td className="py-1.5"><span className="font-mono">{a.material?.code}</span> {a.material?.name}</td>
-                <td className="py-1.5 text-right">{fmt(a.qty_required)}</td>
-                <td className="py-1.5 text-right">{fmt(a.qty_reserved)}</td>
-                <td className="py-1.5 text-right">{fmt(a.qty_issued)}</td>
-                <td className="py-1.5">{a.is_backflush ? <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">Backflush</span> : <span className="text-xs text-slate-500">Aktual</span>}</td>
-              </tr>
-            ))}
+            {(mo.material_allocations ?? []).map((a) => {
+              const remaining = Number(a.qty_reserved) - Number(a.qty_issued);
+              const isRoll = a.material?.tracking_level === "ROLL";
+              const inp = issueInputs[a.material_id] ?? { qty: "", roll_id: "" };
+              return (
+                <tr key={a.material_id} className="border-b last:border-0">
+                  <td className="py-1.5"><span className="font-mono">{a.material?.code}</span> {a.material?.name}</td>
+                  <td className="py-1.5 text-right">{fmt(a.qty_required)}</td>
+                  <td className="py-1.5 text-right">{fmt(a.qty_reserved)}</td>
+                  <td className="py-1.5 text-right">{fmt(a.qty_issued)}</td>
+                  <td className={`py-1.5 text-right ${remaining > 0 ? "font-medium" : "text-slate-400"}`}>{fmt(remaining)}</td>
+                  <td className="py-1.5">{a.is_backflush ? <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">Backflush</span> : <span className="text-xs text-slate-500">Aktual</span>}</td>
+                  {canIssue && (
+                    <td className="py-1.5">
+                      {a.is_backflush ? (
+                        <span className="text-xs text-slate-400">otomatis</span>
+                      ) : remaining > 0 ? (
+                        <div className="flex gap-1">
+                          <input
+                            type="number" step="any" min="0" max={remaining}
+                            value={inp.qty}
+                            onChange={(e) => setIssueInputs({ ...issueInputs, [a.material_id]: { ...inp, qty: e.target.value } })}
+                            placeholder="qty"
+                            className="w-24 rounded border px-2 py-1 text-xs"
+                          />
+                          {isRoll && (
+                            <select
+                              value={inp.roll_id}
+                              onChange={(e) => setIssueInputs({ ...issueInputs, [a.material_id]: { ...inp, roll_id: e.target.value } })}
+                              className="rounded border px-2 py-1 text-xs"
+                            >
+                              <option value="">roll *</option>
+                              {(rollsByMaterial[a.material_id] ?? []).map((r) => (
+                                <option key={r.id} value={r.id}>{r.roll_no} ({fmt(r.qty_remaining_meter)}m)</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-green-600">✔ habis</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {(mo.material_allocations ?? []).length === 0 && (
-              <tr><td colSpan={5} className="py-4 text-center text-sm text-slate-500">Belum ada alokasi — release MO dulu.</td></tr>
+              <tr><td colSpan={canIssue ? 7 : 6} className="py-4 text-center text-sm text-slate-500">Belum ada alokasi — release MO dulu.</td></tr>
             )}
           </tbody>
         </table>
+        {canIssue && (
+          <p className="mt-2 text-xs text-slate-500">
+            BR-041: fabric wajib pilih roll (aktual terukur); trim backflush tidak perlu issue manual. BR-060: issue ≤ sisa reservasi.
+          </p>
+        )}
       </section>
     </div>
   );
