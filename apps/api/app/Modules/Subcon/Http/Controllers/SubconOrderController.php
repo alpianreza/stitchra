@@ -15,7 +15,7 @@ class SubconOrderController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('subcon.order.view'), 403);
+        abort_unless($request->user()->hasPermission('subcon.jwo.view'), 403);
 
         $query = SubconOrder::with('supplier', 'productionOrder');
         if ($status = $request->query('status')) {
@@ -28,7 +28,7 @@ class SubconOrderController extends Controller
     /** Buat + kirim subcon order (supplier wajib type SUBCON; bahan pendamping → SUBCON_OUT) */
     public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('subcon.order.create'), 403);
+        abort_unless($request->user()->hasPermission('subcon.jwo.create'), 403);
 
         $data = $request->validate([
             'supplier_id' => 'required|integer|exists:suppliers,id',
@@ -62,7 +62,7 @@ class SubconOrderController extends Controller
     /** Terima hasil subcon — SUBCON_IN + fee (BR-091/080) */
     public function receive(Request $request, SubconOrder $subconOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('subcon.order.receive'), 403);
+        abort_unless($request->user()->hasPermission('subcon.movement.create'), 403);
 
         $data = $request->validate([
             'returns' => 'required|array|min:1',
@@ -82,7 +82,7 @@ class SubconOrderController extends Controller
 
     public function show(Request $request, SubconOrder $subconOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('subcon.order.view'), 403);
+        abort_unless($request->user()->hasPermission('subcon.jwo.view'), 403);
 
         return response()->json($subconOrder->load('lines', 'fees', 'supplier'));
     }

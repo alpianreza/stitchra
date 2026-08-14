@@ -15,7 +15,7 @@ class ScanController extends Controller
     /** BR-062: scan bundle (keyboard-wedge scanner / manual) — IN/OUT per operasi */
     public function scan(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('shopfloor.scan.create'), 403);
+        abort_unless($request->user()->hasPermission('production.output.create'), 403);
 
         $data = $request->validate([
             'bundle_no' => 'required|string|max:40',
@@ -38,7 +38,7 @@ class ScanController extends Controller
     /** BR-063: WIP per MO per stage */
     public function wip(Request $request, int $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('shopfloor.scan.view'), 403);
+        abort_unless($request->user()->hasPermission('production.output.view'), 403);
 
         return response()->json(['data' => $this->service->wipByStage($productionOrder)]);
     }
@@ -46,7 +46,7 @@ class ScanController extends Controller
     /** Daily output per line (agregasi scan OUT) */
     public function dailyOutput(Request $request, int $line): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('shopfloor.scan.view'), 403);
+        abort_unless($request->user()->hasPermission('production.output.view'), 403);
 
         $date = $request->query('date', now()->toDateString());
 

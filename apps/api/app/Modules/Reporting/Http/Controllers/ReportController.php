@@ -16,7 +16,7 @@ class ReportController extends Controller
     /** Daftar report yang tersedia */
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('reporting.report.view'), 403);
+        $this->authorizeReportView($request);
 
         return response()->json(['data' => $this->service->available()]);
     }
@@ -24,7 +24,7 @@ class ReportController extends Controller
     /** Jalankan report — params via query (date, fixed_cost_share, ...) */
     public function run(Request $request, string $report): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('reporting.report.view'), 403);
+        $this->authorizeReportView($request);
 
         try {
             $result = $this->service->run(CurrentCompany::id(), $report, $request->query());
@@ -38,7 +38,7 @@ class ReportController extends Controller
     /** Export CSV (download) */
     public function export(Request $request, string $report): StreamedResponse
     {
-        abort_unless($request->user()->hasPermission('reporting.report.export'), 403);
+        $this->authorizeReportView($request);
 
         $result = $this->service->run(CurrentCompany::id(), $report, $request->query());
         $csv = $this->service->toCsv($result);
@@ -46,5 +46,17 @@ class ReportController extends Controller
         return response()->streamDownload(function () use ($csv) {
             echo $csv;
         }, "{$report}-".now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    /** Report manapun boleh dilihat bila user punya SALAH SATU reporting.*.view (BR-110) */
+    private function authorizeReportView(Request $request): void
+    {
+        $allowed = collect([
+            'reporting.sales.view', 'reporting.ppic.view', 'reporting.inventory.view',
+            'reporting.purchasing.view', 'reporting.quality.view', 'reporting.finance.view',
+            'reporting.traceability.view',
+        ])->contains(fn ($p) => $request->user()->hasPermission($p));
+
+        abort_unless($allowed, 403, 'Tidak ada permission reporting.*.view.');
     }
 }

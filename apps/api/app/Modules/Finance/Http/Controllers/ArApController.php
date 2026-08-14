@@ -18,7 +18,7 @@ class ArApController extends Controller
     /** AR invoice dari shipment SHIPPED (harga SO, kurs BR-102; jurnal AUTO Piutang/Pendapatan) */
     public function createArInvoice(Request $request, Shipment $shipment): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.ar.create'), 403);
+        abort_unless($request->user()->hasPermission('finance.ar-invoice.create'), 403);
 
         $data = $request->validate(['due_date' => 'nullable|date']);
 
@@ -33,7 +33,7 @@ class ArApController extends Controller
 
     public function payAr(Request $request, ArInvoice $arInvoice): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.ar.pay'), 403);
+        abort_unless($request->user()->hasPermission('finance.payment.create'), 403);
 
         $data = $request->validate([
             'amount' => 'required|numeric|min:0.0001',
@@ -54,7 +54,7 @@ class ArApController extends Controller
     /** BR-050: bayar supplier hanya untuk invoice MATCHED */
     public function payAp(Request $request, SupplierInvoice $supplierInvoice): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.ap.pay'), 403);
+        abort_unless($request->user()->hasPermission('finance.payment.create'), 403);
 
         $data = $request->validate([
             'amount' => 'required|numeric|min:0.0001',
@@ -74,7 +74,7 @@ class ArApController extends Controller
 
     public function agingAr(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.ar.view'), 403);
+        abort_unless($request->user()->hasPermission('finance.ar-invoice.view'), 403);
 
         return response()->json(['data' => $this->service->agingAr(CurrentCompany::id(), $request->query('as_of', now()->toDateString()))]);
     }

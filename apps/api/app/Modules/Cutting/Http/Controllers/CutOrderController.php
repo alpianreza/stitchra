@@ -15,7 +15,7 @@ class CutOrderController extends Controller
 
     public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('cutting.order.create'), 403);
+        abort_unless($request->user()->hasPermission('cutting.order.execute'), 403);
 
         $data = $request->validate([
             'lines' => 'required|array|min:1',
@@ -36,7 +36,7 @@ class CutOrderController extends Controller
     /** BR-031/041: marker log — konsumsi aktual kain per roll */
     public function recordMarker(Request $request, CutOrder $cutOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('cutting.marker.create'), 403);
+        abort_unless($request->user()->hasPermission('cutting.marker.execute'), 403);
 
         $data = $request->validate([
             'markers' => 'required|array|min:1',
@@ -59,7 +59,7 @@ class CutOrderController extends Controller
     /** BR-061: generate bundles dari cut order line */
     public function generateBundles(Request $request, CutOrder $cutOrder, int $line): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('cutting.bundle.create'), 403);
+        abort_unless($request->user()->hasPermission('cutting.bundle.execute'), 403);
 
         $data = $request->validate(['bundle_size' => 'required|integer|min:1']);
 
@@ -75,7 +75,7 @@ class CutOrderController extends Controller
     /** Selesaikan cut order; update consumption_actual di BOM (BR-031) */
     public function complete(Request $request, CutOrder $cutOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('cutting.order.complete'), 403);
+        abort_unless($request->user()->hasPermission('cutting.order.execute'), 403);
 
         return response()->json($this->service->complete($cutOrder, $request->user()));
     }

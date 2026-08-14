@@ -15,7 +15,7 @@ class PackingListController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('packing.list.view'), 403);
+        abort_unless($request->user()->hasPermission('packing.packinglist.view'), 403);
 
         $query = PackingList::with('salesOrder.customer')->withCount('cartons');
         if ($status = $request->query('status')) {
@@ -27,7 +27,7 @@ class PackingListController extends Controller
 
     public function store(Request $request, SalesOrder $salesOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('packing.list.create'), 403);
+        abort_unless($request->user()->hasPermission('packing.packinglist.create'), 403);
 
         $data = $request->validate(['production_order_id' => 'nullable|integer|exists:production_orders,id']);
 
@@ -42,7 +42,7 @@ class PackingListController extends Controller
 
     public function addCarton(Request $request, PackingList $packingList): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('packing.list.update'), 403);
+        abort_unless($request->user()->hasPermission('packing.packinglist.update'), 403);
 
         $data = $request->validate([
             'carton.gross_weight_kg' => 'nullable|numeric|min:0',
@@ -67,7 +67,7 @@ class PackingListController extends Controller
     /** BR-082: finalize — wajib QC FINAL PASS + ratio check (BR-021); FG masuk gudang FG */
     public function finalize(Request $request, PackingList $packingList): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('packing.list.finalize'), 403);
+        abort_unless($request->user()->hasPermission('packing.packinglist.submit'), 403);
 
         $data = $request->validate(['fg_warehouse_id' => 'required|integer|exists:warehouses,id']);
 
@@ -82,7 +82,7 @@ class PackingListController extends Controller
 
     public function show(Request $request, PackingList $packingList): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('packing.list.view'), 403);
+        abort_unless($request->user()->hasPermission('packing.packinglist.view'), 403);
 
         return response()->json($packingList->load('cartons.lines', 'salesOrder.customer'));
     }

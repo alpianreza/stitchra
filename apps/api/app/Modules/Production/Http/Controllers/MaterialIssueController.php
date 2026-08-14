@@ -17,7 +17,7 @@ class MaterialIssueController extends Controller
     /** BR-041/060: issue aktual dari reservasi (fabric wajib per roll) */
     public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.issue.create'), 403);
+        abort_unless($request->user()->hasPermission('production.issue.execute'), 403);
 
         $data = $request->validate([
             'warehouse_id' => 'required|integer|exists:warehouses,id',
@@ -41,7 +41,7 @@ class MaterialIssueController extends Controller
     /** BR-041: backflush trim dari BOM × qty_produced */
     public function backflush(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.issue.create'), 403);
+        abort_unless($request->user()->hasPermission('production.issue.execute'), 403);
 
         $data = $request->validate(['warehouse_id' => 'required|integer|exists:warehouses,id']);
 
@@ -53,7 +53,7 @@ class MaterialIssueController extends Controller
     /** BR-042: leftover roll kembali ke RM sebagai available */
     public function returnLeftover(Request $request, ProductionOrder $productionOrder, FabricRoll $roll): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.issue.create'), 403);
+        abort_unless($request->user()->hasPermission('cutting.leftover.execute'), 403);
 
         $data = $request->validate([
             'warehouse_id' => 'required|integer|exists:warehouses,id',

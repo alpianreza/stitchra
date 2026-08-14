@@ -48,10 +48,10 @@ class ShipmentController extends Controller
         return response()->json($shipment, 201);
     }
 
-    /** BR-021: approve shipment di luar toleransi (eksplisit + audit) */
+    /** BR-021: approve shipment di luar toleransi (override terkontrol + audit) */
     public function approveOverTolerance(Request $request, Shipment $shipment): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('shipping.shipment.approve'), 403);
+        abort_unless($request->user()->hasPermission('shipping.shipment.update'), 403);
 
         try {
             $shipment = $this->service->approveOverTolerance($shipment, $request->user());
@@ -65,7 +65,7 @@ class ShipmentController extends Controller
     /** Kirim — FG keluar via ITS (BR-013); SO auto-close bila terpenuhi (BR-021) */
     public function ship(Request $request, Shipment $shipment): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('shipping.shipment.ship'), 403);
+        abort_unless($request->user()->hasPermission('shipping.shipment.submit'), 403);
 
         $data = $request->validate(['fg_warehouse_id' => 'required|integer|exists:warehouses,id']);
 

@@ -40,10 +40,10 @@ class JournalController extends Controller
         return response()->json($journal, 201);
     }
 
-    /** Koreksi via jurnal balik (bukan edit — BR-016) */
+    /** Koreksi via jurnal balik (bukan edit — BR-016); butuh otorisasi approve */
     public function reverse(Request $request, Journal $journal): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.journal.reverse'), 403);
+        abort_unless($request->user()->hasPermission('finance.journal.approve'), 403);
 
         $data = $request->validate(['reason' => 'nullable|string']);
 
@@ -58,7 +58,7 @@ class JournalController extends Controller
 
     public function trialBalance(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.gl.view'), 403);
+        abort_unless($request->user()->hasPermission('finance.report.view'), 403);
 
         $period = $request->query('period', now()->format('Y-m'));
 
@@ -68,7 +68,7 @@ class JournalController extends Controller
     /** BR-103: tutup periode */
     public function closePeriod(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.period.close'), 403);
+        abort_unless($request->user()->hasPermission('finance.period-closing.execute'), 403);
 
         $data = $request->validate(['period' => 'required|string|max:7']);
 
@@ -77,10 +77,10 @@ class JournalController extends Controller
         return response()->json($period);
     }
 
-    /** Mapping event → akun (BR-101 jurnal AUTO) */
+    /** Mapping event → akun (BR-101 jurnal AUTO) — master finance */
     public function setMapping(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.mapping.update'), 403);
+        abort_unless($request->user()->hasPermission('master.finance.manage'), 403);
 
         $data = $request->validate([
             'event' => 'required|string|in:'.implode(',', AccountMapping::EVENTS),

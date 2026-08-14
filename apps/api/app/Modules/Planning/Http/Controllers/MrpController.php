@@ -32,7 +32,7 @@ class MrpController extends Controller
     /** BR-043/045: jalankan MRP dari SO CONFIRMED — hasil = saran, bukan auto-PO */
     public function run(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('planning.mrp.run'), 403);
+        abort_unless($request->user()->hasPermission('planning.mrp.execute'), 403);
 
         $data = $request->validate([
             'so_ids' => 'required|array|min:1',

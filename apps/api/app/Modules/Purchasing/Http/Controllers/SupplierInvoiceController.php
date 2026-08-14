@@ -65,10 +65,10 @@ class SupplierInvoiceController extends Controller
         return response()->json($invoice->load('lines'), 201);
     }
 
-    /** BR-050: jalankan 3-way match */
+    /** BR-050: jalankan 3-way match — otorisasi approve (finance) */
     public function match(Request $request, SupplierInvoice $supplierInvoice): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('purchasing.invoice.match'), 403);
+        abort_unless($request->user()->hasPermission('purchasing.invoice.approve'), 403);
 
         $data = $request->validate([
             'price_tolerance_pct' => 'nullable|numeric|min:0|max:100',

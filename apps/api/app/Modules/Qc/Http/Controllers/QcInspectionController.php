@@ -15,7 +15,7 @@ class QcInspectionController extends Controller
 
     public function index(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('qc.inspection.view'), 403);
+        abort_unless($request->user()->hasPermission('quality.inspection.view'), 403);
 
         return response()->json(
             QcInspection::where('production_order_id', $productionOrder->id)
@@ -26,7 +26,7 @@ class QcInspectionController extends Controller
     /** Buat inspeksi — FINAL menghitung sample size + Ac/Re otomatis (BR-008/071) */
     public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('qc.inspection.create'), 403);
+        abort_unless($request->user()->hasPermission('quality.inspection.create'), 403);
 
         $data = $request->validate([
             'stage' => 'required|in:INLINE,ENDLINE,FINAL',
@@ -45,7 +45,7 @@ class QcInspectionController extends Controller
     /** BR-072: catat defect dari library */
     public function recordDefects(Request $request, QcInspection $qcInspection): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('qc.inspection.update'), 403);
+        abort_unless($request->user()->hasPermission('quality.inspection.update'), 403);
 
         $data = $request->validate([
             'defects' => 'required|array|min:1',
@@ -68,7 +68,7 @@ class QcInspectionController extends Controller
     /** Finalisasi — FINAL: verdict otomatis AQL; INLINE/ENDLINE: manual PASS/FAIL (BR-073: FAIL → REWORK) */
     public function finalize(Request $request, QcInspection $qcInspection): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('qc.inspection.finalize'), 403);
+        abort_unless($request->user()->hasPermission('quality.inspection.submit'), 403);
 
         $data = $request->validate(['verdict' => 'nullable|in:PASS,FAIL']);
 

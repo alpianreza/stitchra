@@ -15,7 +15,7 @@ class CostingController extends Controller
     /** BR-080/081: actual costing per MO + variance vs standard */
     public function actual(Request $request, ProductionOrder $productionOrder, ActualCostingService $service): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.costing.view'), 403);
+        abort_unless($request->user()->hasPermission('costing.actual.view'), 403);
 
         try {
             $result = $service->computeForMo($productionOrder, $request->query('period'));

@@ -41,7 +41,7 @@ class InwardInspectionController extends Controller
     /** Finalisasi: PASS → release hold (BR-004); FAIL → tandai rejected */
     public function finalize(Request $request, InwardInspection $inwardInspection): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('receiving.inspection.finalize'), 403);
+        abort_unless($request->user()->hasPermission('receiving.inspection.update'), 403);
 
         $data = $request->validate([
             'lines' => 'required|array|min:1',

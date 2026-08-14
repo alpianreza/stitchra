@@ -16,7 +16,7 @@ class ProductionOrderController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.order.view'), 403);
+        abort_unless($request->user()->hasPermission('production.mo.view'), 403);
 
         $query = ProductionOrder::with('style', 'salesOrder', 'line');
         if ($status = $request->query('status')) {
@@ -28,7 +28,7 @@ class ProductionOrderController extends Controller
 
     public function show(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.order.view'), 403);
+        abort_unless($request->user()->hasPermission('production.mo.view'), 403);
 
         return response()->json($productionOrder->load([
             'style', 'salesOrder.customer', 'bomVersion.lines.material', 'routingVersion.operations.operation',
@@ -39,7 +39,7 @@ class ProductionOrderController extends Controller
     /** Generate MO dari SO CONFIRMED (satu per style; snapshot BOM/Routing — BR-030) */
     public function createFromSo(Request $request, SalesOrder $salesOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.order.create'), 403);
+        abort_unless($request->user()->hasPermission('production.mo.create'), 403);
 
         $mos = $this->service->createFromSalesOrder($salesOrder, $request->user());
 
@@ -49,7 +49,7 @@ class ProductionOrderController extends Controller
     /** BR-060: release = hard reservation (atomic; shortage → 422 + daftar kurang) */
     public function release(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.order.release'), 403);
+        abort_unless($request->user()->hasPermission('production.mo.release'), 403);
 
         $data = $request->validate(['warehouse_id' => 'required|integer|exists:warehouses,id']);
 
@@ -64,7 +64,7 @@ class ProductionOrderController extends Controller
 
     public function unrelease(Request $request, ProductionOrder $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.order.release'), 403);
+        abort_unless($request->user()->hasPermission('production.mo.release'), 403);
 
         return response()->json($this->service->unrelease($productionOrder, $request->user()));
     }
