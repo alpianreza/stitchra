@@ -12,6 +12,8 @@ const NAV = [
   { href: "/dashboard", label: "Dasbor" },
   { href: "/approvals", label: "Approval" },
   { href: "/sales/orders", label: "Sales Order" },
+  { href: "/pd/boms", label: "BOM" },
+  { href: "/pd/routings", label: "Routing" },
   { href: "/planning/mrp", label: "MRP" },
   { href: "/purchasing/prs", label: "Purchase Request" },
   { href: "/purchasing/pos", label: "Purchase Order" },
