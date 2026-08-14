@@ -16,12 +16,12 @@ class InventoryOpsController extends Controller
 {
     public function __construct(private InventoryOpsService $service) {}
 
-    /** Inquiry stok (saldo + available per baris) */
+    /** Inquiry stok (saldo + available per baris, dengan nama material/gudang) */
     public function stock(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('inventory.stock.view'), 403);
 
-        $query = StockBalance::query();
+        $query = StockBalance::with('material:id,code,name', 'warehouse:id,code,name');
         if ($materialId = $request->query('material_id')) {
             $query->where('material_id', $materialId);
         }
@@ -31,7 +31,10 @@ class InventoryOpsController extends Controller
 
         $rows = $query->orderBy('material_id')->limit(500)->get()->map(fn ($b) => [
             'material_id' => $b->material_id,
+            'material_code' => $b->material?->code,
+            'material_name' => $b->material?->name,
             'warehouse_id' => $b->warehouse_id,
+            'warehouse_code' => $b->warehouse?->code,
             'lot_no' => $b->lot_no,
             'roll_id' => $b->roll_id,
             'ownership' => $b->ownership,

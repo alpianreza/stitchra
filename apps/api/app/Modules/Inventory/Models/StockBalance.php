@@ -3,7 +3,10 @@
 namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\MasterData\Models\Material;
+use Modules\MasterData\Models\Warehouse;
 
 /**
  * Saldo materialized dari ledger. BR-006:
@@ -33,5 +36,15 @@ class StockBalance extends Model
     public function available(): float
     {
         return (float) $this->on_hand - (float) $this->reserved - (float) $this->quality_hold;
+    }
+
+    public function material(): BelongsTo
+    {
+        return $this->belongsTo(Material::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 }
