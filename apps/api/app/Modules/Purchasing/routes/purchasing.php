@@ -9,6 +9,7 @@ use Modules\Receiving\Http\Controllers\InwardInspectionController;
 
 Route::middleware(['auth:sanctum', 'company'])->group(function () {
     // Purchasing
+    Route::get('purchasing/prs', [PurchaseRequestController::class, 'index']);
     Route::post('purchasing/prs', [PurchaseRequestController::class, 'store']);
     Route::post('purchasing/prs/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit']);
     Route::get('purchasing/pos', [PurchaseOrderController::class, 'index']);

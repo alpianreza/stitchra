@@ -13,6 +13,8 @@ const NAV = [
   { href: "/approvals", label: "Approval" },
   { href: "/sales/orders", label: "Sales Order" },
   { href: "/planning/mrp", label: "MRP" },
+  { href: "/purchasing/prs", label: "Purchase Request" },
+  { href: "/purchasing/pos", label: "Purchase Order" },
   { href: "/production/orders", label: "Manufacturing Order" },
   { href: "/shopfloor/scan", label: "Stasiun Scan" },
   { href: "/receiving/grs/new", label: "Goods Receipt" },
