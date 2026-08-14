@@ -1,0 +1,44 @@
+<?php
+
+namespace Modules\Cutting\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Production\Models\ProductionOrder;
+use Modules\ShopFloor\Models\ProductionScan;
+
+/** BR-061: bundle = unit tracking shop floor (bundle_no = barcode) */
+class Bundle extends Model
+{
+    use BelongsToCompany;
+
+    public const STAGES = ['CUTTING','SEWING','FINISHING','QC','PACKING'];
+    public const STATUSES = ['ACTIVE','COMPLETED','REWORK','REJECTED'];
+
+    protected $fillable = [
+        'company_id', 'bundle_no', 'cut_order_line_id', 'production_order_id',
+        'qty', 'current_stage', 'status',
+    ];
+
+    protected function casts(): array
+    {
+        return ['qty' => 'decimal:4'];
+    }
+
+    public function cutOrderLine(): BelongsTo
+    {
+        return $this->belongsTo(CutOrderLine::class, 'cut_order_line_id');
+    }
+
+    public function productionOrder(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOrder::class);
+    }
+
+    public function scans(): HasMany
+    {
+        return $this->hasMany(ProductionScan::class);
+    }
+}
