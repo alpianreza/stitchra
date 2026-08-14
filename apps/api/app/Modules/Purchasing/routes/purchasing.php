@@ -13,6 +13,7 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::post('purchasing/prs/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit']);
     Route::get('purchasing/pos', [PurchaseOrderController::class, 'index']);
     Route::post('purchasing/pos', [PurchaseOrderController::class, 'store']);
+    Route::get('purchasing/pos/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
     Route::post('purchasing/pos/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit']);
     Route::post('purchasing/invoices', [SupplierInvoiceController::class, 'store']);
     Route::post('purchasing/invoices/{supplierInvoice}/match', [SupplierInvoiceController::class, 'match']);

@@ -15,6 +15,8 @@ const NAV = [
   { href: "/planning/mrp", label: "MRP" },
   { href: "/production/orders", label: "Manufacturing Order" },
   { href: "/shopfloor/scan", label: "Stasiun Scan" },
+  { href: "/receiving/grs/new", label: "Goods Receipt" },
+  { href: "/qc/inspections", label: "Inspeksi QC" },
   { href: "/reports", label: "Laporan" },
 ];
 
@@ -50,7 +52,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`rounded px-3 py-2 hover:bg-slate-800 ${pathname.startsWith(item.href) ? "bg-slate-800 font-medium" : ""}`}
+              className={`rounded px-3 py-2 hover:bg-slate-800 ${pathname.startsWith(item.href.split("/").slice(0, 2).join("/")) ? "bg-slate-800 font-medium" : ""}`}
             >
               {item.label}
             </Link>

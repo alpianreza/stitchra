@@ -26,6 +26,13 @@ class PurchaseOrderController extends Controller
         return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
     }
 
+    public function show(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('purchasing.po.view'), 403);
+
+        return response()->json($purchaseOrder->load('lines.material', 'supplier'));
+    }
+
     public function store(Request $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission('purchasing.po.create'), 403);
