@@ -1,8 +1,8 @@
 # ERP GARMENT — ROLES & PERMISSIONS
 
-> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
-> **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 1 Business Spec §4, BUSINESS_RULES v1.1 (BR-110), DEC-2026-08-13-01 s/d 03
+> **Status:** ✅ LOCKED v1.1 — v1.0 disetujui 13 Agu 2026; v1.1: + permission BEP (DEC-2026-08-14-01)
+> **Tanggal:** 14 Agustus 2026
+> **Dasar:** FASE 1 Business Spec §4, BUSINESS_RULES v1.2 (BR-110, BR-104), DEC-2026-08-13-01 s/d DEC-2026-08-14-01
 > **Model:** RBAC granular. Permission format: `domain.entity.action`. Dicek **server-side**; scope data per `company_id`. Permission baru default **deny**.
 
 ---
@@ -92,10 +92,10 @@
 - `reporting.finance.view`
 
 ### Accounting
-- Semua permission Finance **plus**: `finance.period.lock`, `finance.journal.approve`, `finance.period-closing.execute`, `finance.report.view` (trial balance, P&L, balance sheet — full GL DEC-03), `master.finance.*` (COA, rates)
+- Semua permission Finance **plus**: `finance.period.lock`, `finance.journal.approve`, `finance.period-closing.execute`, `finance.report.view` (trial balance, P&L, balance sheet — full GL DEC-03), **`finance.bep.view`** (BEP analysis — BR-104, DEC-2026-08-14-01), `master.finance.*` (COA, rates)
 
 ### Management
-- `*.view` semua domain + `*.export`
+- `*.view` semua domain + `*.export` (termasuk `finance.bep.view`)
 - `*.approve` level akhir (sesuai approval matrix: PO di atas limit, scrap di atas threshold, dst.)
 - `reporting.*.view`, `dashboard.*.view`
 - Tidak bisa: create/update transaksi operasional (read + approve saja)
@@ -110,6 +110,7 @@
 | `quality.disposition.execute` | QC Manager | Disposition NCR (BR-070) |
 | `finance.period.lock` | Accounting | Lock periode (BR-103) |
 | `finance.period-closing.execute` | Accounting | Tutup buku per periode (BR-101) |
+| `finance.bep.view` | Accounting, Management | BEP analysis report (BR-104) |
 | `core.audit.view` | Super Admin, Management | Audit log read-only |
 | `costing.margin.view` | Management, Merchandiser (own buyer), Finance | Data margin sensitif — tidak semua role boleh lihat |
 | `pd.costing.view` | Sales/Merchandiser | Harga/cost sensitif: scope terbatas |
@@ -124,7 +125,7 @@
 
 ## 5. CONTOH DENY-BY-DEFAULT
 
-- Operator produksi (memakai akun Production) **tidak bisa** melihat harga/cost/margin.
+- Operator produksi (memakai akun Production) **tidak bisa** melihat harga/cost/margin/BEP.
 - Warehouse tidak bisa `purchasing.po.view` harga (hanya qty untuk receiving) → diimplementasikan sebagai field-level masking pada fase UI.
 - QC tidak bisa mengubah output produksi; Production tidak bisa mengubah hasil inspeksi.
 
@@ -132,4 +133,4 @@
 
 ## PENUTUP
 
-Dokumen ini dikunci **v1.0**. Matrix ini dijadikan tabel seed (`roles`, `permissions`, `role_permissions`) saat Phase 1 (Core Foundation) diimplementasikan.
+Dokumen ini dikunci **v1.1**. Matrix ini dijadikan tabel seed (`roles`, `permissions`, `role_permissions`) saat Phase 1 (Core Foundation) diimplementasikan.

@@ -1,9 +1,9 @@
 # ERP GARMENT — IMPLEMENTATION ROADMAP
 
-> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
-> **Tanggal:** 13 Agustus 2026
-> **Dasar:** seluruh blueprint (FASE 0 → Database Blueprint) + BLUEPRINT_REVIEW, DECISION_LOG DEC-2026-08-13-01 s/d 03, master prompt FASE 22
-> **Aturan:** satu fase selesai + teruji + direview sebelum fase berikutnya. Blueprint dikunci v1.0; **coding Phase 1 menunggu instruksi eksplisit pemilik** (DEC-03).
+> **Status:** ✅ LOCKED v1.1 — v1.0 disetujui pemilik 13 Agu 2026; v1.1: + BEP report di Phase 8 (DEC-2026-08-14-01)
+> **Tanggal:** 14 Agustus 2026
+> **Dasar:** seluruh blueprint (FASE 0 → Database Blueprint) + BLUEPRINT_REVIEW, DECISION_LOG DEC-2026-08-13-01 s/d DEC-2026-08-14-01, master prompt FASE 22
+> **Aturan:** satu fase selesai + teruji + direview sebelum fase berikutnya. Blueprint dikunci; **coding Phase 1 menunggu instruksi eksplisit pemilik** (DEC-03).
 
 ---
 
@@ -84,7 +84,7 @@ Catatan pelaksanaan: pin versi di composer/package.json; verifikasi kompatibilit
 - Keputusan: OBD-002, OBD-017, OBD-018, OBD-019, OBD-020, OBD-021.
 
 ### PHASE 8 — Costing & Finance / Full GL (±4–6 minggu)
-**Scope:** biaya jasa subcon → actual cost MO (BR-091); actual cost per MO (material dari ledger, labor, OH per SAM-minute, subcon, wastage) + variance vs standard + margin per SO/style/buyer; **Finance full GL (BR-101):** COA, journal operasional otomatis (dari event GR/shipment/payment/adjustment) + journal umum/manual, AR (dari CI) + aging + payment + selisih kurs, AP + payment, cash/bank, **period closing**, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar); ekspor journal **opsional** (bila kelak perlu integrasi).
+**Scope:** biaya jasa subcon → actual cost MO (BR-091); actual cost per MO (material dari ledger, labor, OH per SAM-minute, subcon, wastage) + variance vs standard + margin per SO/style/buyer; **Finance full GL (BR-101):** COA, journal operasional otomatis (dari event GR/shipment/payment/adjustment) + journal umum/manual, AR (dari CI) + aging + payment + selisih kurs, AP + payment, cash/bank, **period closing**, inventory valuation, COGS, laporan keuangan (trial balance, P&L, balance sheet dasar); **BEP analysis report (BR-104): factory-wide per bulan + per style, milik Accounting**; ekspor journal **opsional** (bila kelak perlu integrasi).
 - Keputusan: OBD-025 (multi-currency operasional), OBD-026 (period lock) sebelum mulai fase.
 
 ### PHASE 9 — Dashboard, Reporting, Hardening (±3–4 minggu)
@@ -120,7 +120,7 @@ Catatan pelaksanaan: pin versi di composer/package.json; verifikasi kompatibilit
 
 ```
 stitchra/
-├─ docs/                    # seluruh blueprint (folder ini) — LOCKED v1.0
+├─ docs/                    # seluruh blueprint (folder ini) — LOCKED
 ├─ apps/
 │  ├─ api/                  # Laravel 13 — modular monolith (modul = Module Map)
 │  └─ web/                  # Next.js 16 (React) — SPA via Sanctum
@@ -133,4 +133,4 @@ stitchra/
 
 ## NEXT STEP
 
-Blueprint **dikunci v1.0** (DEC-2026-08-13-03). Coding **belum dimulai** — menunggu instruksi eksplisit pemilik untuk memulai **Phase 1 (Core Foundation)**. Keputusan berikutnya yang dibutuhkan: TD-03 (sebelum Phase 6), OBD per fase sesuai tabel §3.
+Blueprint **dikunci** (DEC-2026-08-13-03) + BEP ditambahkan (DEC-2026-08-14-01). Coding **belum dimulai** — menunggu instruksi eksplisit pemilik untuk memulai **Phase 1 (Core Foundation)**. Keputusan berikutnya yang dibutuhkan: TD-03 (sebelum Phase 6), OBD per fase sesuai tabel §3.
