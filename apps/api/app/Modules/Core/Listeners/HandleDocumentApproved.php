@@ -9,6 +9,7 @@ use Modules\ProductDev\Models\RoutingVersion;
 use Modules\ProductDev\Services\BomService;
 use Modules\ProductDev\Services\CostingService;
 use Modules\ProductDev\Services\RoutingService;
+use Modules\Purchasing\Services\PurchasingService;
 use Modules\Sales\Models\SalesOrder;
 use Modules\Sales\Services\SalesOrderService;
 
@@ -31,6 +32,7 @@ class HandleDocumentApproved
                 RoutingVersion::findOrFail($request->doc_id)),
             'COST' => app(CostingService::class)->markApproved(
                 CostSheet::withoutGlobalScopes()->findOrFail($request->doc_id)),
+            'PR', 'PO' => app(PurchasingService::class)->markApproved($request->doc_type, $request->doc_id),
             default => null,
         };
     }
