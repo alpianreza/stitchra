@@ -1,9 +1,0 @@
-        return DB::transaction(function () use ($mo, $lines, $user): CutOrder {
-            $cutOrder = CutOrder::create([
-                'company_id' => $mo->company_id,
-                'doc_no' => $this->numbering->next($mo->company_id, 'CUT'),
-                'production_order_id' => $mo->id,
-                'cut_date' => now()->toDateString(),
-                'status' => 'IN_PROGRESS',
-                'created_by' => $user->id,
-            ]);
