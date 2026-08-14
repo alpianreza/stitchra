@@ -12,7 +12,10 @@ const NAV = [
   { href: "/dashboard", label: "Dasbor" },
   { href: "/approvals", label: "Approval" },
   { href: "/sales/orders", label: "Sales Order" },
+  { href: "/planning/mrp", label: "MRP" },
   { href: "/production/orders", label: "Manufacturing Order" },
+  { href: "/shopfloor/scan", label: "Stasiun Scan" },
+  { href: "/reports", label: "Laporan" },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
