@@ -2,6 +2,8 @@
 
 namespace Modules\Core\Models;
 
+use Database\Factories\Modules\Core\Models\UserFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -10,7 +12,7 @@ use Modules\Core\Models\Concerns\BelongsToCompany;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, SoftDeletes, BelongsToCompany;
+    use HasApiTokens, HasFactory, SoftDeletes, BelongsToCompany;
 
     protected $fillable = [
         'company_id', 'name', 'email', 'password', 'is_active',
@@ -27,6 +29,11 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'password' => 'hashed',   // hashing modern (BR-111)
         ];
+    }
+
+    protected static function newFactory(): UserFactory
+    {
+        return UserFactory::new();
     }
 
     public function roles(): BelongsToMany
