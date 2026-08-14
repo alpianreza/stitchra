@@ -13,6 +13,18 @@ class SubconOrderController extends Controller
 {
     public function __construct(private SubconService $service) {}
 
+    public function index(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('subcon.order.view'), 403);
+
+        $query = SubconOrder::with('supplier', 'productionOrder');
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
+    }
+
     /** Buat + kirim subcon order (supplier wajib type SUBCON; bahan pendamping → SUBCON_OUT) */
     public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
     {

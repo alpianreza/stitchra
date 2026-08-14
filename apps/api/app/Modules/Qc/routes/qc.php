@@ -14,18 +14,21 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::post('qc/inspections/{qcInspection}/finalize', [QcInspectionController::class, 'finalize']);
 
     // Packing — BR-021/082
+    Route::get('packing/lists', [PackingListController::class, 'index']);
     Route::post('packing/lists/from-so/{salesOrder}', [PackingListController::class, 'store']);
     Route::post('packing/lists/{packingList}/cartons', [PackingListController::class, 'addCarton']);
     Route::post('packing/lists/{packingList}/finalize', [PackingListController::class, 'finalize']);
     Route::get('packing/lists/{packingList}', [PackingListController::class, 'show']);
 
     // Shipment — BR-021
+    Route::get('shipping/shipments', [ShipmentController::class, 'index']);
     Route::post('shipping/shipments/from-pl/{packingList}', [ShipmentController::class, 'store']);
     Route::post('shipping/shipments/{shipment}/approve-over-tolerance', [ShipmentController::class, 'approveOverTolerance']);
     Route::post('shipping/shipments/{shipment}/ship', [ShipmentController::class, 'ship']);
     Route::get('shipping/shipments/{shipment}', [ShipmentController::class, 'show']);
 
     // Subcon — BR-090/091/080
+    Route::get('subcon/orders', [SubconOrderController::class, 'index']);
     Route::post('subcon/orders/from-mo/{productionOrder}', [SubconOrderController::class, 'store']);
     Route::post('subcon/orders/{subconOrder}/receive', [SubconOrderController::class, 'receive']);
     Route::get('subcon/orders/{subconOrder}', [SubconOrderController::class, 'show']);

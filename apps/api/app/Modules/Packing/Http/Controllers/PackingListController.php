@@ -13,6 +13,18 @@ class PackingListController extends Controller
 {
     public function __construct(private PackingService $service) {}
 
+    public function index(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('packing.list.view'), 403);
+
+        $query = PackingList::with('salesOrder.customer')->withCount('cartons');
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
+    }
+
     public function store(Request $request, SalesOrder $salesOrder): JsonResponse
     {
         abort_unless($request->user()->hasPermission('packing.list.create'), 403);

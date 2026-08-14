@@ -13,6 +13,18 @@ class ShipmentController extends Controller
 {
     public function __construct(private ShipmentService $service) {}
 
+    public function index(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('shipping.shipment.view'), 403);
+
+        $query = Shipment::with('salesOrder.customer');
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
+    }
+
     public function store(Request $request, PackingList $packingList): JsonResponse
     {
         abort_unless($request->user()->hasPermission('shipping.shipment.create'), 403);
