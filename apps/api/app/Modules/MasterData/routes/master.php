@@ -2,11 +2,13 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\MasterData\Http\Controllers\MasterDataController;
+use Modules\MasterData\Http\Controllers\MasterDataImportController;
 
 // Master data CRUD — BR-110 (permission di controller), BR-011 (company middleware)
 Route::middleware(['auth:sanctum', 'company'])
     ->prefix('master')
     ->group(function () {
+        Route::post('{entity}/import', MasterDataImportController::class);
         Route::get('{entity}', [MasterDataController::class, 'index']);
         Route::post('{entity}', [MasterDataController::class, 'store']);
         Route::get('{entity}/{id}', [MasterDataController::class, 'show']);
