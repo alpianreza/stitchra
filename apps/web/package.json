@@ -1,0 +1,27 @@
+{
+  "name": "stitchra-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@playwright/test": "^1.49",
+    "typescript": "^5.7",
+    "tailwindcss": "^4.0",
+    "eslint": "^9",
+    "eslint-config-next": "^16.0.0"
+  }
+}

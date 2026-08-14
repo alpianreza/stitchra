@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build
+.next/
+dist/
+
+# Env & secrets (BR-113)
+.env
+.env.*
+!.env.example
+
+# Storage & cache
+apps/api/storage/*.key
+apps/api/storage/logs/*.log
+apps/api/storage/framework/cache/*
+apps/api/storage/framework/sessions/*
+apps/api/storage/framework/views/*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
