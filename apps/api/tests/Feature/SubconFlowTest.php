@@ -9,8 +9,6 @@ use Modules\MasterData\Models\Uom;
 use Modules\MasterData\Models\Warehouse;
 use Modules\Subcon\Services\SubconService;
 
-require_once __DIR__.'/AqlVerdictTest.php';
-
 test('BR-090/091: subcon OUT menaikkan in_transit; receive menurunkannya + fee tercatat (BR-080)', function () {
     [$user, , , , $mo] = qcFixture();
 

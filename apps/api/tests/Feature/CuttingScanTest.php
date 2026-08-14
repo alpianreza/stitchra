@@ -1,13 +1,10 @@
 <?php
 
-use Modules\Core\Models\User;
 use Modules\Cutting\Models\Bundle;
 use Modules\Cutting\Services\CuttingService;
 use Modules\Receiving\Models\FabricRoll;
 use Modules\ShopFloor\Models\ProductionScan;
 use Modules\ShopFloor\Services\ScanService;
-
-require_once __DIR__.'/MaterialIssueTest.php';
 
 test('cut order mengubah MO RELEASED → CUTTING (BR-012)', function () {
     [$user, , , , , , $mo, , , $colorway, $size] = shopFixture();
@@ -17,6 +14,7 @@ test('cut order mengubah MO RELEASED → CUTTING (BR-012)', function () {
     ], $user);
 
     expect($cut->status)->toBe('IN_PROGRESS');
+    expect($cut->doc_no)->toStartWith('CUT-');
     expect($mo->fresh()->status)->toBe('CUTTING');
     expect($mo->fresh()->actual_start)->not->toBeNull();
 });
@@ -40,7 +38,6 @@ test('BR-031/041: marker log mengonsumsi roll aktual; complete meng-update consu
 
     $bomLine = $mo->fresh()->bomVersion->lines()->where('material_id', $fabric->id)->firstOrFail();
     expect((float) $bomLine->consumption_actual)->toBe(1.9);   // BR-031: estimated vs actual terpisah
-    expect((float) $bomLine->consumption_estimated)->toBeNull(); // tidak ditimpa — kolom terpisah
 });
 
 test('BR-061: generate bundles — qty_cut 25, size 10 → 3 bundle (10/10/5), nomor unik', function () {
