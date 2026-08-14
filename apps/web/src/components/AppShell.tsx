@@ -10,6 +10,7 @@ import { masterEntities, masterMenuOrder } from "@/lib/masterMeta";
 
 const NAV = [
   { href: "/dashboard", label: "Dasbor" },
+  { href: "/approvals", label: "Approval" },
   { href: "/sales/orders", label: "Sales Order" },
   { href: "/production/orders", label: "Manufacturing Order" },
 ];

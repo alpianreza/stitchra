@@ -3,6 +3,7 @@
 namespace Modules\Core\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 
@@ -24,6 +25,16 @@ class ApprovalRequest extends Model
             'submitted_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
+    }
+
+    public function flow(): BelongsTo
+    {
+        return $this->belongsTo(ApprovalFlow::class, 'flow_id');
+    }
+
+    public function submitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by');
     }
 
     public function stepInstances(): HasMany
