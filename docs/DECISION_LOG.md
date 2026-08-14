@@ -26,12 +26,12 @@
 | OBD-016 | AQL | AQL engine configurable per buyer (default 2.5 major / 4.0 minor, ISO 2859-1 General Level II) |
 | OBD-022 | Level costing | Estimated per style (revisi per SO), **actual per MO**, laporan per SO |
 | OBD-023 | Basis overhead | **Per menit SAM terpakai**, configurable |
-| OBD-024 | Scope Finance | Hook integrasi disiapkan; implementasi awal AR/AP + costing di ERP (full GL kemudian — **diganti oleh DEC-2026-08-13-03**) |
+| OBD-024 | Scope Finance | **Digantikan DEC-2026-08-13-03: full GL internal** |
 | OBD-027 | Document numbering | Per company + prefix + tahun, counter terpisah, concurrency-safe |
 | OBD-029 | Multi-company | Schema siap (company_id/factory_id di semua tabel transaksi & stok); operasional 1 company dulu |
 
 ### Catatan
-- OBD-024: **digantikan oleh DEC-2026-08-13-03** (full GL — lihat di bawah).
+- OBD-024: **digantikan oleh DEC-2026-08-13-03** (full GL).
 - OBD non-P0 (002, 003, 006, 010, 012–015, 017–021, 025, 026, 028, 030–032) tetap terbuka dan dijadwalkan keputusannya per fase di `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`. Rekomendasi pada FASE 0 menjadi default sementara sampai diganti keputusan resmi.
 
 ### Referensi riset tambahan yang diadopsi
@@ -114,6 +114,24 @@ Seluruh dokumen blueprint (`docs/`) dikunci **v1.0**. **Coding Phase 1 belum dim
   - `ERP_GARMENT_MODULE_MAP.md` — §2.18 (journal: full GL + period closing; export opsional), §5 (deployment resolved)
   - `ERP_GARMENT_PROCESS_FLOW.md` — PF-10 (laporan keuangan dari GL; ekspor opsional)
   - `BLUEPRINT_REVIEW.md` — addendum pasca-review
+
+---
+
+## DEC-2026-08-14-01 — BEP (Break-Even Point) Analysis Masuk Scope, Dimiliki Accounting
+
+- **Tanggal:** 14 Agustus 2026
+- **Diputuskan oleh:** Pemilik proyek (Agen)
+- **Keputusan:**
+  1. **BEP Analysis ditambahkan ke scope resmi** sebagai report di domain **Finance/Accounting** (bukan Costing) — sesuai praktik perusahaan: *"accounting yang bikin BEP"*.
+  2. Formula baseline: `BEP (pcs) = Fixed Cost per periode ÷ (Harga jual rata-rata per pcs − Variable cost per pcs)`.
+     - Variable cost per pcs: dari costing (material + labor + variable overhead) — standard atau actual.
+     - Fixed cost per periode: dari GL (akun overhead tetap) — tersedia karena full GL internal (DEC-2026-08-13-03).
+     - Level report: **factory-wide per bulan** (utama) + **per style** (sekunder).
+  3. **Tidak butuh tabel baru** — BEP adalah computed report dari data yang sudah ada (GL, `overhead_rates`, cost sheets, actual costs). Database blueprint tidak berubah.
+  4. Implementasi masuk **Phase 8** (Costing & Finance / Full GL) di roadmap.
+- **OBD terkait:** — (penambahan scope baru via DEC)
+- **Dampak:** `ERP_GARMENT_BUSINESS_SPECIFICATION.md` §2 & §13 (+ BEP), `ERP_GARMENT_BUSINESS_RULES.md` BR-104 (baru, LOCKED), `ERP_GARMENT_ROLES_PERMISSIONS.md` (Accounting: `finance.bep.view`), `ERP_GARMENT_IMPLEMENTATION_ROADMAP.md` Phase 8.
+- **Catatan:** rekomendasi lain yang diusulkan 13–14 Agu (backup/DR offsite, production calendar, supplier scorecard, fabric reconciliation per MO, operator incentive report) statusnya **diusulkan, belum diadopsi** — menunggu keputusan pemilik. Rekomendasi terkuat tetap **backup offsite** karena deployment on-premise.
 
 ---
 
