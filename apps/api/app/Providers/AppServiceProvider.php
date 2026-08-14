@@ -6,12 +6,16 @@ use Illuminate\Support\ServiceProvider;
 use Modules\Core\Providers\CoreServiceProvider;
 use Modules\Cutting\Providers\CuttingServiceProvider;
 use Modules\MasterData\Providers\MasterDataServiceProvider;
+use Modules\Packing\Providers\PackingServiceProvider;
 use Modules\Planning\Providers\PlanningServiceProvider;
 use Modules\ProductDev\Providers\ProductDevServiceProvider;
 use Modules\Production\Providers\ProductionServiceProvider;
 use Modules\Purchasing\Providers\PurchasingServiceProvider;
+use Modules\Qc\Providers\QcServiceProvider;
 use Modules\Sales\Providers\SalesServiceProvider;
+use Modules\Shipping\Providers\ShippingServiceProvider;
 use Modules\ShopFloor\Providers\ShopFloorServiceProvider;
+use Modules\Subcon\Providers\SubconServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->register(ProductionServiceProvider::class);
         $this->app->register(CuttingServiceProvider::class);
         $this->app->register(ShopFloorServiceProvider::class);
+        $this->app->register(QcServiceProvider::class);
+        $this->app->register(PackingServiceProvider::class);
+        $this->app->register(ShippingServiceProvider::class);
+        $this->app->register(SubconServiceProvider::class);
     }
 
     public function boot(): void
