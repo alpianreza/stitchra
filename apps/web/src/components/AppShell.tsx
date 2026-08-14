@@ -30,10 +30,14 @@ const NAV = [
   { href: "/reports", label: "Laporan" },
 ];
 
+const ADMIN_NAV = [
+  { href: "/approvals/flows", label: "Approval Flow" },
+];
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<{ name: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; roles?: string[] } | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -76,6 +80,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className={`rounded px-3 py-2 hover:bg-slate-800 ${pathname === `/master/${slug}` ? "bg-slate-800 font-medium" : ""}`}
             >
               {masterEntities[slug].title}
+            </Link>
+          ))}
+
+          <div className="mt-4 px-3 text-xs uppercase tracking-wide text-slate-400">Admin</div>
+          {ADMIN_NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`rounded px-3 py-2 hover:bg-slate-800 ${pathname === item.href ? "bg-slate-800 font-medium" : ""}`}
+            >
+              {item.label}
             </Link>
           ))}
         </nav>
