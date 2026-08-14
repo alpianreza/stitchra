@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Modules\Core\Providers\CoreServiceProvider;
 use Modules\Cutting\Providers\CuttingServiceProvider;
+use Modules\Finance\Providers\FinanceServiceProvider;
 use Modules\MasterData\Providers\MasterDataServiceProvider;
 use Modules\Packing\Providers\PackingServiceProvider;
 use Modules\Planning\Providers\PlanningServiceProvider;
@@ -34,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->register(PackingServiceProvider::class);
         $this->app->register(ShippingServiceProvider::class);
         $this->app->register(SubconServiceProvider::class);
+        $this->app->register(FinanceServiceProvider::class);
     }
 
     public function boot(): void
