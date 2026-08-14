@@ -3,6 +3,7 @@
 namespace Modules\Core\Listeners;
 
 use Modules\Core\Approval\Events\DocumentApproved;
+use Modules\Inventory\Services\InventoryOpsService;
 use Modules\ProductDev\Models\BomVersion;
 use Modules\ProductDev\Models\CostSheet;
 use Modules\ProductDev\Models\RoutingVersion;
@@ -33,6 +34,9 @@ class HandleDocumentApproved
             'COST' => app(CostingService::class)->markApproved(
                 CostSheet::withoutGlobalScopes()->findOrFail($request->doc_id)),
             'PR', 'PO' => app(PurchasingService::class)->markApproved($request->doc_type, $request->doc_id),
+            // BR-017: adjustment/opname hanya berefek ke stok SETELAH approved
+            'ADJ' => app(InventoryOpsService::class)->applyAdjustmentOnApproval($request->doc_id),
+            'OPN' => app(InventoryOpsService::class)->applyOpnameOnApproval($request->doc_id),
             default => null,
         };
     }
