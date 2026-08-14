@@ -1,6 +1,5 @@
-import { NextUIProvider } from "./providers";
-
+// Middleware halaman lama — kini ditangani AppShell di (app)/layout.tsx.
+// File ini tidak dipakai lagi; root page redirect via providers.tsx.
 export default function Home() {
-  // Middleware client-side: cek token → dashboard, else → login
   return null;
 }
