@@ -1,8 +1,8 @@
 # ERP GARMENT — BUSINESS SPECIFICATION (FASE 1)
 
-> **Status:** ✅ LOCKED v1.0 — disetujui pemilik 13 Agustus 2026
-> **Tanggal:** 13 Agustus 2026
-> **Dasar:** FASE 0 Business Discovery (LOCKED v1.0) + DECISION_LOG DEC-2026-08-13-01, DEC-2026-08-13-02, DEC-2026-08-13-03
+> **Status:** ✅ LOCKED v1.1 — v1.0 disetujui pemilik 13 Agu 2026; v1.1: + BEP analysis (DEC-2026-08-14-01)
+> **Tanggal:** 14 Agustus 2026
+> **Dasar:** FASE 0 Business Discovery (LOCKED v1.0) + DECISION_LOG DEC-2026-08-13-01 s/d DEC-2026-08-14-01
 > **Aturan:** Dokumen ini adalah sumber kebenaran bisnis. Kode mengikuti dokumen ini, bukan sebaliknya. Item yang belum diputuskan ditandai `OBD-NNN` (lihat FASE 0 & DECISION_LOG).
 
 ---
@@ -38,6 +38,7 @@ Prinsip sistem:
 - Subcontracting/Job Work: material out → tracking → return, biaya jasa ke costing.
 - Costing: estimated/standard/actual, variance, margin per style/order.
 - **Finance — FULL GL (OBD-024 RESOLVED, DEC-2026-08-13-03):** COA, journal (operasional + umum/manual), AR (invoice buyer), AP (supplier/subcon), cash/bank, period closing, inventory valuation, COGS, revenue, expense, laporan keuangan (trial balance, P&L, balance sheet dasar). Perusahaan sebelumnya Excel/manual → tidak ada integrasi akuntansi eksternal; ekspor journal bersifat opsional.
+- **BEP (Break-Even Point) analysis — milik Accounting (DEC-2026-08-14-01, BR-104):** BEP factory-wide per bulan (utama) + per style (sekunder); computed report dari GL + costing, tanpa tabel baru.
 - Reporting & Dashboard per domain.
 
 ### Out-of-scope (fase awal, hook disiapkan)
@@ -71,7 +72,7 @@ Mengacu FASE 0 bagian 3 (18 aktor): Owner/Management, Admin Sistem, Sales/Mercha
 | Packing | packinglist.*, carton.* |
 | Shipping | shipment.*, exportdoc.* |
 | Finance | invoice.*, payment.*, journal.*, valuation.view |
-| Accounting | finance + period.lock, journal.approve, financial report |
+| Accounting | finance + period.lock, journal.approve, financial report, **bep.view** |
 | Management | *.view semua domain, dashboard, approval level akhir |
 
 Aturan: permission dicek **server-side** di setiap endpoint; frontend hanya menyembunyikan UI. Approval action (`*.approve`) terpisah dari `*.update`.
@@ -96,7 +97,7 @@ Mengadopsi peta modul master prompt (FASE 2) dengan penyesuaian hasil discovery:
 15. **Shipping** — Shipment, Container, CommercialInvoice, ExportDocument.
 16. **Subcontracting** — JobWorkOrder, MaterialOut, JobReturn, SubconCost.
 17. **Costing** — StandardCost, ActualCost (per MO), Variance, Margin.
-18. **Finance** — COA, Journal (operasional + umum), AR, AP, CashBank, PeriodClosing, Valuation, COGS, Financial Reports (full GL), ExportInterface (opsional).
+18. **Finance** — COA, Journal (operasional + umum), AR, AP, CashBank, PeriodClosing, Valuation, COGS, Financial Reports (full GL), **BEP Report**, ExportInterface (opsional).
 19. **Reporting** — per domain + Management dashboard.
 20. **Integration** — Barcode/QR, import/export (CSV/Excel).
 
@@ -131,6 +132,7 @@ Aturan yang **dikunci** (dari DECISION_LOG) berkode BR; yang masih terbuka meruj
 - **BR-012 (OBD-028 default):** Dokumen dengan turunan tidak boleh di-cancel; gunakan reversal/return document.
 - **BR-013:** Setiap perubahan stok hanya melalui **Inventory Transaction Service** terpusat (atomic: dokumen + lines + ledger + saldo).
 - **BR-014:** Estimated consumption (formula sampling) dan actual consumption (marker) disimpan terpisah di BOM/cutting; costing estimated memakai estimated+wastage%, costing actual memakai realisasi marker + leftover return.
+- **BR-104 (DEC-2026-08-14-01):** BEP analysis milik Accounting — `BEP (pcs) = Fixed Cost per periode ÷ (Harga jual per pcs − Variable cost per pcs)`; level factory-wide per bulan + per style; computed report.
 - Aturan AQL per buyer, toleransi shipment, batas rework, shade rule → masih `OBD` (default dari FASE 0 dipakai sementara).
 
 ## 8. DOCUMENT FLOW
@@ -224,7 +226,7 @@ Minimum per domain (rinci di FASE 16 master prompt), ditambah hasil discovery:
 - **Production:** plan vs actual, efficiency (SAM), WIP per proses, reject & downtime Pareto, leftover & wastage per marker.
 - **QC:** defect Pareto per kategori/proses/supplier kain, AQL pass rate per buyer, rework rate.
 - **Costing:** cost sheet estimated vs actual per MO/SO, variance (material/labor/OH/subcon), margin per style/buyer.
-- **Finance:** AR aging, AP aging, outstanding PO vs GR, COGS per periode, **trial balance, P&L, balance sheet dasar (full GL — DEC-03)**.
+- **Finance:** AR aging, AP aging, outstanding PO vs GR, COGS per periode, trial balance, P&L, balance sheet dasar (full GL — DEC-03), **BEP analysis per bulan + per style (DEC-2026-08-14-01)**.
 - Semua report: filter per company/periode/buyer/style; export Excel/PDF; data dari ledger/view — bukan query langsung tabel transaksi untuk report berat.
 
 ## 14. AUDIT REQUIREMENTS
@@ -253,4 +255,4 @@ OBD-002 (subcon in-scope), OBD-003 (buyer portal), OBD-006 (shade rule), OBD-010
 
 ## PENUTUP
 
-Dokumen ini dikunci **v1.0**. Perubahan berikutnya hanya via OBD/DEC baru + persetujuan pemilik (master prompt aturan 25: kode mengikuti business specification).
+Dokumen ini dikunci **v1.1**. Perubahan berikutnya hanya via OBD/DEC baru + persetujuan pemilik (master prompt aturan 25: kode mengikuti business specification).
