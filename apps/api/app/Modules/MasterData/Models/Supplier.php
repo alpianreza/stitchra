@@ -3,8 +3,10 @@
 namespace Modules\MasterData\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Receiving\Models\SupplierReturn;
 
 class Supplier extends Model
 {
@@ -25,5 +27,10 @@ class Supplier extends Model
     public function isSubcon(): bool
     {
         return $this->type === 'SUBCON';
+    }
+
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SupplierReturn::class);
     }
 }

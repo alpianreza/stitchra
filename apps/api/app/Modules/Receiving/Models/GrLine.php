@@ -5,6 +5,8 @@ namespace Modules\Receiving\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\MasterData\Models\Material;
+use Modules\Purchasing\Models\PoLine;
 
 /** BR-004: line masuk QUALITY_HOLD; BR-052: fabric → satu fabric_rolls per roll */
 class GrLine extends Model
@@ -24,6 +26,16 @@ class GrLine extends Model
     public function goodsReceipt(): BelongsTo
     {
         return $this->belongsTo(GoodsReceipt::class);
+    }
+
+    public function material(): BelongsTo
+    {
+        return $this->belongsTo(Material::class);
+    }
+
+    public function poLine(): BelongsTo
+    {
+        return $this->belongsTo(PoLine::class, 'po_line_id');
     }
 
     public function rolls(): HasMany
