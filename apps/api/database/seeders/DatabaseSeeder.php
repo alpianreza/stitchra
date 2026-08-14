@@ -43,7 +43,8 @@ class DatabaseSeeder extends Seeder
             'MO',   // Manufacturing Order
             'MI',   // Material Issue (+ fabric return)
             'CUT',  // Cut Order
-            'WIP',  // Transfer WIP
+            'TRF',  // Stock Transfer
+            'WIP',  // Transfer WIP (legacy mapping)
             'QC',   // QC Inspection
             'PL',   // Packing List
             'SHP',  // Shipment

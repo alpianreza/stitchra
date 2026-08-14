@@ -266,7 +266,7 @@ class InventoryTransactionService
         return match ($movementType) {
             'PURCHASE_RECEIPT' => 'GR',
             'MATERIAL_ISSUE' => 'MI',
-            'TRANSFER_IN', 'TRANSFER_OUT' => 'WIP',
+            'TRANSFER_IN', 'TRANSFER_OUT' => 'TRF',
             'ADJUSTMENT' => 'ADJ',
             'OPNAME_ADJUSTMENT' => 'OPN',
             'PRODUCTION_RETURN' => 'MI',
