@@ -13,6 +13,7 @@ use Modules\ProductDev\Providers\ProductDevServiceProvider;
 use Modules\Production\Providers\ProductionServiceProvider;
 use Modules\Purchasing\Providers\PurchasingServiceProvider;
 use Modules\Qc\Providers\QcServiceProvider;
+use Modules\Reporting\Providers\ReportingServiceProvider;
 use Modules\Sales\Providers\SalesServiceProvider;
 use Modules\Shipping\Providers\ShippingServiceProvider;
 use Modules\ShopFloor\Providers\ShopFloorServiceProvider;
@@ -36,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->register(ShippingServiceProvider::class);
         $this->app->register(SubconServiceProvider::class);
         $this->app->register(FinanceServiceProvider::class);
+        $this->app->register(ReportingServiceProvider::class);
     }
 
     public function boot(): void
