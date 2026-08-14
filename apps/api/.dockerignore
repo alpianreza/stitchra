@@ -1,0 +1,14 @@
+vendor
+.env
+.env.local
+.env.*.local
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+bootstrap/cache/*
+node_modules
+npm-debug.log
+.DS_Store
+.git
+.gitignore
+tests

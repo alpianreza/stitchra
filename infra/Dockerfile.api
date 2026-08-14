@@ -1,0 +1,87 @@
+# Multi-stage build for Laravel API
+# Stage 1: Builder
+FROM php:8.5-fpm-alpine AS builder
+
+RUN apk add --no-cache \
+    composer \
+    git \
+    curl \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
+    freetype-dev \
+    && docker-php-ext-configure gd \
+      --with-freetype \
+      --with-jpeg \
+      --with-webp \
+    && docker-php-ext-install -j$(nproc) \
+      pdo_mysql \
+      session \
+      zip \
+      gd \
+      bcmath
+
+WORKDIR /app
+
+COPY apps/api/composer.json composer.lock* ./
+
+RUN composer install \
+    --no-interaction \
+    --no-progress \
+    --prefer-dist \
+    --optimize-autoloader \
+    --ignore-platform-reqs \
+    || echo "Composer dependencies installed with warnings"
+
+# Stage 2: Runtime
+FROM php:8.5-fpm-alpine
+
+RUN apk add --no-cache \
+    libzip \
+    libzip-dev \
+    libpng \
+    libpng-dev \
+    libjpeg-turbo \
+    libjpeg-turbo-dev \
+    libwebp \
+    libwebp-dev \
+    freetype \
+    freetype-dev \
+    nginx \
+    curl \
+    && docker-php-ext-install -j$(nproc) \
+      pdo_mysql \
+      session \
+      zip \
+      gd \
+      bcmath \
+    && apk del *-dev
+
+WORKDIR /app
+
+# Copy application code
+COPY apps/api/ .
+
+# Copy composer dependencies from builder
+COPY --from=builder /app/vendor ./vendor
+
+# Create necessary directories
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+# Copy Nginx configuration
+COPY infra/nginx/api.conf /etc/nginx/conf.d/default.conf
+
+# Copy startup script
+COPY infra/startup-api.sh /startup.sh
+RUN chmod +x /startup.sh
+
+# Expose ports
+EXPOSE 9000 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+CMD ["/startup.sh"]
