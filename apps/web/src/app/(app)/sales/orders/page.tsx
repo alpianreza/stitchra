@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -41,10 +42,15 @@ export default function SalesOrdersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Sales Order</h1>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
-          <option value="">Semua status</option>
-          {["DRAFT", "SUBMITTED", "APPROVED", "CONFIRMED", "IN_PROGRESS", "CLOSED"].map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
+            <option value="">Semua status</option>
+            {["DRAFT", "SUBMITTED", "APPROVED", "CONFIRMED", "IN_PROGRESS", "CLOSED"].map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <Link href="/sales/orders/new" className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white">
+            + Buat SO
+          </Link>
+        </div>
       </div>
 
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}

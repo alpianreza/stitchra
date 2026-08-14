@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -47,15 +48,19 @@ export default function ProductionOrdersPage() {
               <th className="px-3 py-2 font-medium">SO</th>
               <th className="px-3 py-2 font-medium">Style</th>
               <th className="px-3 py-2 font-medium">Line</th>
-              <th className="px-3 py-2 font-medium text-right">Qty Plan</th>
-              <th className="px-3 py-2 font-medium text-right">Qty Produced</th>
+              <th className="px-3 py-2 text-right font-medium">Qty Plan</th>
+              <th className="px-3 py-2 text-right font-medium">Qty Produced</th>
               <th className="px-3 py-2 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {(page?.data ?? []).map((mo) => (
               <tr key={mo.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono">{mo.doc_no}</td>
+                <td className="px-3 py-2">
+                  <Link href={`/production/orders/${mo.id}`} className="font-mono text-blue-700 hover:underline">
+                    {mo.doc_no}
+                  </Link>
+                </td>
                 <td className="px-3 py-2 font-mono">{mo.sales_order?.doc_no ?? "—"}</td>
                 <td className="px-3 py-2">{mo.style?.style_no ?? "—"}</td>
                 <td className="px-3 py-2">{mo.line?.name ?? "—"}</td>
