@@ -23,6 +23,7 @@ const NAV = [
   { href: "/receiving/grs", label: "Goods Receipt" },
   { href: "/receiving/inspections", label: "Inward QC (FQC)" },
   { href: "/inventory/stock", label: "Inquiry Stok" },
+  { href: "/inventory/ops", label: "Operasi Stok" },
   { href: "/qc/inspections", label: "Inspeksi QC" },
   { href: "/packing/lists", label: "Packing List" },
   { href: "/shipping/shipments", label: "Shipment" },
