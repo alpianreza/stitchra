@@ -8,10 +8,6 @@ use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\MasterData\Models\Material;
 use Modules\MasterData\Models\ShadeGroup;
 
-/**
- * BR-003/052: satu baris per roll. BR-002: qty beli + meter aktual + conversion_rate
- * tersimpan per roll. BR-042: leftover = qty_remaining_meter kembali ke inventory.
- */
 class FabricRoll extends Model
 {
     use BelongsToCompany;
@@ -19,37 +15,33 @@ class FabricRoll extends Model
     public const STATUSES = ['QUALITY_HOLD','RELEASED','REJECTED_RETURNED','CONSUMED'];
 
     protected $fillable = [
-        'company_id', 'roll_no', 'gr_line_id', 'material_id', 'lot_no',
-        'shade_group_id', 'qty_buy', 'qty_meter_actual', 'conversion_rate',
-        'gsm_actual', 'width_actual_cm', 'qty_remaining_meter', 'status',
+        'company_id','roll_no','gr_line_id','material_id','use_uom_id','lot_no','shade_group_id',
+        'qty_buy','qty_meter_actual','qty_use_actual','conversion_rate','gsm_actual','width_actual_cm',
+        'qty_remaining_meter','qty_remaining_use','status',
     ];
 
     protected function casts(): array
     {
         return [
-            'qty_buy' => 'decimal:4', 'qty_meter_actual' => 'decimal:4',
-            'conversion_rate' => 'decimal:6', 'gsm_actual' => 'decimal:2',
-            'width_actual_cm' => 'decimal:2', 'qty_remaining_meter' => 'decimal:4',
+            'qty_buy'=>'decimal:4','qty_meter_actual'=>'decimal:4','qty_use_actual'=>'decimal:4',
+            'conversion_rate'=>'decimal:6','gsm_actual'=>'decimal:2','width_actual_cm'=>'decimal:2',
+            'qty_remaining_meter'=>'decimal:4','qty_remaining_use'=>'decimal:4',
         ];
     }
 
-    public function material(): BelongsTo
+    public function material(): BelongsTo { return $this->belongsTo(Material::class); }
+    public function shadeGroup(): BelongsTo { return $this->belongsTo(ShadeGroup::class); }
+
+    public function remainingUse(): float
     {
-        return $this->belongsTo(Material::class);
+        return (float) ($this->qty_remaining_use ?? $this->qty_remaining_meter);
     }
 
-    public function shadeGroup(): BelongsTo
+    public function consumeUse(float $qtyUse, float $qtyMeters): void
     {
-        return $this->belongsTo(ShadeGroup::class);
-    }
-
-    /** BR-042: pemakaian mengurangi sisa; sisa = leftover */
-    public function consume(float $meters): void
-    {
-        $this->qty_remaining_meter = max(0, (float) $this->qty_remaining_meter - $meters);
-        if ((float) $this->qty_remaining_meter <= 0) {
-            $this->status = 'CONSUMED';
-        }
+        $this->qty_remaining_use = max(0, $this->remainingUse() - $qtyUse);
+        $this->qty_remaining_meter = max(0, (float) $this->qty_remaining_meter - $qtyMeters);
+        if ((float) $this->qty_remaining_use <= 0.0001) $this->status = 'CONSUMED';
         $this->save();
     }
 }
