@@ -1,29 +1,18 @@
-# Modul Production (Manufacturing Order)
+# Modul Production
 
-MO dibuat per style dari SO `CONFIRMED`, menyimpan snapshot BOM/routing, dan release menghasilkan hard reservation.
+MO menyimpan snapshot BOM/routing dan release menghasilkan hard reservation.
 
-## MO invariants
+## Material issue dan BR-042
 
-- SO dikunci saat MO dibuat; hanya SO `CONFIRMED` pada company user yang diterima.
-- Satu MO per company×SO×style dilindungi service lock dan unique constraint.
-- BOM/routing `APPROVED` disimpan sebagai snapshot version pada MO.
-- Release hanya dari `PLANNED`, mengunci MO dan seluruh candidate balances.
-- Kebutuhan BOM diagregasi per material sebelum reservation.
-- Reservation dialokasikan FIFO ke balance nyata termasuk location, lot, roll, dan ownership.
-- Shortage pada satu material membatalkan seluruh release tanpa partial reservation.
-- Unrelease mengembalikan reserved pada dimension key yang sama dan ditolak setelah material pernah di-issue.
+- Fabric issue wajib menunjuk reservation dan roll yang sama dalam UOM pemakaian material.
+- Setiap issue roll menambah `fabric_dispatch_balances.qty_dispatched` untuk MO×roll.
+- Marker menambah `qty_consumed`; leftover return menambah `qty_returned`.
+- Constraint database menjaga `consumed + returned <= dispatched`.
+- Return hanya boleh sekali per MO×roll, wajib kembali ke warehouse asal, dan harus menutup seluruh `dispatched − consumed − returned`.
+- Sisa fisik roll tidak langsung dianggap leftover MO; bagian yang belum di-issue tetap sudah berada di stok warehouse sehingga tidak boleh ditambahkan lagi.
+- Roll yang sudah ditutup dengan return tidak dapat di-issue ulang ke MO yang sama.
+- Backflush tetap delta/idempotent dan memperbarui reservation serta MO allocation.
 
-## Material issue
+## Verification
 
-- Actual fabric issue wajib menunjuk roll reservation yang sama.
-- ITS mengurangi on-hand dan reserved pada balance dimension yang sama.
-- Backflush memakai target kumulatif `BOM × qty_produced`, memposting delta saja, dan memperbarui reservation serta MO allocation.
-- Semua transition mengunci MO/reservation dan memvalidasi company user serta warehouse.
-
-## Open design
-
-BR-042 leftover roll belum dinyatakan selesai. Model perlu memisahkan qty warehouse, qty dispatched ke cutting, qty consumed, dan qty returned; implementasi tanpa empat state tersebut berisiko double-count stock.
-
-## Verification status
-
-Regression tests tersedia untuk snapshot MO, duplicate prevention, hard reservation, shortage rollback, per-roll allocation, exact issue, incremental backflush, dan safe unrelease. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan.
+Regression evidence tersedia untuk issue, backflush, dispatch/consume/return, double-return rejection, dan no-double-count stock. Runtime belum dinyatakan hijau sampai lockfile dan CI tersedia.

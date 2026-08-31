@@ -4,47 +4,35 @@
 
 ## Executive status
 
-Phases 1–9 have implementation hardening and regression-test evidence on `main`. **Stitchra is not yet production-approved.** No full PHP/web test suite or clean migration smoke test has been confirmed in this environment.
+Phases 1–9 plus Stage 10A have implementation hardening and regression-test evidence on `main`. **Not production-approved:** full PHP/web tests and clean MySQL migrations have not been executed in this environment.
 
-## Implemented evidence
+## Added in Stage 10A
 
-1. Core: concurrency-safe numbering/approval, tenant isolation, audit controls, scoped expiring tokens, granular permissions.
-2. Master Data: tenant-safe CRUD/import, schema-aligned validation, deletion guards.
-3. Sales/PD: locked BOM/routing/cost versions, transactional transitions, SO matrix integrity.
-4. Inventory/Purchasing/Receiving: ITS locking/idempotency, exact dimensions, receiving/QC, valuation, 3-way match.
-5. MRP/MO: strict selection/conversion, unique MO, dimensional hard reservation, exact issue, delta backflush.
-6. Shop floor: cutting ceilings, issued-roll marker use, serialized scans, finishing/rework gates.
-7. Outbound: QC cycles, cumulative packing, one shipment per PL, matrix tolerance/closure, partial subcon returns.
-8. Finance: composite GL periods, balanced/idempotent journals, locked AR/AP, historical actual costing, BEP.
-9. Reporting: domain permissions, corrected KPI counting, MO-level variance, bounded/export-safe reports, readiness check.
+- Meter and yard fabric use-UOM support with `1 YRD = 0.9144 MTR`.
+- Generic roll/marker/return use quantities while retaining meter compatibility fields.
+- Explicit MO×roll dispatched, consumed, and returned quantities.
+- Leftover return based only on dispatched balance, preventing stock double count.
+- Locked, tenant-safe, same-warehouse, single-close return lifecycle.
+- Historical dispatch backfill and regression evidence.
 
-## Unresolved design/functional items
+## Remaining design/functional items
 
-- BR-042: explicit roll quantities for warehouse, dispatched, consumed, and returned states.
-- Offline scan client replay key/conflict UX and separate device authentication.
-- MO snapshot of the approved standard cost sheet id.
+- Offline scan replay key/conflict UX and separate device authentication.
+- MO snapshot of approved standard cost sheet id.
 - Formal buyer AQL table/config validation and attachment controls.
 - Tax/withholding, FX revaluation, bank reconciliation, and accounting close checklist.
-- Customer AQL endpoints, size-range lines, UOM conversion CRUD, operation-version/SMV management, location management, and effective-period validation remain functional backlog from earlier phases.
+- Customer AQL endpoints, size-range lines, UOM conversion CRUD, operation-version/SMV management, location management, and effective-period validation.
 
 ## Verification blockers
 
-1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json` externally.
-2. Run clean MySQL migrations/seeds and the full PHP suite.
-3. Run web lint/typecheck/build and Playwright.
-4. Add real multi-process concurrency tests for critical counters and transitions.
-5. Execute production-scale load/query-plan tests, backup restore drill, security review, UAT, and pilot.
-6. Enable branch protection for `main` with required CI checks and restricted direct pushes.
-
-## Repository verification
-
-- Latest verified branch head before this documentation update: `08411266329c444785f7efef01559f0b66e852e3`.
-- Repository branch listing showed only `main`; the temporary `chore/generate-lockfiles` branch is no longer present.
-- `main` was reported as unprotected by GitHub.
-- Static GitHub code-search checks returned incomplete empty results, so they are not treated as proof that the searched patterns are absent.
-- The connected GitHub tool does not expose direct Actions run status for a branch commit; CI result remains unverified.
-- Lockfiles were not generated or pushed by this audit.
+1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json`.
+2. Run migration `000015` preflight: duplicate returns, mixed warehouse/UOM issues, and invalid historical dispatch totals.
+3. Run clean MySQL migrations/seeds and full PHP tests.
+4. Run web lint/typecheck/build and Playwright.
+5. Add real multi-process concurrency tests.
+6. Enable protected `main` with required CI.
+7. Complete load tests, restore drill, security review, UAT, and pilot.
 
 ## Production decision
 
-**NO-GO until every verification blocker is completed and formally approved.**
+**NO-GO until verification blockers are completed and approved.**

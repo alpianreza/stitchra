@@ -1,18 +1,16 @@
 # Modul Cutting
 
-Cut order → material issue roll → marker consumption → bundle.
+Cut order → issue/dispatch roll → marker consumption → bundle → leftover return.
 
 ## Invariants
 
-- Cut order hanya untuk MO `RELEASED/CUTTING` dan dibuat di bawah lock MO.
-- Colorway/size wajib berasal dari matrix SO untuk style MO.
-- Total cut aktif per colorway×size tidak boleh melebihi qty SO.
-- Matrix line unik per cut order; bundle generation dikunci dan hanya boleh sekali.
-- Marker hanya menerima roll `RELEASED`, company yang sama, dan material fabric pada BOM snapshot MO.
-- Cumulative marker consumption tidak boleh melebihi cumulative material issue untuk MO×roll.
-- Completion wajib memiliki bundle lengkap dengan total sama dengan qty cut.
-- Actual consumption disimpan pada `mo_material_allocations`, bukan menulis BOM `APPROVED`.
+- Cut order terkunci dan tidak boleh melebihi matrix SO.
+- Marker hanya menerima roll RELEASED dari fabric BOM snapshot MO.
+- Kain dapat memakai basis `MTR` atau `YRD`; input dikonversi ke `use_uom_id` material.
+- Marker hanya boleh mengonsumsi saldo dispatch MO×roll, bukan seluruh sisa fisik roll.
+- Kuantitas input basis dan ekuivalen meter disimpan untuk audit/backward compatibility.
+- Completion membutuhkan bundle lengkap dan menyimpan actual consumption pada MO allocation, bukan BOM approved.
 
-## Verification status
+## Verification
 
-Regression tests tersedia untuk over-cut, marker-before-issue rejection, per-roll actual consumption, exact bundle quantity, dan duplicate generation. Runtime result belum dinyatakan hijau sampai lockfiles dan CI tersedia.
+Regression evidence mencakup over-cut, marker-before-issue, batas dispatch, consumption, bundle, dan leftover return. Runtime belum dinyatakan hijau sampai lockfile dan CI tersedia.
