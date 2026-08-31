@@ -54,6 +54,22 @@ test('endpoint terproteksi mengembalikan 403 tanpa permission', function () {
         ->assertOk();
 });
 
+test('route domain nyata menolak user tanpa permission sebelum controller', function () {
+    $user = makeUserWithPermission(null);
+
+    $this->actingAs($user)
+        ->getJson('/api/sales/orders')
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->postJson('/api/finance/journals', [])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->postJson('/api/inventory/transfers', [])
+        ->assertForbidden();
+});
+
 test('BR-011: user tidak bisa mengakses company lain via header', function () {
     $user = makeUserWithPermission('sales.order.view');
 
