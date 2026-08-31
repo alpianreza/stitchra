@@ -9,24 +9,20 @@ use Modules\ProductDev\Http\Controllers\SampleController;
 Route::middleware(['auth:sanctum', 'company'])
     ->prefix('pd')
     ->group(function () {
-        // BOM — BR-030 (versioned)
-        Route::post('boms', [BomController::class, 'store']);
-        Route::get('boms/{bomVersion}', [BomController::class, 'show']);
-        Route::put('boms/{bomVersion}', [BomController::class, 'update']);
-        Route::post('boms/{bomVersion}/submit', [BomController::class, 'submit']);
+        Route::post('boms', [BomController::class, 'store'])->middleware('permission:pd.bom.create');
+        Route::get('boms/{bomVersion}', [BomController::class, 'show'])->middleware('permission:pd.bom.view');
+        Route::put('boms/{bomVersion}', [BomController::class, 'update'])->middleware('permission:pd.bom.update');
+        Route::post('boms/{bomVersion}/submit', [BomController::class, 'submit'])->middleware('permission:pd.bom.submit');
 
-        // Routing — BR-033
-        Route::post('routings', [RoutingController::class, 'store']);
-        Route::get('routings/{routingVersion}', [RoutingController::class, 'show']);
-        Route::post('routings/{routingVersion}/submit', [RoutingController::class, 'submit']);
+        Route::post('routings', [RoutingController::class, 'store'])->middleware('permission:pd.routing.create');
+        Route::get('routings/{routingVersion}', [RoutingController::class, 'show'])->middleware('permission:pd.routing.view');
+        Route::post('routings/{routingVersion}/submit', [RoutingController::class, 'submit'])->middleware('permission:pd.routing.submit');
 
-        // Cost sheet — BR-100
-        Route::post('cost-sheets/compute', [CostSheetController::class, 'compute']);
-        Route::get('cost-sheets/{costSheet}', [CostSheetController::class, 'show']);
-        Route::post('cost-sheets/{costSheet}/price', [CostSheetController::class, 'setPrice']);
-        Route::post('cost-sheets/{costSheet}/submit', [CostSheetController::class, 'submit']);
+        Route::post('cost-sheets/compute', [CostSheetController::class, 'compute'])->middleware('permission:pd.costing.create');
+        Route::get('cost-sheets/{costSheet}', [CostSheetController::class, 'show'])->middleware('permission:pd.costing.view');
+        Route::post('cost-sheets/{costSheet}/price', [CostSheetController::class, 'setPrice'])->middleware('permission:pd.costing.update');
+        Route::post('cost-sheets/{costSheet}/submit', [CostSheetController::class, 'submit'])->middleware('permission:pd.costing.submit');
 
-        // Sample cycle
-        Route::post('samples', [SampleController::class, 'store']);
-        Route::post('samples/{sample}/approvals', [SampleController::class, 'addApproval']);
+        Route::post('samples', [SampleController::class, 'store'])->middleware('permission:pd.sample.create');
+        Route::post('samples/{sample}/approvals', [SampleController::class, 'addApproval'])->middleware('permission:pd.sample.submit');
     });

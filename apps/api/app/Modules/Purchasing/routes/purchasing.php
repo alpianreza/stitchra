@@ -8,21 +8,19 @@ use Modules\Receiving\Http\Controllers\GoodsReceiptController;
 use Modules\Receiving\Http\Controllers\InwardInspectionController;
 
 Route::middleware(['auth:sanctum', 'company'])->group(function () {
-    // Purchasing
-    Route::get('purchasing/prs', [PurchaseRequestController::class, 'index']);
-    Route::post('purchasing/prs', [PurchaseRequestController::class, 'store']);
-    Route::post('purchasing/prs/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit']);
-    Route::get('purchasing/pos', [PurchaseOrderController::class, 'index']);
-    Route::post('purchasing/pos', [PurchaseOrderController::class, 'store']);
-    Route::get('purchasing/pos/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
-    Route::post('purchasing/pos/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit']);
-    Route::post('purchasing/invoices', [SupplierInvoiceController::class, 'store']);
-    Route::post('purchasing/invoices/{supplierInvoice}/match', [SupplierInvoiceController::class, 'match']);
+    Route::get('purchasing/prs', [PurchaseRequestController::class, 'index'])->middleware('permission:purchasing.pr.view');
+    Route::post('purchasing/prs', [PurchaseRequestController::class, 'store'])->middleware('permission:purchasing.pr.create');
+    Route::post('purchasing/prs/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit'])->middleware('permission:purchasing.pr.submit');
+    Route::get('purchasing/pos', [PurchaseOrderController::class, 'index'])->middleware('permission:purchasing.po.view');
+    Route::post('purchasing/pos', [PurchaseOrderController::class, 'store'])->middleware('permission:purchasing.po.create');
+    Route::get('purchasing/pos/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->middleware('permission:purchasing.po.view');
+    Route::post('purchasing/pos/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit'])->middleware('permission:purchasing.po.submit');
+    Route::post('purchasing/invoices', [SupplierInvoiceController::class, 'store'])->middleware('permission:purchasing.invoice.create');
+    Route::post('purchasing/invoices/{supplierInvoice}/match', [SupplierInvoiceController::class, 'match'])->middleware('permission:purchasing.invoice.update');
 
-    // Receiving & Inward QC
-    Route::get('receiving/grs', [GoodsReceiptController::class, 'index']);
-    Route::post('receiving/grs', [GoodsReceiptController::class, 'store']);
-    Route::get('receiving/grs/{goodsReceipt}', [GoodsReceiptController::class, 'show']);
-    Route::post('receiving/grs/{goodsReceipt}/inspections', [InwardInspectionController::class, 'store']);
-    Route::post('receiving/inspections/{inwardInspection}/finalize', [InwardInspectionController::class, 'finalize']);
+    Route::get('receiving/grs', [GoodsReceiptController::class, 'index'])->middleware('permission:receiving.gr.view');
+    Route::post('receiving/grs', [GoodsReceiptController::class, 'store'])->middleware('permission:receiving.gr.create');
+    Route::get('receiving/grs/{goodsReceipt}', [GoodsReceiptController::class, 'show'])->middleware('permission:receiving.gr.view');
+    Route::post('receiving/grs/{goodsReceipt}/inspections', [InwardInspectionController::class, 'store'])->middleware('permission:receiving.inspection.create');
+    Route::post('receiving/inspections/{inwardInspection}/finalize', [InwardInspectionController::class, 'finalize'])->middleware('permission:receiving.inspection.update');
 });

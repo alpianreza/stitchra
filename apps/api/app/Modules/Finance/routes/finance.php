@@ -8,22 +8,19 @@ use Modules\Finance\Http\Controllers\JournalController;
 Route::middleware(['auth:sanctum', 'company'])
     ->prefix('finance')
     ->group(function () {
-        // GL — BR-101/103
-        Route::post('journals', [JournalController::class, 'store']);
-        Route::post('journals/{journal}/reverse', [JournalController::class, 'reverse']);
-        Route::get('trial-balance', [JournalController::class, 'trialBalance']);
-        Route::post('periods/close', [JournalController::class, 'closePeriod']);
-        Route::post('account-mappings', [JournalController::class, 'setMapping']);
+        Route::post('journals', [JournalController::class, 'store'])->middleware('permission:finance.journal.create');
+        Route::post('journals/{journal}/reverse', [JournalController::class, 'reverse'])->middleware('permission:finance.journal.approve');
+        Route::get('trial-balance', [JournalController::class, 'trialBalance'])->middleware('permission:finance.report.view');
+        Route::post('periods/close', [JournalController::class, 'closePeriod'])->middleware('permission:finance.period-closing.execute');
+        Route::post('account-mappings', [JournalController::class, 'setMapping'])->middleware('permission:master.finance.manage');
 
-        // AR/AP — BR-050/102
-        Route::post('ar/invoices/from-shipment/{shipment}', [ArApController::class, 'createArInvoice']);
-        Route::post('ar/invoices/{arInvoice}/payments', [ArApController::class, 'payAr']);
-        Route::post('ap/invoices/{supplierInvoice}/payments', [ArApController::class, 'payAp']);
-        Route::get('ar/aging', [ArApController::class, 'agingAr']);
-        Route::get('ap/aging', [ArApController::class, 'agingAp']);
+        Route::post('ar/invoices/from-shipment/{shipment}', [ArApController::class, 'createArInvoice'])->middleware('permission:finance.ar-invoice.create');
+        Route::post('ar/invoices/{arInvoice}/payments', [ArApController::class, 'payAr'])->middleware('permission:finance.payment.create');
+        Route::post('ap/invoices/{supplierInvoice}/payments', [ArApController::class, 'payAp'])->middleware('permission:finance.payment.create');
+        Route::get('ar/aging', [ArApController::class, 'agingAr'])->middleware('permission:finance.report.view');
+        Route::get('ap/aging', [ArApController::class, 'agingAp'])->middleware('permission:finance.report.view');
 
-        // Costing aktual & BEP — BR-080/081/104
-        Route::get('costing/mo/{productionOrder}/actual', [CostingController::class, 'actual']);
-        Route::post('bep/style/{style}', [CostingController::class, 'bepStyle']);
-        Route::post('bep/factory', [CostingController::class, 'bepFactory']);
+        Route::get('costing/mo/{productionOrder}/actual', [CostingController::class, 'actual'])->middleware('permission:costing.actual.view');
+        Route::post('bep/style/{style}', [CostingController::class, 'bepStyle'])->middleware('permission:finance.bep.view');
+        Route::post('bep/factory', [CostingController::class, 'bepFactory'])->middleware('permission:finance.bep.view');
     });
