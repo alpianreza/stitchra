@@ -1,25 +1,26 @@
-# Modul Inventory (Inventory Engine)
+# Modul Inventory
 
-Sumber kebenaran stok. Semua perubahan stok di SELURUH sistem hanya lewat `InventoryTransactionService` (ITS).
+`InventoryTransactionService` (ITS) adalah satu-satunya pintu perubahan stok.
 
-## Aturan keras
-- **BR-013**: `stock_ledger` append-only; `stock_balances` materialized; dokumen + ledger + saldo dalam SATU transaksi DB (atomic).
-- **BR-006**: `available = on_hand − reserved − quality_hold`; saldo tidak pernah negatif (CHECK + validasi ITS).
-- **BR-005**: moving average — `avg_cost` di-update tiap penerimaan berbiaya; ledger menyimpan cost per transaksi.
-- **BR-004**: penerimaan masuk `quality_hold`; `releaseQualityHold()` memindahkan ke available.
-- **BR-017**: koreksi stok hanya via `adjust()` dari dokumen adjustment/opname yang APPROVED.
-- **BR-001**: ownership COMPANY/BUYER pada saldo & ledger.
+## Invariants
 
-## Movement types
-OPENING, PURCHASE_RECEIPT, PURCHASE_RETURN, QUALITY_RELEASE, TRANSFER_IN/OUT, MATERIAL_ISSUE, PRODUCTION_RETURN, PRODUCTION_RECEIPT, ADJUSTMENT, OPNAME_ADJUSTMENT, SUBCON_OUT/IN, SHIPMENT.
+- Ledger bersifat append-only; koreksi dibuat sebagai transaksi balik, bukan update/delete.
+- Movement hanya menerima type yang dikenal dan idempotent berdasarkan company + type + source document.
+- Header, ledger, dan materialized balance ditulis dalam satu transaksi.
+- First-balance creation diserialisasi melalui deterministic balance lock key, termasuk untuk dimensi nullable.
+- ITS memvalidasi user, material/style variant, warehouse, location, UOM, roll, ownership, dan company secara langsung.
+- `available = on_hand - reserved - quality_hold`; issue tidak dapat membuat stok negatif.
+- Material issue dapat mengonsumsi reserved stock, sedangkan purchase return hanya mengonsumsi quality hold.
+- Moving average dihitung pada inflow berbiaya dan dipertahankan saat transfer antar gudang.
 
-## API ITS (untuk modul lain — bukan HTTP)
-```php
-$its->post('PURCHASE_RECEIPT', $header, $lines, $user);   // atomic
-$its->releaseQualityHold($companyId, $line, $qty, $user); // BR-004
-$its->adjust($companyId, $line, $qtyDelta, $sourceType, $sourceId, $user); // BR-017
-```
-Modul lain DILARANG menulis tabel `stock_*` langsung (I-01).
+## Operations
 
-## Reservation
-`stock_reservations` (BR-006/060): hard reservation saat MO release (dipakai Phase 5).
+- Transfer dikunci pada state transition `DRAFT → IN_TRANSIT → RECEIVED` dan posting dua sisi idempotent.
+- Adjustment dan opname tidak mengubah stok sebelum approval.
+- Submit adjustment/opname dan pembuatan approval request berada dalam transaksi yang sama.
+- Approval application dikunci, idempotent, dan mengubah dokumen menjadi `APPROVED`.
+- Opname wajib menghitung seluruh snapshot line tepat satu kali.
+
+## Verification status
+
+Regression tests tersedia untuk atomic rollback, idempotency, reserved issue, quality hold, moving average, transfer valuation, approval rollback, opname completeness, append-only ledger, dan tenant isolation. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan dari clean checkout.

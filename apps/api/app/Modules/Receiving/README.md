@@ -1,19 +1,20 @@
 # Modul Receiving & Inward QC
 
-Goods Receipt (roll-level) + inward inspection + supplier return.
+Goods Receipt, fabric roll tracking, inward inspection, dan supplier return.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/receiving/grs` | `receiving.gr.create` | posting stok via ITS — **fabric wajib per roll (BR-052)** |
-| GET | `/api/receiving/grs/{id}` | `receiving.gr.view` | detail + rolls |
-| POST | `/api/receiving/grs/{id}/inspections` | `receiving.inspection.create` | 4-point, shrinkage, GSM, shade |
-| POST | `/api/receiving/inspections/{id}/finalize` | `receiving.inspection.finalize` | PASS → release hold; FAIL → rejected |
+## Invariants
 
-## Aturan bisnis
-- **BR-052/BR-003**: fabric dicatat per roll (`fabric_rolls`); trim/packaging lot-level.
-- **BR-002**: per roll tersimpan qty beli (kg/yard), meter aktual, dan conversion_rate; default `meter = kg × 1000 / (GSM × lebar_m)`.
-- **BR-004**: semua line GR masuk `QUALITY_HOLD`; available setelah inspeksi PASS; FAIL → `REJECTED_RETURNED` + supplier return memposting `PURCHASE_RETURN` via ITS.
-- **BR-053**: roll membawa `shade_group_id`.
-- **BR-005**: harga GR masuk moving average.
-- **BR-072**: defect inspeksi dari `defect_library`, tidak free-text.
+- GR hanya dapat dibuat dari PO `APPROVED` atau `PARTIAL_RECEIVED` pada company aktif.
+- PO header dan PO line dikunci selama receipt; over-receipt ditolak secara atomic.
+- Material, UOM, dan unit cost GR diturunkan dari PO line, bukan payload klien.
+- Fabric wajib per roll dan total `qty_buy` roll harus sama dengan `qty_received`.
+- Fabric diposting ke ITS sebagai balance per roll; trim/packaging tetap lot-level.
+- Konversi meter memakai GSM/width aktual bila tersedia dan menyimpan conversion rate per roll.
+- Seluruh receipt masuk quality hold.
+- Inspection line harus berasal dari GR yang sama; roll harus berasal dari GR line yang sama.
+- Finalize QC mengambil material, warehouse, UOM, lot, roll, dan qty dari data server, menggunakan row lock, dan idempotent melalui `finalized_at`.
+- Mixed PASS/FAIL menghasilkan status GR line `PARTIAL`; supplier return mengeluarkan rejected roll dari quality hold yang tepat.
+
+## Verification status
+
+Regression tests tersedia untuk roll conversion, per-roll balances, PASS/FAIL release, idempotent finalize, supplier return, partial receipt, over-receipt rollback, dan PO-price derivation. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan.

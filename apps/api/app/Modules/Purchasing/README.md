@@ -1,19 +1,24 @@
 # Modul Purchasing
 
-PR → RFQ/quotation → PO → supplier invoice + 3-way match.
+Alur purchasing mencakup PR → PO → supplier invoice → 3-way match.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/purchasing/prs` | `purchasing.pr.create` | PR manual (MRP dari Phase 5) |
-| POST | `/api/purchasing/prs/{id}/submit` | `purchasing.pr.submit` | approval berjenjang (BR-015) |
-| GET/POST | `/api/purchasing/pos` | `purchasing.po.view/create` | total dihitung server-side |
-| POST | `/api/purchasing/pos/{id}/submit` | `purchasing.po.submit` | |
-| POST | `/api/purchasing/invoices` | `purchasing.invoice.create` | supplier invoice |
-| POST | `/api/purchasing/invoices/{id}/match` | `purchasing.invoice.match` | **3-way match (BR-050)** |
+## Invariants
 
-## Aturan bisnis
-- **BR-050**: match invoice vs PO (harga, toleransi %) vs GR (qty received) → MATCHED/MISMATCH.
-- **BR-051**: partial receiving — `po_lines.received_qty` diagregasi dari GR; status PO PARTIAL_RECEIVED/RECEIVED otomatis.
-- Approval PR/PO via approval matrix by nilai (BR-015) — event `DocumentApproved` doc_type `PR`/`PO`.
-- Traceability: `po_lines.pr_line_id` → PR (BR-120).
+- PR/PO line wajib memiliki qty positif dan reference tenant-scoped.
+- Total PO dihitung server-side dari qty × unit price.
+- Supplier, currency, material, UOM, dan PR line harus berasal dari company aktif.
+- Expected date tidak boleh sebelum order date; exchange rate wajib positif bila currency digunakan.
+- Submit PR/PO menggunakan row lock dan transaksi yang sama dengan approval request.
+- Approval promotion hanya menerima status `SUBMITTED` dan idempotent terhadap status `APPROVED`.
+
+## Three-way match
+
+- Supplier dan company invoice harus cocok dengan PO.
+- Setiap invoice line harus menunjuk PO line pada PO invoice dan tidak boleh duplikat.
+- Invoice sebelum ada receipt selalu `MISMATCH`.
+- Harga invoice dibandingkan dengan PO; qty invoice dibandingkan dengan cumulative received qty.
+- Tolerance endpoint berasal dari konfigurasi server (`PURCHASING_PRICE_TOLERANCE_PCT` dan `PURCHASING_QTY_TOLERANCE_PCT`), bukan input bebas klien.
+
+## Verification status
+
+Regression tests tersedia untuk approval rollback, full/partial receiving, match/mismatch, dan invoice sebelum receipt. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan.
