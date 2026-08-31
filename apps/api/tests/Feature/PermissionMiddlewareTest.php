@@ -1,8 +1,10 @@
 <?php
 
+use LogicException;
 use Modules\Core\Models\Permission;
 use Modules\Core\Models\Role;
 use Modules\Core\Models\User;
+use Modules\Core\Support\CurrentCompany;
 
 /**
  * BR-110: permission dicek server-side. User tanpa permission → 403.
@@ -61,4 +63,15 @@ test('BR-011: user tidak bisa mengakses company lain via header', function () {
     $this->actingAs($user)
         ->getJson('/api/_test/company', ['X-Company-Id' => 999])
         ->assertForbidden();
+});
+
+test('BR-011: model tenant menolak write ke company lain saat context aktif', function () {
+    CurrentCompany::set(1);
+
+    try {
+        expect(fn () => User::factory()->create(['company_id' => 2]))
+            ->toThrow(LogicException::class, 'company lain');
+    } finally {
+        CurrentCompany::clear();
+    }
 });
