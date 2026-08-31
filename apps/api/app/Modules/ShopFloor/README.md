@@ -1,17 +1,24 @@
 # Modul Shop Floor
 
-Scan bundle per operasi (sewing/finishing) — WIP real-time tanpa input manual ganda.
+Scan bundle per operasi untuk WIP real-time, finishing transition, dan controlled rework.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/shopfloor/scans` | `shopfloor.scan.create` | scan IN/OUT bundle (BR-062) |
-| GET | `/api/shopfloor/wip/{moId}` | `shopfloor.scan.view` | WIP per stage (BR-063) |
-| GET | `/api/shopfloor/lines/{lineId}/daily-output` | `shopfloor.scan.view` | output harian per line |
+## Invariants
 
-## Aturan bisnis
-- **BR-062**: OUT butuh IN; IN operasi N+1 butuh OUT operasi N (urutan routing MO); double IN ditolak. Payload `bundle_no` dari keyboard-wedge scanner.
-- **BR-063**: WIP = agregasi bundle × stage dari scan (tanpa tabel agregat — anti double-count).
-- **BR-012**: scan sewing pertama menaikkan MO → SEWING; finishing → FINISHING (maju saja).
-- **BR-072**: rework memakai `defect_library`, tidak free-text.
-- Operasi harus bagian dari routing snapshot MO (BR-030).
+- Scan mengunci bundle dan MO sehingga concurrent duplicate tidak dapat melewati state check.
+- Database unique backstop membatasi satu `IN` dan satu `OUT` per bundle×operation×stage.
+- Production scan bersifat append-only.
+- `OUT` membutuhkan `IN`; sewing operation berikutnya membutuhkan predecessor `OUT`.
+- Finishing ditolak sampai seluruh routing operation sudah `OUT` dari sewing.
+- Operation wajib berasal dari routing snapshot MO.
+- Line, employee, bundle, MO, WIP, dan daily output semuanya company-scoped.
+- MO hanya maju: `CUTTING → SEWING → FINISHING`.
+- Rework wajib memakai active defect library, qty tidak melebihi bundle, menahan bundle pada status `REWORK`, dan membutuhkan resolve eksplisit sebelum scan berlanjut.
+- Route scan/rework memakai `production.output.create`; WIP/daily output memakai `production.output.view`.
+
+## Device/security decision
+
+Keyboard-wedge scanner melalui browser tetap baseline. Offline queue, replay key, device enrollment, dan pemisahan browser-session versus device token masih membutuhkan desain deployment tersendiri sebelum pilot.
+
+## Verification status
+
+Regression tests tersedia untuk ordering, duplicate direction, finishing gate, append-only scan, tenant-scoped WIP, dan rework lifecycle. Runtime result belum dinyatakan hijau sampai lockfiles dan CI tersedia.

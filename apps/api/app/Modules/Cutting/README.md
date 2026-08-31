@@ -1,17 +1,18 @@
 # Modul Cutting
 
-Cut order → marker log (konsumsi kain aktual per roll) → bundle (unit tracking shop floor).
+Cut order → material issue roll → marker consumption → bundle.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/cutting/orders/from-mo/{moId}` | `cutting.order.create` | MO RELEASED → CUTTING (BR-012) |
-| POST | `/api/cutting/orders/{id}/markers` | `cutting.marker.create` | konsumsi aktual per roll (BR-031/041) |
-| POST | `/api/cutting/orders/{id}/lines/{line}/bundles` | `cutting.bundle.create` | bundle generator (BR-061) |
-| POST | `/api/cutting/orders/{id}/complete` | `cutting.order.complete` | update `consumption_actual` BOM (BR-031) |
+## Invariants
 
-## Aturan bisnis
-- **BR-031**: `consumption_actual = total meter marker / qty cut` — kolom terpisah dari `consumption_estimated`.
-- **BR-041/042**: roll dikonsumsi aktual via marker log; sisa (`qty_remaining_meter`) = leftover → return via modul Production.
-- **BR-061**: `bundle_no = {CUT-doc}-{line}-{seq}` unik per company; bundle membawa qty, stage, status.
-- Roll harus RELEASED (lulus inward QC) sebelum dipakai marker.
+- Cut order hanya untuk MO `RELEASED/CUTTING` dan dibuat di bawah lock MO.
+- Colorway/size wajib berasal dari matrix SO untuk style MO.
+- Total cut aktif per colorway×size tidak boleh melebihi qty SO.
+- Matrix line unik per cut order; bundle generation dikunci dan hanya boleh sekali.
+- Marker hanya menerima roll `RELEASED`, company yang sama, dan material fabric pada BOM snapshot MO.
+- Cumulative marker consumption tidak boleh melebihi cumulative material issue untuk MO×roll.
+- Completion wajib memiliki bundle lengkap dengan total sama dengan qty cut.
+- Actual consumption disimpan pada `mo_material_allocations`, bukan menulis BOM `APPROVED`.
+
+## Verification status
+
+Regression tests tersedia untuk over-cut, marker-before-issue rejection, per-roll actual consumption, exact bundle quantity, dan duplicate generation. Runtime result belum dinyatakan hijau sampai lockfiles dan CI tersedia.

@@ -6,67 +6,61 @@ This file records implementation evidence. The locked business blueprint remains
 
 ## Current state
 
-- Application code exists across Core, Master Data, Sales, Inventory, MRP/Production, Cutting, Quality, Packing/Shipment, Costing, and Finance domains.
-- Automated feature tests exist for the principal domain flows.
-- Production readiness is **not yet approved**.
-- Phase 1–5 hardening is implemented in code, but runtime verification remains blocked until deterministic lockfiles are committed and CI completes successfully.
+- Phase 1–6 hardening is implemented in code with regression-test evidence.
+- Production readiness is **not approved**.
+- Runtime verification remains blocked until deterministic lockfiles are committed and clean CI completes successfully.
 
-## Phase 1–3 hardening evidence
+## Phase 1–5 evidence
 
-- Concurrency-safe numbering/approval, tenant isolation, append-only audit, route permissions, and expiring API tokens.
-- Tenant-scoped Master Data validation/import/deletion safeguards.
-- Locked BOM/routing/cost versioning, strict costing inputs, SO matrix integrity, and transactional document transitions.
+- Core: serialized numbering/approval, tenant isolation, append-only audit, route permissions, expiring API tokens.
+- Master Data: tenant-scoped CRUD/import, schema-aligned validation, deletion safeguards.
+- Sales/Product Development: locked BOM/routing/cost versions, SO matrix integrity, transactional transitions.
+- Inventory/Purchasing/Receiving: ITS locking/idempotency, exact dimensions, per-roll QC, valuation preservation, strict 3-way match.
+- MRP/Production: strict SO selection, atomic shortage→PR, unique MO generation, dimensional hard reservation, exact issue, incremental backflush.
 
-## Phase 4 hardening evidence
+## Phase 6 evidence
 
-- ITS movement whitelist, source idempotency, deterministic balance locking, append-only ledger, and direct tenant validation.
-- Reserved issue, quality-hold return, corrected QUALITY_RELEASE constraint, and transfer cost preservation.
-- Locked/idempotent inventory operations, GR over-receipt prevention, server-derived PO values, per-roll stock/QC, and strict 3-way matching.
-
-## Phase 5 hardening evidence
-
-- MRP run numbering is serialized and requirement rows are unique per run/material.
-- MRP rejects partial/foreign/non-confirmed SO selections and converts shortage→PR atomically under lock.
-- MO creation locks the SO and enforces one MO per SO×style with database uniqueness.
-- MO release allocates reservation across actual location/lot/roll balances and rejects shortage before mutation.
-- Unrelease restores exact balance dimensions and is blocked after issue.
-- Material issue uses the exact reservation dimension; backflush posts cumulative deltas and updates reservation state.
-- Fabric inventory now uses consumption UOM (meter) while preserving PO valuation through converted unit cost.
-- Regression tests cover MRP atomicity, per-roll reservation/issue, incremental backflush, shortage rollback, and duplicate protection.
+- Cutting quantity is capped by SO matrix under MO lock.
+- Marker usage is exact-roll and cannot exceed prior material issue.
+- Actual consumption is stored per MO allocation without mutating approved BOM.
+- Bundle generation is serialized and exact.
+- Scan state transitions lock bundle/MO, reject duplicate directions, and are append-only.
+- Finishing requires completed sewing routing; WIP/output queries are tenant-scoped.
+- Rework uses active defect library and explicit resolution.
 
 These items are implementation evidence only. Tests have **not** been declared green in this environment.
 
-## Known functional gap
+## Known gaps
 
-- BR-042 leftover roll requires an explicit dispatch/consumption/return quantity model. The current method is not approved for production because it can double-count warehouse stock without that state separation.
+- BR-042 leftover roll needs explicit warehouse/dispatched/consumed/returned quantity states.
+- Offline scan replay needs a client idempotency key and conflict handling.
+- Browser auth and shop-floor device-token flows are not yet separated.
 
 ## Phase status
 
 | Phase | Implementation evidence | Review status |
 |---|---|---|
-| 1 — Core Foundation | Core hardening and regression tests present | CI/runtime verification pending |
-| 2 — Master Data | Validation/import/delete hardening and tests present | CI/runtime verification pending |
-| 3 — Sales/BOM/Routing/Estimated Costing | State, tenant, versioning, costing hardening and tests present | CI/runtime verification pending |
-| 4 — Inventory/Purchasing/Receiving | Ledger, transaction, receiving, QC, and matching hardening present | CI/runtime and real concurrency verification pending |
-| 5 — MRP/Planning/MO | MRP, dimensional reservation, issue, and backflush hardening present | BR-042 design plus CI/concurrency verification pending |
-| 6 — Cutting/Sewing/Finishing/WIP | Partial-to-broad implementation evidence | Device/offline decisions and review required |
-| 7 — QC/Packing/Shipment/Subcontracting | Partial-to-broad implementation evidence | Review required |
-| 8 — Costing/Finance | Code and feature tests present | Accounting validation required |
-| 9 — Dashboard/Reporting/Hardening | In progress | Not approved |
+| 1–3 | Core, Master Data, Sales/PD hardening present | CI/runtime verification pending |
+| 4 | Inventory/Purchasing/Receiving hardening present | CI and real concurrency verification pending |
+| 5 | MRP/MO/reservation/issue hardening present | BR-042 plus CI/concurrency pending |
+| 6 | Cutting/scan/finishing/rework hardening present | Offline/device design plus CI/concurrency pending |
+| 7 | QC/Packing/Shipment/Subcontracting broadly implemented | Dedicated audit required |
+| 8 | Costing/Finance broadly implemented | Accounting validation required |
+| 9 | Dashboard/Reporting/Hardening in progress | Not approved |
 
 ## Immediate blockers
 
-1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json` from the current manifests.
-2. Run full PHP and web CI from a clean checkout and retain evidence.
-3. Add real multi-process concurrency tests for numbering, approval, inventory, receiving, MRP, and MO release.
-4. Design and implement explicit roll dispatch/consumption/return state for BR-042.
-5. Complete dedicated browser-session versus shop-floor device-token design and security review.
+1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json` from current manifests.
+2. Run full PHP/web CI from a clean checkout and retain evidence.
+3. Add real multi-process concurrency tests for counters, stock transitions, MRP, MO release, bundles, and scans.
+4. Design BR-042 roll dispatch/consume/return state model.
+5. Design offline replay keys and separate browser/device authentication.
 
 ## Exit criteria before production
 
-1. CI is green with deterministic dependency lockfiles.
-2. Real multi-process concurrency tests pass for critical counters and stock transitions.
-3. Cross-company endpoint isolation tests pass for every tenant-owned resource.
-4. Browser auth and shop-floor device-token flows are separated and security-reviewed.
-5. Production deployment uses external secrets, internal-only data services, backups, monitoring, and tested restores.
-6. UAT and pilot production are formally approved by the owner.
+1. Deterministic lockfiles and green CI.
+2. Critical multi-process concurrency tests pass on the production DB engine.
+3. Cross-company endpoint isolation passes for all tenant-owned resources.
+4. Browser/device auth and offline replay are security-reviewed.
+5. External secrets, private data services, backups, monitoring, and tested restores.
+6. Formal UAT and pilot approval.
