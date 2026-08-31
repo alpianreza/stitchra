@@ -5,96 +5,26 @@ namespace Modules\Finance\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
 use Modules\Finance\Models\AccountMapping;
 use Modules\Finance\Models\Journal;
 use Modules\Finance\Services\JournalService;
+use RuntimeException;
 
 class JournalController extends Controller
 {
-    public function __construct(private JournalService $service, private AuditService $audit) {}
-
-    /** Jurnal manual — wajib balanced (BR-101) */
-    public function store(Request $request): JsonResponse
+    public function __construct(private JournalService $service,private AuditService $audit){}
+    public function store(Request $request):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'journal_date'=>'nullable|date_format:Y-m-d','description'=>'nullable|string|max:1000','lines'=>'required|array|min:2','lines.*.coa_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'lines.*.debit'=>'nullable|numeric|min:0','lines.*.credit'=>'nullable|numeric|min:0','lines.*.memo'=>'nullable|string|max:1000']);return $this->domain(fn()=>response()->json($this->service->post($company,$data,$data['lines'],$request->user()),201));}
+    public function reverse(Request $request,Journal $journal):JsonResponse{$data=$request->validate(['reason'=>'nullable|string|max:1000']);return $this->domain(fn()=>response()->json($this->service->reverse($journal,$request->user(),$data['reason']??null),201));}
+    public function trialBalance(Request $request):JsonResponse{$data=$request->validate(['period'=>['nullable','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);$period=$data['period']??now()->format('Y-m');return $this->domain(fn()=>response()->json(['period'=>$period,'data'=>$this->service->trialBalance(CurrentCompany::id(),$period)]));}
+    public function closePeriod(Request $request):JsonResponse{$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);return $this->domain(fn()=>response()->json($this->service->closePeriod(CurrentCompany::id(),$data['period'],$request->user())));}
+    public function setMapping(Request $request):JsonResponse
     {
-        abort_unless($request->user()->hasPermission('finance.journal.create'), 403);
-
-        $data = $request->validate([
-            'period' => 'required|string|max:7',
-            'journal_date' => 'nullable|date',
-            'description' => 'nullable|string',
-            'lines' => 'required|array|min:2',
-            'lines.*.coa_id' => 'required|integer|exists:chart_of_accounts,id',
-            'lines.*.debit' => 'nullable|numeric|min:0',
-            'lines.*.credit' => 'nullable|numeric|min:0',
-            'lines.*.memo' => 'nullable|string',
-        ]);
-
-        try {
-            $journal = $this->service->post(CurrentCompany::id(), $data, $data['lines'], $request->user());
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        return response()->json($journal, 201);
+        $company=CurrentCompany::id();$data=$request->validate(['event'=>['required',Rule::in(AccountMapping::EVENTS)],'debit_account_id'=>['required','integer','different:credit_account_id',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'credit_account_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)]]);
+        return DB::transaction(function()use($company,$data,$request){$mapping=AccountMapping::updateOrCreate(['company_id'=>$company,'event'=>$data['event']],['debit_account_id'=>$data['debit_account_id'],'credit_account_id'=>$data['credit_account_id'],'updated_by'=>$request->user()->id]);$this->audit->record('update','account_mappings',documentId:$mapping->id,after:$mapping->toArray(),request:$request);return response()->json($mapping);});
     }
-
-    /** Koreksi via jurnal balik (bukan edit — BR-016); butuh otorisasi approve */
-    public function reverse(Request $request, Journal $journal): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('finance.journal.approve'), 403);
-
-        $data = $request->validate(['reason' => 'nullable|string']);
-
-        try {
-            $reversal = $this->service->reverse($journal, $request->user(), $data['reason'] ?? null);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        return response()->json($reversal, 201);
-    }
-
-    public function trialBalance(Request $request): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('finance.report.view'), 403);
-
-        $period = $request->query('period', now()->format('Y-m'));
-
-        return response()->json(['period' => $period, 'data' => $this->service->trialBalance(CurrentCompany::id(), $period)]);
-    }
-
-    /** BR-103: tutup periode */
-    public function closePeriod(Request $request): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('finance.period-closing.execute'), 403);
-
-        $data = $request->validate(['period' => 'required|string|max:7']);
-
-        $period = $this->service->closePeriod(CurrentCompany::id(), $data['period'], $request->user());
-
-        return response()->json($period);
-    }
-
-    /** Mapping event → akun (BR-101 jurnal AUTO) — master finance */
-    public function setMapping(Request $request): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('master.finance.manage'), 403);
-
-        $data = $request->validate([
-            'event' => 'required|string|in:'.implode(',', AccountMapping::EVENTS),
-            'debit_account_id' => 'required|integer|exists:chart_of_accounts,id',
-            'credit_account_id' => 'required|integer|exists:chart_of_accounts,id',
-        ]);
-
-        $mapping = AccountMapping::updateOrCreate(
-            ['company_id' => CurrentCompany::id(), 'event' => $data['event']],
-            ['debit_account_id' => $data['debit_account_id'], 'credit_account_id' => $data['credit_account_id'], 'updated_by' => $request->user()->id],
-        );
-
-        $this->audit->record('update', 'account_mappings', documentId: $mapping->id, after: $mapping->toArray(), request: $request);
-
-        return response()->json($mapping);
-    }
+    private function domain(callable $callback):JsonResponse{try{return $callback();}catch(RuntimeException $e){return response()->json(['message'=>$e->getMessage()],422);}}
 }
