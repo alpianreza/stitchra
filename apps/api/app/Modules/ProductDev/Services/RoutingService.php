@@ -5,22 +5,47 @@ namespace Modules\ProductDev\Services;
 use Illuminate\Support\Facades\DB;
 use Modules\Core\Approval\ApprovalEngine;
 use Modules\Core\Models\User;
+use Modules\Core\Support\CurrentCompany;
+use Modules\MasterData\Models\Operation;
+use Modules\MasterData\Models\Style;
 use Modules\ProductDev\Models\Routing;
 use Modules\ProductDev\Models\RoutingVersion;
 use RuntimeException;
 
-/** BR-033: Routing versioned + SMV per operasi → total SAM style. */
 class RoutingService
 {
     public function __construct(private ApprovalEngine $approval) {}
 
     public function createVersion(int $styleId, array $operations, User $creator): RoutingVersion
     {
-        return DB::transaction(function () use ($styleId, $operations, $creator): RoutingVersion {
-            $routing = Routing::firstOrCreate(['style_id' => $styleId]);
-            $nextVersion = (int) $routing->versions()->max('version_no') + 1;
+        $companyId = CurrentCompany::id() ?? (int) $creator->company_id;
+        if (! Style::query()->where('company_id', $companyId)->whereKey($styleId)->exists()) {
+            throw new RuntimeException('Style tidak ditemukan pada company aktif.');
+        }
+        if ($operations === []) {
+            throw new RuntimeException('Routing wajib memiliki minimal satu operasi.');
+        }
 
-            $totalSam = collect($operations)->sum(fn ($op) => (float) $op['smv']);
+        foreach ($operations as $operation) {
+            if (! Operation::query()->where('company_id', $companyId)->whereKey($operation['operation_id'] ?? null)->exists()) {
+                throw new RuntimeException('Operation routing tidak ditemukan pada company aktif.');
+            }
+            if ((float) ($operation['smv'] ?? 0) <= 0) {
+                throw new RuntimeException('SMV routing harus lebih besar dari nol.');
+            }
+        }
+
+        return DB::transaction(function () use ($styleId, $operations, $creator): RoutingVersion {
+            DB::table('routings')->insertOrIgnore([
+                'style_id' => $styleId,
+                'current_version' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $routing = Routing::where('style_id', $styleId)->lockForUpdate()->firstOrFail();
+            $nextVersion = (int) $routing->versions()->max('version_no') + 1;
+            $totalSam = collect($operations)->sum(fn ($operation) => (float) $operation['smv']);
 
             $version = $routing->versions()->create([
                 'version_no' => $nextVersion,
@@ -29,12 +54,12 @@ class RoutingService
                 'created_by' => $creator->id,
             ]);
 
-            foreach ($operations as $i => $op) {
+            foreach ($operations as $index => $operation) {
                 $version->operations()->create([
-                    'seq' => $op['seq'] ?? ($i + 1),
-                    'operation_id' => $op['operation_id'],
-                    'smv' => $op['smv'],
-                    'machine_type' => $op['machine_type'] ?? null,
+                    'seq' => $operation['seq'] ?? ($index + 1),
+                    'operation_id' => $operation['operation_id'],
+                    'smv' => $operation['smv'],
+                    'machine_type' => $operation['machine_type'] ?? null,
                 ]);
             }
 
@@ -44,34 +69,35 @@ class RoutingService
 
     public function submit(RoutingVersion $version, User $submitter): void
     {
-        if ($version->status !== 'DRAFT') {
-            throw new RuntimeException('Hanya versi DRAFT yang bisa disubmit.');
-        }
-        if ($version->operations()->count() === 0) {
-            throw new RuntimeException('Routing tanpa operasi tidak bisa disubmit.');
-        }
+        DB::transaction(function () use ($version, $submitter): void {
+            $locked = RoutingVersion::whereKey($version->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'DRAFT') {
+                throw new RuntimeException('Hanya versi DRAFT yang bisa disubmit.');
+            }
+            if (! $locked->operations()->exists()) {
+                throw new RuntimeException('Routing tanpa operasi tidak bisa disubmit.');
+            }
 
-        $version->update(['status' => 'SUBMITTED']);
-        $this->approval->submit($version, 'ROUTING', $submitter);
+            $locked->update(['status' => 'SUBMITTED']);
+            $this->approval->submit($locked, 'ROUTING', $submitter);
+        });
     }
 
     public function markApproved(RoutingVersion $version): void
     {
         DB::transaction(function () use ($version): void {
-            $version->routing->versions()
-                ->where('id', '!=', $version->id)
-                ->where('status', 'APPROVED')
-                ->update(['status' => 'OBSOLETE']);
+            $locked = RoutingVersion::whereKey($version->id)->lockForUpdate()->firstOrFail();
+            $routing = Routing::whereKey($locked->routing_id)->lockForUpdate()->firstOrFail();
 
-            $version->update(['status' => 'APPROVED']);
-            $version->routing->update(['current_version' => $version->version_no]);
+            $routing->versions()->where('id', '!=', $locked->id)->where('status', 'APPROVED')
+                ->update(['status' => 'OBSOLETE']);
+            $locked->update(['status' => 'APPROVED']);
+            $routing->update(['current_version' => $locked->version_no]);
         });
     }
 
     public function activeVersion(int $styleId): ?RoutingVersion
     {
-        $routing = Routing::where('style_id', $styleId)->first();
-
-        return $routing?->approvedVersion();
+        return Routing::where('style_id', $styleId)->first()?->approvedVersion();
     }
 }

@@ -5,25 +5,42 @@ namespace Modules\ProductDev\Services;
 use Illuminate\Support\Facades\DB;
 use Modules\Core\Approval\ApprovalEngine;
 use Modules\Core\Models\User;
+use Modules\Core\Support\CurrentCompany;
+use Modules\MasterData\Models\Colorway;
+use Modules\MasterData\Models\Material;
+use Modules\MasterData\Models\Style;
+use Modules\MasterData\Models\Uom;
 use Modules\ProductDev\Models\Bom;
 use Modules\ProductDev\Models\BomVersion;
 use RuntimeException;
 
-/**
- * BR-030: BOM versioned.
- * - Hanya versi APPROVED yang dipakai MRP/costing/produksi
- * - Perubahan pasca-approval = versi BARU (tidak edit in-place)
- * - Approve versi baru → versi lama otomatis OBSOLETE
- */
 class BomService
 {
     public function __construct(private ApprovalEngine $approval) {}
 
-    /** Buat versi BOM baru (draft) beserta lines. */
     public function createVersion(int $styleId, array $lines, User $creator): BomVersion
     {
+        $companyId = CurrentCompany::id() ?? (int) $creator->company_id;
+        $style = Style::query()->where('company_id', $companyId)->find($styleId);
+
+        if ($style === null) {
+            throw new RuntimeException('Style tidak ditemukan pada company aktif.');
+        }
+        if ($lines === []) {
+            throw new RuntimeException('BOM wajib memiliki minimal satu line.');
+        }
+
+        $this->assertLinesBelongToCompany($lines, $styleId, $companyId);
+
         return DB::transaction(function () use ($styleId, $lines, $creator): BomVersion {
-            $bom = Bom::firstOrCreate(['style_id' => $styleId]);
+            DB::table('boms')->insertOrIgnore([
+                'style_id' => $styleId,
+                'current_version' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $bom = Bom::where('style_id', $styleId)->lockForUpdate()->firstOrFail();
             $nextVersion = (int) $bom->versions()->max('version_no') + 1;
 
             $version = $bom->versions()->create([
@@ -33,23 +50,6 @@ class BomService
             ]);
 
             foreach ($lines as $line) {
-                $version->lines()->create($line);   // kolom sesuai BR-032
-            }
-
-            return $version->load('lines');
-        });
-    }
-
-    /** Update lines — HANYA untuk versi DRAFT (BR-030). */
-    public function updateDraftLines(BomVersion $version, array $lines): BomVersion
-    {
-        if ($version->status !== 'DRAFT') {
-            throw new RuntimeException('BR-030: versi BOM yang sudah SUBMITTED/APPROVED tidak bisa diedit — buat versi baru.');
-        }
-
-        return DB::transaction(function () use ($version, $lines): BomVersion {
-            $version->lines()->delete();
-            foreach ($lines as $line) {
                 $version->lines()->create($line);
             }
 
@@ -57,39 +57,85 @@ class BomService
         });
     }
 
-    public function submit(BomVersion $version, User $submitter): void
+    public function updateDraftLines(BomVersion $version, array $lines): BomVersion
     {
-        if ($version->status !== 'DRAFT') {
-            throw new RuntimeException('Hanya versi DRAFT yang bisa disubmit.');
-        }
-        if ($version->lines()->count() === 0) {
-            throw new RuntimeException('BOM version tanpa lines tidak bisa disubmit.');
+        if ($lines === []) {
+            throw new RuntimeException('BOM wajib memiliki minimal satu line.');
         }
 
-        $version->update(['status' => 'SUBMITTED']);
-        $this->approval->submit($version, 'BOM', $submitter);
-    }
+        return DB::transaction(function () use ($version, $lines): BomVersion {
+            $locked = BomVersion::whereKey($version->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'DRAFT') {
+                throw new RuntimeException('BR-030: versi BOM yang sudah SUBMITTED/APPROVED tidak bisa diedit — buat versi baru.');
+            }
 
-    /** Dipanggil setelah approval APPROVED (listener DocumentApproved). */
-    public function markApproved(BomVersion $version): void
-    {
-        DB::transaction(function () use ($version): void {
-            // Versi lama → OBSOLETE (hanya satu APPROVED aktif per style)
-            $version->bom->versions()
-                ->where('id', '!=', $version->id)
-                ->where('status', 'APPROVED')
-                ->update(['status' => 'OBSOLETE']);
+            $companyId = (int) $locked->bom->style->company_id;
+            $this->assertLinesBelongToCompany($lines, (int) $locked->bom->style_id, $companyId);
 
-            $version->update(['status' => 'APPROVED']);
-            $version->bom->update(['current_version' => $version->version_no]);
+            $locked->lines()->delete();
+            foreach ($lines as $line) {
+                $locked->lines()->create($line);
+            }
+
+            return $locked->load('lines');
         });
     }
 
-    /** Versi APPROVED aktif untuk style — dipakai MRP/costing/SO gate (BR-023). */
+    public function submit(BomVersion $version, User $submitter): void
+    {
+        DB::transaction(function () use ($version, $submitter): void {
+            $locked = BomVersion::whereKey($version->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'DRAFT') {
+                throw new RuntimeException('Hanya versi DRAFT yang bisa disubmit.');
+            }
+            if (! $locked->lines()->exists()) {
+                throw new RuntimeException('BOM version tanpa lines tidak bisa disubmit.');
+            }
+
+            $locked->update(['status' => 'SUBMITTED']);
+            $this->approval->submit($locked, 'BOM', $submitter);
+        });
+    }
+
+    public function markApproved(BomVersion $version): void
+    {
+        DB::transaction(function () use ($version): void {
+            $locked = BomVersion::whereKey($version->id)->lockForUpdate()->firstOrFail();
+            $bom = Bom::whereKey($locked->bom_id)->lockForUpdate()->firstOrFail();
+
+            $bom->versions()->where('id', '!=', $locked->id)->where('status', 'APPROVED')
+                ->update(['status' => 'OBSOLETE']);
+            $locked->update(['status' => 'APPROVED']);
+            $bom->update(['current_version' => $locked->version_no]);
+        });
+    }
+
     public function activeVersion(int $styleId): ?BomVersion
     {
-        $bom = Bom::where('style_id', $styleId)->first();
+        return Bom::where('style_id', $styleId)->first()?->approvedVersion();
+    }
 
-        return $bom?->approvedVersion();
+    private function assertLinesBelongToCompany(array $lines, int $styleId, int $companyId): void
+    {
+        foreach ($lines as $line) {
+            $material = Material::query()->where('company_id', $companyId)->find($line['material_id'] ?? null);
+            $uom = Uom::query()->where('company_id', $companyId)->find($line['uom_id'] ?? null);
+
+            if ($material === null || $uom === null) {
+                throw new RuntimeException('Material/UOM BOM tidak ditemukan pada company aktif.');
+            }
+
+            if (! empty($line['colorway_id'])) {
+                $validColorway = Colorway::query()
+                    ->where('company_id', $companyId)
+                    ->where('style_id', $styleId)
+                    ->whereKey($line['colorway_id'])
+                    ->exists();
+
+                if (! $validColorway) {
+                    throw new RuntimeException('Colorway BOM harus berasal dari style dan company yang sama.');
+                }
+            }
+        }
     }
 }
