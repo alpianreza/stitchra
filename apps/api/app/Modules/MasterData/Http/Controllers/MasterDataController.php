@@ -2,20 +2,15 @@
 
 namespace Modules\MasterData\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Validation\Rule;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
 use Modules\MasterData\Support\MasterDataRegistry;
+use Modules\MasterData\Support\MasterDataValidation;
 
-/**
- * CRUD generik master data.
- * BR-110: permission dicek server-side (master.<entity>.<action>).
- * BR-011: company scope via trait BelongsToCompany pada model.
- * BR-016: semua mutasi tercatat audit.
- */
 class MasterDataController extends Controller
 {
     public function __construct(private AuditService $audit) {}
@@ -64,7 +59,6 @@ class MasterDataController extends Controller
         $data['created_by'] = $request->user()->id;
 
         $record = $config['model']::create($data);
-
         $this->audit->record('create', $record, after: $record->toArray(), request: $request);
 
         return response()->json($record, 201);
@@ -85,12 +79,10 @@ class MasterDataController extends Controller
 
         $record = $config['model']::findOrFail($id);
         $before = $record->toArray();
-
-        $data = $this->validateData($request, $config, isUpdate: true);
+        $data = $this->validateData($request, $config, $record);
         $data['updated_by'] = $request->user()->id;
 
         $record->update($data);
-
         $this->audit->record('update', $record, before: $before, after: $record->fresh()->toArray(), request: $request);
 
         return response()->json($record->fresh());
@@ -127,49 +119,23 @@ class MasterDataController extends Controller
         }
     }
 
-    private function validateData(Request $request, array $config, bool $isUpdate = false): array
+    private function validateData(Request $request, array $config, ?Model $record = null): array
     {
         $companyId = CurrentCompany::id();
-        $rules = $this->tenantScopedRules($config['rules'], $companyId);
+        abort_if($companyId === null, 500, 'Company context tidak tersedia.');
 
-        if ($isUpdate) {
-            $rules = collect($rules)->mapWithKeys(function (array $rule, string $field): array {
-                array_unshift($rule, 'sometimes');
+        $values = $record === null
+            ? $request->all()
+            : array_merge($record->getAttributes(), $request->all());
 
-                return [$field => $rule];
-            })->all();
-        }
-
-        foreach (['code', 'style_no', 'nik'] as $uniqueField) {
-            if (isset($rules[$uniqueField])) {
-                $table = (new $config['model'])->getTable();
-                $rules[$uniqueField][] = Rule::unique($table, $uniqueField)
-                    ->where('company_id', $companyId)
-                    ->ignore($isUpdate ? $request->route('id') : null);
-            }
-        }
+        $rules = MasterDataValidation::rules(
+            config: $config,
+            companyId: $companyId,
+            values: $values,
+            presentFields: $record === null ? null : array_keys($request->all()),
+            ignoreId: $record?->getKey(),
+        );
 
         return $request->validate($rules);
-    }
-
-    /** Scope every registry exists rule to the active company. */
-    private function tenantScopedRules(array $rules, int $companyId): array
-    {
-        foreach ($rules as $field => $rule) {
-            $segments = is_array($rule) ? $rule : explode('|', $rule);
-
-            foreach ($segments as $index => $segment) {
-                if (! is_string($segment) || ! preg_match('/^exists:([^,]+)(?:,([^,]+))?$/', $segment, $matches)) {
-                    continue;
-                }
-
-                $segments[$index] = Rule::exists($matches[1], $matches[2] ?? 'id')
-                    ->where('company_id', $companyId);
-            }
-
-            $rules[$field] = $segments;
-        }
-
-        return $rules;
     }
 }

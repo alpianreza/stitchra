@@ -5,14 +5,13 @@ namespace Modules\MasterData\Services;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Modules\Core\Support\CurrentCompany;
 use Modules\MasterData\Models\IntegrationJob;
 use Modules\MasterData\Support\MasterDataRegistry;
+use Modules\MasterData\Support\MasterDataValidation;
 use RuntimeException;
 use Throwable;
 
-/** Import CSV master data with row-level validation and tenant-safe references. */
 class MasterDataImportService
 {
     public function import(string $entity, UploadedFile $file, int $userId): IntegrationJob
@@ -24,8 +23,11 @@ class MasterDataImportService
         }
 
         $companyId = CurrentCompany::id();
-        $path = $file->store("imports/{$companyId}/{$entity}", 's3');
+        if ($companyId === null) {
+            throw new RuntimeException('Company context tidak tersedia.');
+        }
 
+        $path = $file->store("imports/{$companyId}/{$entity}", 's3');
         $job = IntegrationJob::create([
             'company_id' => $companyId,
             'type' => 'MASTER_IMPORT',
@@ -41,7 +43,7 @@ class MasterDataImportService
         }
 
         try {
-            $header = fgetcsv($handle);
+            $header = $this->readCsv($handle);
             if ($header === false) {
                 return $this->failJob($job, 'File kosong / header tidak terbaca.');
             }
@@ -57,13 +59,12 @@ class MasterDataImportService
                     : 'Header CSV kosong atau duplikat.');
             }
 
-            $rules = $this->importRules($config, $companyId);
             $errors = [];
             $success = 0;
             $total = 0;
-            $maxRows = max(1, (int) env('MASTER_IMPORT_MAX_ROWS', 10000));
+            $maxRows = max(1, (int) config('master_data.import_max_rows', 10000));
 
-            while (($row = fgetcsv($handle)) !== false) {
+            while (($row = $this->readCsv($handle)) !== false) {
                 $total++;
 
                 if ($total > $maxRows) {
@@ -78,6 +79,7 @@ class MasterDataImportService
                 }
 
                 $data = array_map(static fn ($value) => trim((string) $value) === '' ? null : trim((string) $value), $data);
+                $rules = MasterDataValidation::rules($config, $companyId, $data);
                 $validator = Validator::make($data, $rules);
 
                 if ($validator->fails()) {
@@ -101,9 +103,9 @@ class MasterDataImportService
 
             $job->update([
                 'status' => 'DONE',
-                'total_rows' => min($total, $maxRows),
+                'total_rows' => $total,
                 'success_rows' => $success,
-                'failed_rows' => min($total, $maxRows) - $success,
+                'failed_rows' => $total - $success,
                 'errors' => $errors ?: null,
             ]);
 
@@ -113,29 +115,10 @@ class MasterDataImportService
         }
     }
 
-    private function importRules(array $config, int $companyId): array
+    /** @return array<int, string|null>|false */
+    private function readCsv($handle): array|false
     {
-        $rules = [];
-
-        foreach ($config['rules'] as $field => $rule) {
-            $segments = is_array($rule) ? $rule : explode('|', $rule);
-
-            foreach ($segments as $index => $segment) {
-                if (is_string($segment) && preg_match('/^exists:([^,]+)(?:,([^,]+))?$/', $segment, $matches)) {
-                    $segments[$index] = Rule::exists($matches[1], $matches[2] ?? 'id')
-                        ->where('company_id', $companyId);
-                }
-            }
-
-            if (in_array($field, ['code', 'style_no', 'nik'], true)) {
-                $segments[] = Rule::unique((new $config['model'])->getTable(), $field)
-                    ->where('company_id', $companyId);
-            }
-
-            $rules[$field] = $segments;
-        }
-
-        return $rules;
+        return fgetcsv($handle, null, ',', '"', '');
     }
 
     private function failJob(IntegrationJob $job, string $message): IntegrationJob
