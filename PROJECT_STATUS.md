@@ -9,20 +9,29 @@ This file records implementation evidence. The locked business blueprint remains
 - Application code exists across Core, Master Data, Sales, Inventory, MRP/Production, Cutting, Quality, Packing/Shipment, Costing, and Finance domains.
 - Automated feature tests exist for the principal domain flows.
 - Production readiness is **not yet approved**.
-- Phase 1 code hardening is substantially implemented, but runtime verification remains blocked until deterministic lockfiles are committed and CI completes successfully.
+- Phase 1 and Phase 2 hardening are implemented in code, but runtime verification remains blocked until deterministic lockfiles are committed and CI completes successfully.
 
 ## Phase 1 hardening evidence
-
-Implemented on `main`:
 
 - Concurrency-safe document numbering and serialized approval transitions.
 - Stale approval-request rejection and post-commit approval events.
 - Tenant context validation, cleanup, and cross-company write rejection.
-- Append-only audit model protections and recursive sensitive-field redaction.
-- Granular permission middleware on domain routes; dynamic Shop Floor and Reporting permissions remain enforced in their controllers.
+- Append-only audit protections and recursive sensitive-field redaction.
+- Granular permission middleware on domain routes; dynamic Shop Floor and Reporting permissions remain enforced in controllers.
 - Scoped Sanctum API tokens with configurable expiry and device names.
-- Docker build failure propagation, Node 24 alignment, MySQL 8.4 pinning, corrected mounts, and removal of the API/MinIO port collision.
-- Regression tests added for stale approvals, audit immutability/redaction, cross-company writes, expiring tokens, and real domain-route permission gates.
+- Docker failure propagation, Node 24 alignment, MySQL 8.4 pinning, corrected mounts, and removal of the API/MinIO port collision.
+- Regression tests for stale approvals, audit immutability/redaction, cross-company writes, expiring tokens, and domain-route permission gates.
+
+## Phase 2 hardening evidence
+
+- Generic search only queries fields that exist for the selected master entity.
+- Pagination/filter input is validated.
+- CRUD and CSV import share tenant-scoped foreign-key and uniqueness validation.
+- Composite database constraints are represented in application validation.
+- CSV header, row-count, PHP 8.5 parsing, and database-error disclosure are hardened.
+- BR-003 material tracking and positive rate/GSM/width constraints are enforced.
+- Referenced critical master records are blocked from deletion with `409 Conflict`.
+- Regression tests cover search, pagination, cross-company references, composite unique, material tracking, deletion guards, and CSV import failures.
 
 These items are implementation evidence only. Tests have **not** been declared green in this environment.
 
@@ -30,8 +39,8 @@ These items are implementation evidence only. Tests have **not** been declared g
 
 | Phase | Implementation evidence | Review status |
 |---|---|---|
-| 1 — Core Foundation | Core code, hardening, and regression tests present | CI/runtime verification pending |
-| 2 — Master Data | Code and feature tests present | Review required |
+| 1 — Core Foundation | Core hardening and regression tests present | CI/runtime verification pending |
+| 2 — Master Data | Master validation/import/delete hardening and tests present | CI/runtime verification pending |
 | 3 — Sales/BOM/Routing/Estimated Costing | Code and feature tests present | Review required |
 | 4 — Inventory/Purchasing/Receiving | Code and feature tests present | Concurrency review required |
 | 5 — MRP/Planning/MO | Code and feature tests present | Review required |
