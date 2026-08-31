@@ -1,24 +1,28 @@
 # Modul Shop Floor
 
-Scan bundle per operasi untuk WIP real-time, finishing transition, dan controlled rework.
+## Online and offline scan invariants
 
-## Invariants
+- Online and offline scans share the same locked state-transition engine.
+- Every bundle has monotonic `scan_version`; an offline event must send `expected_bundle_version`.
+- Each device event has a unique `client_event_id` and canonical SHA-256 payload hash.
+- Same event and payload returns `replayed`; reused event id with a different payload returns `conflict`.
+- Stale bundle versions return the current version and non-sensitive bundle snapshot.
+- Device timestamps older than the configured window or too far in the future are rejected.
+- Batch sync returns per-event `applied`, `replayed`, `conflict`, or `rejected` results.
+- Existing ordering remains enforced: OUT requires IN, previous sewing operation requires OUT, and finishing requires all sewing OUT.
 
-- Scan mengunci bundle dan MO sehingga concurrent duplicate tidak dapat melewati state check.
-- Database unique backstop membatasi satu `IN` dan satu `OUT` per bundle×operation×stage.
-- Production scan bersifat append-only.
-- `OUT` membutuhkan `IN`; sewing operation berikutnya membutuhkan predecessor `OUT`.
-- Finishing ditolak sampai seluruh routing operation sudah `OUT` dari sewing.
-- Operation wajib berasal dari routing snapshot MO.
-- Line, employee, bundle, MO, WIP, dan daily output semuanya company-scoped.
-- MO hanya maju: `CUTTING → SEWING → FINISHING`.
-- Rework wajib memakai active defect library, qty tidak melebihi bundle, menahan bundle pada status `REWORK`, dan membutuhkan resolve eksplisit sebelum scan berlanjut.
-- Route scan/rework memakai `production.output.create`; WIP/daily output memakai `production.output.view`.
+## Device security
 
-## Device/security decision
+- Device enrollment issues a time-limited Sanctum token with only `shopfloor:scan`.
+- Device tokens are rejected by all permission-protected administration/business routes because they lack `api:access`.
+- Devices are company/user bound, rate-limited, auditable, and explicitly revocable; revocation deletes the token.
+- Plaintext token is returned only at enrollment.
 
-Keyboard-wedge scanner melalui browser tetap baseline. Offline queue, replay key, device enrollment, dan pemisahan browser-session versus device token masih membutuhkan desain deployment tersendiri sebelum pilot.
+## Configuration
 
-## Verification status
+- `SHOPFLOOR_DEVICE_TOKEN_DAYS=30`
+- `SHOPFLOOR_OFFLINE_MAX_AGE_DAYS=7`
+- `SHOPFLOOR_CLOCK_SKEW_MINUTES=5`
+- `SHOPFLOOR_SYNC_BATCH_SIZE=100`
 
-Regression tests tersedia untuk ordering, duplicate direction, finishing gate, append-only scan, tenant-scoped WIP, dan rework lifecycle. Runtime result belum dinyatakan hijau sampai lockfiles dan CI tersedia.
+Runtime verification remains pending deterministic lockfiles and CI.
