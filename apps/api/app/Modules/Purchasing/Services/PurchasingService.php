@@ -19,16 +19,19 @@ class PurchasingService
         if ($lines === []) {
             throw new RuntimeException('PR wajib punya minimal 1 line.');
         }
-        $this->assertLines($lines, false);
+        if (! in_array($source, PurchaseRequest::SOURCES, true)) {
+            throw new RuntimeException('Source PR tidak valid.');
+        }
+        $this->assertCreatorCompany($creator, $companyId);
+        $this->assertLines($companyId, $lines, false);
 
         return DB::transaction(function () use ($companyId, $header, $lines, $source, $creator): PurchaseRequest {
             $pr = PurchaseRequest::create([
                 'company_id' => $companyId,
                 'doc_no' => $this->numbering->next($companyId, 'PR'),
-                'request_date' => $header['request_date'],
-                'required_date' => $header['required_date'] ?? null,
-                'department' => $header['department'] ?? null,
                 'source' => $source,
+                'needed_by' => $header['needed_by'] ?? null,
+                'notes' => $header['notes'] ?? null,
                 'status' => 'DRAFT',
                 'created_by' => $creator->id,
             ]);
@@ -43,6 +46,7 @@ class PurchasingService
     {
         DB::transaction(function () use ($pr, $submitter): void {
             $locked = PurchaseRequest::withoutGlobalScopes()->whereKey($pr->id)->lockForUpdate()->firstOrFail();
+            $this->assertCreatorCompany($submitter, (int) $locked->company_id);
             if ($locked->status !== 'DRAFT') {
                 throw new RuntimeException('Hanya PR DRAFT yang bisa disubmit.');
             }
@@ -56,7 +60,18 @@ class PurchasingService
         if ($lines === []) {
             throw new RuntimeException('PO wajib punya minimal 1 line.');
         }
-        $this->assertLines($lines, true);
+        $this->assertCreatorCompany($creator, $companyId);
+        $this->assertCompanyReference('suppliers', (int) ($header['supplier_id'] ?? 0), $companyId, 'Supplier');
+        if (! empty($header['currency_id'])) {
+            $this->assertCompanyReference('currencies', (int) $header['currency_id'], $companyId, 'Currency');
+            if ((float) ($header['exchange_rate'] ?? 0) <= 0) {
+                throw new RuntimeException('Exchange rate wajib lebih besar dari nol untuk PO ber-currency.');
+            }
+        }
+        if (! empty($header['expected_date']) && $header['expected_date'] < $header['order_date']) {
+            throw new RuntimeException('Expected date tidak boleh sebelum order date.');
+        }
+        $this->assertLines($companyId, $lines, true);
 
         return DB::transaction(function () use ($companyId, $header, $lines, $creator): PurchaseOrder {
             $total = 0.0;
@@ -89,6 +104,7 @@ class PurchasingService
     {
         DB::transaction(function () use ($po, $submitter): void {
             $locked = PurchaseOrder::withoutGlobalScopes()->whereKey($po->id)->lockForUpdate()->firstOrFail();
+            $this->assertCreatorCompany($submitter, (int) $locked->company_id);
             if ($locked->status !== 'DRAFT') {
                 throw new RuntimeException('Hanya PO DRAFT yang bisa disubmit.');
             }
@@ -116,18 +132,44 @@ class PurchasingService
         });
     }
 
-    private function assertLines(array $lines, bool $requirePrice): void
+    private function assertLines(int $companyId, array $lines, bool $requirePrice): void
     {
         foreach ($lines as $line) {
             if ((float) ($line['qty'] ?? 0) <= 0) {
                 throw new RuntimeException('Qty line purchasing wajib lebih besar dari nol.');
             }
-            if ((int) ($line['material_id'] ?? 0) <= 0 || (int) ($line['uom_id'] ?? 0) <= 0) {
-                throw new RuntimeException('Material dan UOM line purchasing wajib diisi.');
-            }
+            $this->assertCompanyReference('materials', (int) ($line['material_id'] ?? 0), $companyId, 'Material');
+            $this->assertCompanyReference('uoms', (int) ($line['uom_id'] ?? 0), $companyId, 'UOM');
             if ($requirePrice && (float) ($line['unit_price'] ?? -1) < 0) {
                 throw new RuntimeException('Harga PO tidak boleh negatif.');
             }
+            if ($requirePrice && ! empty($line['pr_line_id'])) {
+                $valid = DB::table('pr_lines')
+                    ->join('purchase_requests', 'purchase_requests.id', '=', 'pr_lines.purchase_request_id')
+                    ->where('pr_lines.id', (int) $line['pr_line_id'])
+                    ->where('purchase_requests.company_id', $companyId)
+                    ->exists();
+                if (! $valid) {
+                    throw new RuntimeException('PR line tidak berasal dari company aktif.');
+                }
+            }
+        }
+    }
+
+    private function assertCompanyReference(string $table, int $id, int $companyId, string $label): void
+    {
+        if ($id <= 0 || ! DB::table($table)->where('id', $id)->where('company_id', $companyId)->exists()) {
+            throw new RuntimeException("{$label} tidak ditemukan pada company aktif.");
+        }
+    }
+
+    private function assertCreatorCompany(User $user, int $companyId): void
+    {
+        if ((int) $user->company_id === $companyId) {
+            return;
+        }
+        if (! $user->companies()->whereKey($companyId)->exists()) {
+            throw new RuntimeException('User tidak memiliki akses ke company dokumen.');
         }
     }
 }
