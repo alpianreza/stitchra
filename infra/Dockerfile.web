@@ -1,51 +1,40 @@
 # Multi-stage build for Next.js
-# Stage 1: Builder
-FROM node:23-alpine AS builder
+# Stage 1: Builder — keep the Node major aligned with CI.
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY apps/web/package.json apps/web/package-lock.json* ./
+COPY apps/web/package.json ./
+RUN npm install --no-audit --no-fund
 
-# Install all dependencies
-RUN npm install
-
-# Copy application code
 COPY apps/web/ .
 
-# Build application
-RUN npm run build 2>&1 | grep -i error || echo "Build completed"
+# Never pipe or mask the build exit code.
+RUN npm run build
 
 # Stage 2: Runtime
-FROM node:23-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# Copy package files
-COPY apps/web/package.json apps/web/package-lock.json* ./
+COPY apps/web/package.json ./
+RUN npm install --omit=dev --no-audit --no-fund
 
-# Install production dependencies only
-RUN npm install --omit=dev --prefer-offline
-
-# Copy built application from builder
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY apps/web/src ./src
 COPY apps/web/next.config.ts apps/web/tsconfig.json ./
 
-# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+    adduser -S nextjs -u 1001 && \
+    chown -R nextjs:nodejs /app
 
 USER nextjs
 
-# Expose port
 EXPOSE 3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 

@@ -32,25 +32,35 @@ class ApprovalEngine
             throw new RuntimeException("Approval flow aktif belum ada untuk doc_type [{$docType}].");
         }
 
-        // Satu request aktif per dokumen
-        $existing = ApprovalRequest::withoutGlobalScopes()
-            ->where('company_id', $document->company_id)
-            ->where('doc_type', $docType)
-            ->where('doc_id', $document->getKey())
-            ->where('is_active', true)
-            ->where('status', 'PENDING')
-            ->first();
-
-        if ($existing !== null) {
-            return $existing;
-        }
-
         return DB::transaction(function () use ($document, $docType, $flow, $submitter): ApprovalRequest {
+            // Serialize submissions for the same document. This closes the race where
+            // two callers both observe that no active request exists.
+            $lockedDocument = $document->newQueryWithoutScopes()
+                ->whereKey($document->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($lockedDocument === null) {
+                throw new RuntimeException('Dokumen approval tidak ditemukan.');
+            }
+
+            $existing = ApprovalRequest::withoutGlobalScopes()
+                ->where('company_id', $lockedDocument->company_id)
+                ->where('doc_type', $docType)
+                ->where('doc_id', $lockedDocument->getKey())
+                ->where('is_active', true)
+                ->where('status', 'PENDING')
+                ->first();
+
+            if ($existing !== null) {
+                return $existing;
+            }
+
             return ApprovalRequest::create([
-                'company_id' => $document->company_id,
+                'company_id' => $lockedDocument->company_id,
                 'flow_id' => $flow->id,
                 'doc_type' => $docType,
-                'doc_id' => $document->getKey(),
+                'doc_id' => $lockedDocument->getKey(),
                 'status' => 'PENDING',
                 'current_step' => 1,
                 'is_active' => true,
@@ -63,68 +73,93 @@ class ApprovalEngine
     /** Approve satu step; lanjut ke step berikutnya atau selesaikan request. */
     public function approve(ApprovalRequest $request, User $approver, ?string $note = null, ?User $delegatedFrom = null): ApprovalRequest
     {
-        $this->assertPending($request);
-        $this->assertCanAct($request, $approver);
+        $expectedStep = (int) $request->current_step;
 
-        return DB::transaction(function () use ($request, $approver, $note, $delegatedFrom): ApprovalRequest {
-            $this->recordStep($request, $approver, 'APPROVED', $note, $delegatedFrom);
+        return DB::transaction(function () use ($request, $approver, $note, $delegatedFrom, $expectedStep): ApprovalRequest {
+            $locked = $this->lockCurrentRequest($request, $expectedStep);
+            $this->assertCanAct($locked, $approver);
+            $this->recordStep($locked, $approver, 'APPROVED', $note, $delegatedFrom);
 
-            $flow = $request->flow()->with('steps')->first();
-            $maxStep = $flow->steps->max('step_no');
+            $flow = $locked->flow()->with('steps')->first();
+            $maxStep = (int) $flow->steps->max('step_no');
 
-            if ($request->current_step >= $maxStep) {
-                $request->fill([
+            if ($locked->current_step >= $maxStep) {
+                $locked->fill([
                     'status' => 'APPROVED',
                     'is_active' => false,
                     'completed_at' => now(),
                 ])->save();
 
-                event(new Events\DocumentApproved($request));
+                DB::afterCommit(static fn () => event(new Events\DocumentApproved($locked)));
             } else {
-                $request->increment('current_step');
+                $locked->increment('current_step');
             }
 
-            return $request->refresh();
+            return $locked->refresh();
         });
     }
 
     public function reject(ApprovalRequest $request, User $approver, ?string $note = null): ApprovalRequest
     {
-        $this->assertPending($request);
-        $this->assertCanAct($request, $approver);
+        $expectedStep = (int) $request->current_step;
 
-        return DB::transaction(function () use ($request, $approver, $note): ApprovalRequest {
-            $this->recordStep($request, $approver, 'REJECTED', $note);
+        return DB::transaction(function () use ($request, $approver, $note, $expectedStep): ApprovalRequest {
+            $locked = $this->lockCurrentRequest($request, $expectedStep);
+            $this->assertCanAct($locked, $approver);
+            $this->recordStep($locked, $approver, 'REJECTED', $note);
 
-            $request->fill([
+            $locked->fill([
                 'status' => 'REJECTED',
                 'is_active' => false,
                 'completed_at' => now(),
             ])->save();
 
-            event(new Events\DocumentRejected($request));
+            DB::afterCommit(static fn () => event(new Events\DocumentRejected($locked)));
 
-            return $request->refresh();
+            return $locked->refresh();
         });
     }
 
     /** Minta revisi — dokumen kembali ke submitter, request ditutup. */
     public function requestRevision(ApprovalRequest $request, User $approver, string $note): ApprovalRequest
     {
-        $this->assertPending($request);
-        $this->assertCanAct($request, $approver);
+        $expectedStep = (int) $request->current_step;
 
-        return DB::transaction(function () use ($request, $approver, $note): ApprovalRequest {
-            $this->recordStep($request, $approver, 'REVISION', $note);
+        return DB::transaction(function () use ($request, $approver, $note, $expectedStep): ApprovalRequest {
+            $locked = $this->lockCurrentRequest($request, $expectedStep);
+            $this->assertCanAct($locked, $approver);
+            $this->recordStep($locked, $approver, 'REVISION', $note);
 
-            $request->fill([
+            $locked->fill([
                 'status' => 'REVISION',
                 'is_active' => false,
                 'completed_at' => now(),
             ])->save();
 
-            return $request->refresh();
+            return $locked->refresh();
         });
+    }
+
+    private function lockCurrentRequest(ApprovalRequest $request, int $expectedStep): ApprovalRequest
+    {
+        $locked = ApprovalRequest::withoutGlobalScopes()
+            ->whereKey($request->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($locked === null) {
+            throw new RuntimeException('Approval request tidak ditemukan.');
+        }
+
+        $this->assertPending($locked);
+
+        // A request made from a stale screen must not accidentally approve the
+        // next step after another approver has already advanced the workflow.
+        if ((int) $locked->current_step !== $expectedStep) {
+            throw new RuntimeException('Step approval sudah berubah. Muat ulang data sebelum melanjutkan.');
+        }
+
+        return $locked;
     }
 
     private function recordStep(ApprovalRequest $request, User $approver, string $decision, ?string $note, ?User $delegatedFrom = null): void

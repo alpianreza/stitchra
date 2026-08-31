@@ -24,19 +24,22 @@ class ResolveCompany
         $requested = $request->header('X-Company-Id');
         $allowed = $user->companies()->pluck('companies.id')->all();
         $allowed[] = $user->company_id;
+        $allowed = array_values(array_unique(array_map('intval', array_filter($allowed))));
 
         $companyId = $requested !== null ? (int) $requested : (int) $user->company_id;
 
-        if (! in_array($companyId, $allowed, true)) {
+        if ($companyId <= 0 || ! in_array($companyId, $allowed, true)) {
             abort(403, 'Anda tidak memiliki akses ke company ini.');
         }
 
         CurrentCompany::set($companyId);
 
-        $response = $next($request);
-
-        CurrentCompany::clear();
-
-        return $response;
+        try {
+            return $next($request);
+        } finally {
+            // Critical for long-lived workers (Octane) and exception paths: a
+            // tenant context must never leak into the next request.
+            CurrentCompany::clear();
+        }
     }
 }

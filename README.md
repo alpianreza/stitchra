@@ -31,5 +31,8 @@ docker exec stitchra-api php artisan migrate --seed
 ```
 Web: http://localhost · API: http://localhost:8000 · MinIO console: http://localhost:9001
 
-## Fase
-Lihat `docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`. Saat ini: **Phase 1 — Core Foundation** (rencana: `docs/phases/PHASE_1_CORE_FOUNDATION.md`).
+## Status implementasi
+
+Kode dan feature test sudah mencakup beberapa domain lintas fase. Keberadaan kode belum berarti fase telah lolos review/UAT. Status aktual, pekerjaan hardening, dan exit criteria production dicatat di [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
+
+Roadmap resmi tetap tersedia di [`docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`](./docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md).

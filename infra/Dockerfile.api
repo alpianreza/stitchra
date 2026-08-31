@@ -24,15 +24,14 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY apps/api/composer.json composer.lock* ./
+COPY apps/api/composer.json ./
 
+# Do not suppress Composer failures: an incomplete vendor tree must fail the image build.
 RUN composer install \
     --no-interaction \
     --no-progress \
     --prefer-dist \
-    --optimize-autoloader \
-    --ignore-platform-reqs \
-    || echo "Composer dependencies installed with warnings"
+    --optimize-autoloader
 
 # Stage 2: Runtime
 FROM php:8.5-fpm-alpine
@@ -50,6 +49,10 @@ RUN apk add --no-cache \
     freetype-dev \
     nginx \
     curl \
+    && docker-php-ext-configure gd \
+      --with-freetype \
+      --with-jpeg \
+      --with-webp \
     && docker-php-ext-install -j$(nproc) \
       pdo_mysql \
       session \
@@ -60,27 +63,18 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy application code
 COPY apps/api/ .
-
-# Copy composer dependencies from builder
 COPY --from=builder /app/vendor ./vendor
 
-# Create necessary directories
 RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
-# Copy Nginx configuration
 COPY infra/nginx/api.conf /etc/nginx/conf.d/default.conf
-
-# Copy startup script
 COPY infra/startup-api.sh /startup.sh
 RUN chmod +x /startup.sh
 
-# Expose ports
 EXPOSE 9000 80
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 

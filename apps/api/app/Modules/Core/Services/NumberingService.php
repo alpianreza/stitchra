@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * BR-010: Nomor dokumen PREFIX-YYYY-NNNNNN per company.
  * - Counter terpisah per (company, prefix, tahun)
- * - Concurrency-safe: row lock (SELECT ... FOR UPDATE) dalam transaksi
+ * - Concurrency-safe: atomic insert + row lock dalam transaksi
  * - Nomor dokumen batal TIDAK di-reuse (gap diperbolehkan & tercatat)
  */
 class NumberingService
@@ -33,7 +33,20 @@ class NumberingService
         $year = (int) now()->year;
 
         return DB::transaction(function () use ($companyId, $config, $year): string {
-            // Lock baris counter (atau buat lalu lock) — mencegah duplikat saat paralel.
+            $now = now();
+
+            // Seed the first counter atomically. The unique constraint on
+            // (company_id, prefix, period_year) makes concurrent first-use safe
+            // on both MySQL and PostgreSQL.
+            DB::table('doc_number_counters')->insertOrIgnore([
+                'company_id' => $companyId,
+                'prefix' => $config->prefix,
+                'period_year' => $year,
+                'last_number' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
             $counter = DocNumberCounter::withoutGlobalScopes()
                 ->where('company_id', $companyId)
                 ->where('prefix', $config->prefix)
@@ -42,12 +55,7 @@ class NumberingService
                 ->first();
 
             if ($counter === null) {
-                $counter = new DocNumberCounter([
-                    'company_id' => $companyId,
-                    'prefix' => $config->prefix,
-                    'period_year' => $year,
-                    'last_number' => 0,
-                ]);
+                throw new RuntimeException('Counter nomor dokumen gagal diinisialisasi.');
             }
 
             $counter->last_number++;
@@ -59,7 +67,7 @@ class NumberingService
         });
     }
 
-    /** Preview nomor berikutnya TANPA meng-increment (untuk UI). */
+    /** Preview nomor berikutnya TANPA meng-increment (untuk UI, bukan reservasi nomor). */
     public function peek(int $companyId, string $docType): ?string
     {
         $config = DocNumberingConfig::withoutGlobalScopes()
