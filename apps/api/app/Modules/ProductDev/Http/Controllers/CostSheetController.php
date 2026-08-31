@@ -5,36 +5,42 @@ namespace Modules\ProductDev\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
 use Modules\ProductDev\Models\CostSheet;
 use Modules\ProductDev\Services\CostingService;
+use RuntimeException;
 
 class CostSheetController extends Controller
 {
     public function __construct(private CostingService $service, private AuditService $audit) {}
 
-    /** BR-100: hitung estimated cost dari BOM+Routing APPROVED */
     public function compute(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.costing.create'), 403);
+        $companyId = CurrentCompany::id();
+        $tenantExists = fn (string $table) => Rule::exists($table, 'id')->where('company_id', $companyId);
 
         $data = $request->validate([
-            'style_id' => 'required|integer|exists:styles,id',
-            'line_id' => 'required|integer|exists:lines,id',
-            'period' => 'required|string|max:7',
-            'material_prices' => 'required|array|min:1',
-            'material_prices.*' => 'numeric|min:0',
+            'style_id' => ['required', 'integer', $tenantExists('styles')],
+            'line_id' => ['required', 'integer', $tenantExists('lines')],
+            'period' => ['required', 'date_format:Y-m'],
+            'material_prices' => ['required', 'array', 'min:1'],
+            'material_prices.*' => ['numeric', 'gt:0'],
         ]);
 
-        $sheet = $this->service->compute(
-            styleId: $data['style_id'],
-            companyId: CurrentCompany::id(),
-            materialPrices: $data['material_prices'],
-            lineId: $data['line_id'],
-            period: $data['period'],
-            creator: $request->user(),
-        );
+        try {
+            $sheet = $this->service->compute(
+                styleId: $data['style_id'],
+                companyId: $companyId,
+                materialPrices: $data['material_prices'],
+                lineId: $data['line_id'],
+                period: $data['period'],
+                creator: $request->user(),
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         $this->audit->record('create', $sheet, after: $sheet->toArray(), request: $request);
 
@@ -43,18 +49,22 @@ class CostSheetController extends Controller
 
     public function setPrice(Request $request, CostSheet $costSheet): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.costing.update'), 403);
+        $data = $request->validate(['fob_price' => ['required', 'numeric', 'gt:0']]);
 
-        $data = $request->validate(['fob_price' => 'required|numeric|min:0']);
-
-        return response()->json($this->service->setPrice($costSheet, (float) $data['fob_price']));
+        try {
+            return response()->json($this->service->setPrice($costSheet, (float) $data['fob_price']));
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
     }
 
     public function submit(Request $request, CostSheet $costSheet): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.costing.submit'), 403);
-
-        $this->service->submit($costSheet, $request->user());
+        try {
+            $this->service->submit($costSheet, $request->user());
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         $this->audit->record('submit', $costSheet, request: $request);
 
@@ -63,8 +73,6 @@ class CostSheetController extends Controller
 
     public function show(Request $request, CostSheet $costSheet): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.costing.view'), 403);
-
         return response()->json($costSheet->load('lines'));
     }
 }

@@ -5,9 +5,12 @@ namespace Modules\ProductDev\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Core\Services\AuditService;
+use Modules\Core\Support\CurrentCompany;
 use Modules\ProductDev\Models\BomVersion;
 use Modules\ProductDev\Services\BomService;
+use RuntimeException;
 
 class BomController extends Controller
 {
@@ -15,22 +18,13 @@ class BomController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.bom.create'), 403);
+        $data = $request->validate($this->rules(includeStyle: true));
 
-        $data = $request->validate([
-            'style_id' => 'required|integer|exists:styles,id',
-            'lines' => 'required|array|min:1',
-            'lines.*.material_id' => 'required|integer|exists:materials,id',
-            'lines.*.colorway_id' => 'nullable|integer|exists:colorways,id',
-            'lines.*.qty_per_pcs' => 'required|numeric|min:0',
-            'lines.*.uom_id' => 'required|integer|exists:uoms,id',
-            'lines.*.wastage_pct' => 'nullable|numeric|min:0',
-            'lines.*.shrinkage_pct' => 'nullable|numeric|min:0',
-            'lines.*.consumption_estimated' => 'nullable|numeric|min:0',
-            'lines.*.is_backflush' => 'boolean',
-        ]);
-
-        $version = $this->service->createVersion($data['style_id'], $data['lines'], $request->user());
+        try {
+            $version = $this->service->createVersion($data['style_id'], $data['lines'], $request->user());
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         $this->audit->record('create', $version, after: $version->toArray(), request: $request);
 
@@ -39,25 +33,27 @@ class BomController extends Controller
 
     public function update(Request $request, BomVersion $bomVersion): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.bom.update'), 403);
+        $this->assertTenant($bomVersion);
+        $data = $request->validate($this->rules());
 
-        $data = $request->validate([
-            'lines' => 'required|array|min:1',
-            'lines.*.material_id' => 'required|integer|exists:materials,id',
-            'lines.*.qty_per_pcs' => 'required|numeric|min:0',
-            'lines.*.uom_id' => 'required|integer|exists:uoms,id',
-        ]);
-
-        $version = $this->service->updateDraftLines($bomVersion, $data['lines']);
+        try {
+            $version = $this->service->updateDraftLines($bomVersion, $data['lines']);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json($version);
     }
 
     public function submit(Request $request, BomVersion $bomVersion): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.bom.submit'), 403);
+        $this->assertTenant($bomVersion);
 
-        $this->service->submit($bomVersion, $request->user());
+        try {
+            $this->service->submit($bomVersion, $request->user());
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         $this->audit->record('submit', $bomVersion, request: $request);
 
@@ -66,8 +62,37 @@ class BomController extends Controller
 
     public function show(Request $request, BomVersion $bomVersion): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('pd.bom.view'), 403);
+        $this->assertTenant($bomVersion);
 
         return response()->json($bomVersion->load('lines.material', 'lines.uom', 'lines.colorway'));
+    }
+
+    private function rules(bool $includeStyle = false): array
+    {
+        $companyId = CurrentCompany::id();
+        $tenantExists = fn (string $table) => Rule::exists($table, 'id')->where('company_id', $companyId);
+
+        $rules = [
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.material_id' => ['required', 'integer', $tenantExists('materials')],
+            'lines.*.colorway_id' => ['nullable', 'integer', $tenantExists('colorways')],
+            'lines.*.qty_per_pcs' => ['required', 'numeric', 'gt:0'],
+            'lines.*.uom_id' => ['required', 'integer', $tenantExists('uoms')],
+            'lines.*.wastage_pct' => ['nullable', 'numeric', 'between:0,100'],
+            'lines.*.shrinkage_pct' => ['nullable', 'numeric', 'between:0,100'],
+            'lines.*.consumption_estimated' => ['nullable', 'numeric', 'gt:0'],
+            'lines.*.is_backflush' => ['boolean'],
+        ];
+
+        if ($includeStyle) {
+            $rules = ['style_id' => ['required', 'integer', $tenantExists('styles')]] + $rules;
+        }
+
+        return $rules;
+    }
+
+    private function assertTenant(BomVersion $version): void
+    {
+        abort_unless((int) $version->bom->style->company_id === CurrentCompany::id(), 404);
     }
 }
