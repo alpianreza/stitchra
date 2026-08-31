@@ -4,7 +4,7 @@
 
 ## Executive status
 
-Phases 1–9 have implementation hardening and regression-test evidence on `main`. **Stitchra is not yet production-approved.** No full PHP/web test suite or migration smoke test has been confirmed in this environment.
+Phases 1–9 have implementation hardening and regression-test evidence on `main`. **Stitchra is not yet production-approved.** No full PHP/web test suite or clean migration smoke test has been confirmed in this environment.
 
 ## Implemented evidence
 
@@ -34,12 +34,16 @@ Phases 1–9 have implementation hardening and regression-test evidence on `main
 3. Run web lint/typecheck/build and Playwright.
 4. Add real multi-process concurrency tests for critical counters and transitions.
 5. Execute production-scale load/query-plan tests, backup restore drill, security review, UAT, and pilot.
+6. Enable branch protection for `main` with required CI checks and restricted direct pushes.
 
-## Repository notes
+## Repository verification
 
-- Latest implementation work is on `main`.
+- Latest verified branch head before this documentation update: `08411266329c444785f7efef01559f0b66e852e3`.
+- Repository branch listing showed only `main`; the temporary `chore/generate-lockfiles` branch is no longer present.
+- `main` was reported as unprotected by GitHub.
+- Static GitHub code-search checks returned incomplete empty results, so they are not treated as proof that the searched patterns are absent.
+- The connected GitHub tool does not expose direct Actions run status for a branch commit; CI result remains unverified.
 - Lockfiles were not generated or pushed by this audit.
-- Temporary branch `chore/generate-lockfiles` still requires manual deletion in GitHub because the connected integration exposes no branch-delete operation.
 
 ## Production decision
 
