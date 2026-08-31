@@ -15,13 +15,6 @@ use Modules\Production\Models\ProductionOrder;
 use Modules\Sales\Models\SalesOrder;
 use RuntimeException;
 
-/**
- * Manufacturing Order.
- * BR-060: MO release = HARD RESERVATION (saldo reserved ↑ + stock_reservations).
- * BR-040: shortage → error berisi daftar kurang; planner selesaikan manual.
- * BR-030: MO menyimpan snapshot bom_version_id/routing_version_id.
- * BR-010/015: nomor MO via numbering; release via approval flow.
- */
 class ProductionOrderService
 {
     public function __construct(
@@ -30,37 +23,39 @@ class ProductionOrderService
         private AuditService $audit,
     ) {}
 
-    /** Generate MO dari SO CONFIRMED — satu MO per style (qty diagregasi dari matrix lines). */
     public function createFromSalesOrder(SalesOrder $so, User $creator): array
     {
-        if ($so->status !== 'CONFIRMED') {
-            throw new RuntimeException('MO hanya bisa dibuat dari SO CONFIRMED (BR-023).');
-        }
-
         return DB::transaction(function () use ($so, $creator): array {
-            $mos = [];
-            $qtyPerStyle = $so->lines->groupBy('style_id')->map(fn ($l) => $l->sum(fn ($x) => (float) $x->qty));
+            $lockedSo = SalesOrder::withoutGlobalScopes()->with('lines')
+                ->whereKey($so->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($creator, (int) $lockedSo->company_id);
+            if ($lockedSo->status !== 'CONFIRMED') {
+                throw new RuntimeException('MO hanya bisa dibuat dari SO CONFIRMED (BR-023).');
+            }
 
+            $mos = [];
+            $qtyPerStyle = $lockedSo->lines->groupBy('style_id')
+                ->map(fn ($lines) => $lines->sum(fn ($line) => (float) $line->qty));
             foreach ($qtyPerStyle as $styleId => $qty) {
-                // Cegah duplikasi MO untuk style yang sama di SO yang sama
-                $exists = ProductionOrder::where('sales_order_id', $so->id)->where('style_id', $styleId)->exists();
-                if ($exists) {
+                if (ProductionOrder::withoutGlobalScopes()
+                    ->where('company_id', $lockedSo->company_id)
+                    ->where('sales_order_id', $lockedSo->id)
+                    ->where('style_id', $styleId)->exists()) {
                     continue;
                 }
 
                 $bomVersion = Bom::where('style_id', $styleId)->first()?->approvedVersion();
                 $routingVersion = Routing::where('style_id', $styleId)->first()?->approvedVersion();
-
                 if ($bomVersion === null || $routingVersion === null) {
                     throw new RuntimeException("Style #{$styleId} belum punya BOM/Routing APPROVED (BR-023).");
                 }
 
                 $mos[] = ProductionOrder::create([
-                    'company_id' => $so->company_id,
-                    'doc_no' => $this->numbering->next($so->company_id, 'MO'),
-                    'sales_order_id' => $so->id,
+                    'company_id' => $lockedSo->company_id,
+                    'doc_no' => $this->numbering->next($lockedSo->company_id, 'MO'),
+                    'sales_order_id' => $lockedSo->id,
                     'style_id' => $styleId,
-                    'bom_version_id' => $bomVersion->id,      // snapshot (BR-030)
+                    'bom_version_id' => $bomVersion->id,
                     'routing_version_id' => $routingVersion->id,
                     'qty_planned' => $qty,
                     'status' => 'PLANNED',
@@ -68,145 +63,166 @@ class ProductionOrderService
                 ]);
             }
 
-            if (empty($mos)) {
+            if ($mos === []) {
                 throw new RuntimeException('Semua style di SO ini sudah punya MO.');
             }
-
             $this->audit->record('create', 'production_orders', after: [
-                'sales_order' => $so->doc_no, 'mo_count' => count($mos),
+                'sales_order' => $lockedSo->doc_no,
+                'mo_count' => count($mos),
             ]);
-
             return $mos;
         });
     }
 
-    /**
-     * BR-060: release = hard reservation per BOM line × qty_planned.
-     * BR-040: saldo kurang → RuntimeException berisi daftar shortage; TIDAK ada reservasi parsial (atomic).
-     */
     public function release(ProductionOrder $mo, int $warehouseId, User $user): ProductionOrder
     {
-        if ($mo->status !== 'PLANNED') {
-            throw new RuntimeException('Hanya MO PLANNED yang bisa di-release.');
-        }
-
         return DB::transaction(function () use ($mo, $warehouseId, $user): ProductionOrder {
-            $bomLines = $mo->bomVersion->lines;
+            $locked = ProductionOrder::withoutGlobalScopes()->with('bomVersion.lines.material')
+                ->whereKey($mo->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'PLANNED') {
+                throw new RuntimeException('Hanya MO PLANNED yang bisa di-release.');
+            }
+            if (! DB::table('warehouses')->where('id', $warehouseId)
+                ->where('company_id', $locked->company_id)->exists()) {
+                throw new RuntimeException('Warehouse tidak ditemukan pada company MO.');
+            }
+            if (StockReservation::withoutGlobalScopes()->where('mo_id', $locked->id)
+                ->whereIn('status', ['ACTIVE', 'PARTIAL_ISSUED'])->exists()) {
+                throw new RuntimeException('MO masih memiliki reservasi aktif.');
+            }
+
+            $needs = [];
+            foreach ($locked->bomVersion->lines as $bomLine) {
+                $materialId = (int) $bomLine->material_id;
+                $needs[$materialId] ??= ['required' => 0.0, 'backflush' => true, 'material' => $bomLine->material];
+                $needs[$materialId]['required'] += $bomLine->grossPerPcs() * (float) $locked->qty_planned;
+                $needs[$materialId]['backflush'] = $needs[$materialId]['backflush'] && (bool) $bomLine->is_backflush;
+            }
+
+            $plans = [];
             $shortages = [];
-            $toReserve = [];
-
-            // 1. Kalkulasi kebutuhan + validasi available (lock saldo)
-            foreach ($bomLines as $bomLine) {
-                $required = round($bomLine->grossPerPcs() * (float) $mo->qty_planned, 4);
-
-                $balance = StockBalance::withoutGlobalScopes()
-                    ->where('company_id', $mo->company_id)
-                    ->where('material_id', $bomLine->material_id)
+            foreach ($needs as $materialId => $need) {
+                $required = round($need['required'], 4);
+                $remaining = $required;
+                $balances = StockBalance::withoutGlobalScopes()
+                    ->where('company_id', $locked->company_id)
+                    ->where('material_id', $materialId)
                     ->where('warehouse_id', $warehouseId)
-                    ->whereNull('location_id')->whereNull('lot_no')->whereNull('roll_id')
+                    ->whereRaw('on_hand > reserved + quality_hold')
+                    ->orderBy('id')
                     ->lockForUpdate()
-                    ->first();
+                    ->get();
 
-                $available = $balance ? $balance->available() : 0.0;
+                foreach ($balances as $balance) {
+                    $available = max(0.0, $balance->available());
+                    if ($available <= 0 || $remaining <= 0) continue;
+                    $qty = min($available, $remaining);
+                    $plans[] = ['material_id' => $materialId, 'balance' => $balance, 'qty' => $qty];
+                    $remaining = round($remaining - $qty, 4);
+                }
 
-                if ($available < $required) {
-                    $material = $bomLine->material;
+                if ($remaining > 0.0001) {
+                    $material = $need['material'];
+                    $available = $required - $remaining;
                     $shortages[] = sprintf(
                         '%s (%s): butuh %s, available %s, kurang %s',
                         $material->code, $material->name,
                         rtrim(rtrim(number_format($required, 4), '0'), '.'),
                         rtrim(rtrim(number_format($available, 4), '0'), '.'),
-                        rtrim(rtrim(number_format($required - $available, 4), '0'), '.'),
+                        rtrim(rtrim(number_format($remaining, 4), '0'), '.'),
                     );
                 }
-
-                $toReserve[] = ['bom_line' => $bomLine, 'required' => $required, 'balance' => $balance];
             }
 
-            // BR-040: shortage → tolak TANPA efek samping (rollback via exception)
-            if (! empty($shortages)) {
+            if ($shortages !== []) {
                 throw new RuntimeException('BR-040: material shortage saat release MO:\n- '.implode("\n- ", $shortages));
             }
 
-            // 2. Semua cukup → buat reservasi + naikkan saldo reserved
-            foreach ($toReserve as $r) {
-                $bomLine = $r['bom_line'];
-                $balance = $r['balance'];
-
+            foreach ($plans as $plan) {
+                $balance = $plan['balance'];
                 StockReservation::create([
-                    'company_id' => $mo->company_id,
-                    'mo_id' => $mo->id,
-                    'material_id' => $bomLine->material_id,
+                    'company_id' => $locked->company_id,
+                    'mo_id' => $locked->id,
+                    'material_id' => $plan['material_id'],
                     'warehouse_id' => $warehouseId,
-                    'qty_reserved' => $r['required'],
+                    'location_id' => $balance->location_id,
+                    'lot_no' => $balance->lot_no,
+                    'roll_id' => $balance->roll_id,
+                    'ownership' => $balance->ownership,
+                    'qty_reserved' => $plan['qty'],
                     'status' => 'ACTIVE',
                     'created_by' => $user->id,
                 ]);
-
-                $balance->reserved = (float) $balance->reserved + $r['required'];
+                $balance->reserved = (float) $balance->reserved + $plan['qty'];
                 $balance->save();
-
-                // Alokasi material MO (BR-060 pasangan reservasi)
-                $mo->materialAllocations()->create([
-                    'material_id' => $bomLine->material_id,
-                    'qty_required' => $r['required'],
-                    'qty_reserved' => $r['required'],
-                    'is_backflush' => (bool) $bomLine->is_backflush,   // BR-041
-                ]);
             }
 
-            $mo->update(['status' => 'RELEASED']);
+            foreach ($needs as $materialId => $need) {
+                $required = round($need['required'], 4);
+                $locked->materialAllocations()->updateOrCreate(
+                    ['material_id' => $materialId],
+                    ['qty_required' => $required, 'qty_reserved' => $required, 'qty_issued' => 0, 'is_backflush' => $need['backflush']],
+                );
+            }
 
-            $this->audit->record('update', $mo, after: ['status' => 'RELEASED', 'reservations' => count($toReserve)]);
-
-            return $mo->fresh('materialAllocations');
+            $locked->update(['status' => 'RELEASED', 'updated_by' => $user->id]);
+            $this->audit->record('update', $locked, after: ['status' => 'RELEASED', 'reservations' => count($plans)]);
+            return $locked->fresh('materialAllocations');
         });
     }
 
-    /** Batalkan release: lepas semua reservasi aktif, saldo reserved turun. */
     public function unrelease(ProductionOrder $mo, User $user): ProductionOrder
     {
-        if ($mo->status !== 'RELEASED') {
-            throw new RuntimeException('Hanya MO RELEASED yang bisa di-unrelease.');
-        }
-
         return DB::transaction(function () use ($mo, $user): ProductionOrder {
-            $reservations = StockReservation::where('mo_id', $mo->id)->whereIn('status', ['ACTIVE', 'PARTIAL_ISSUED'])->get();
-
-            foreach ($reservations as $res) {
-                $remaining = $res->remaining();
-                if ($remaining <= 0) {
-                    continue;
-                }
-
-                $balance = StockBalance::withoutGlobalScopes()
-                    ->where('company_id', $mo->company_id)
-                    ->where('material_id', $res->material_id)
-                    ->where('warehouse_id', $res->warehouse_id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($balance) {
-                    $balance->reserved = max(0.0, (float) $balance->reserved - $remaining);
-                    $balance->save();
-                }
-
-                $res->update(['status' => 'RELEASED']);
-
-                $mo->materialAllocations()->where('material_id', $res->material_id)
-                    ->update(['qty_reserved' => 0]);
+            $locked = ProductionOrder::withoutGlobalScopes()->whereKey($mo->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'RELEASED') {
+                throw new RuntimeException('Hanya MO RELEASED yang bisa di-unrelease.');
             }
 
-            $mo->update(['status' => 'PLANNED']);
+            $reservations = StockReservation::withoutGlobalScopes()->where('mo_id', $locked->id)
+                ->whereIn('status', ['ACTIVE', 'PARTIAL_ISSUED'])->lockForUpdate()->get();
+            if ($reservations->contains(fn ($reservation) => (float) $reservation->qty_issued > 0)) {
+                throw new RuntimeException('MO yang sudah memiliki material issue tidak dapat di-unrelease.');
+            }
 
-            $this->audit->record('update', $mo, after: ['status' => 'PLANNED', 'released_reservations' => $reservations->count()]);
+            foreach ($reservations as $reservation) {
+                $remaining = $reservation->remaining();
+                if ($remaining <= 0) continue;
+                $balance = StockBalance::withoutGlobalScopes()
+                    ->where('company_id', $locked->company_id)
+                    ->where('material_id', $reservation->material_id)
+                    ->where('warehouse_id', $reservation->warehouse_id)
+                    ->where('location_id', $reservation->location_id)
+                    ->where('lot_no', $reservation->lot_no)
+                    ->where('roll_id', $reservation->roll_id)
+                    ->where('ownership', $reservation->ownership)
+                    ->lockForUpdate()->firstOrFail();
+                if ((float) $balance->reserved + 0.0001 < $remaining) {
+                    throw new RuntimeException('Saldo reserved tidak konsisten dengan reservation.');
+                }
+                $balance->reserved = (float) $balance->reserved - $remaining;
+                $balance->save();
+                $reservation->update(['status' => 'RELEASED']);
+            }
 
-            return $mo->fresh();
+            $locked->materialAllocations()->update(['qty_reserved' => 0]);
+            $locked->update(['status' => 'PLANNED', 'updated_by' => $user->id]);
+            $this->audit->record('update', $locked, after: ['status' => 'PLANNED', 'released_reservations' => $reservations->count()]);
+            return $locked->fresh();
         });
     }
 
     public function submit(ProductionOrder $mo, User $submitter): void
     {
         $this->approval->submit($mo, 'MO', $submitter);
+    }
+
+    private function assertUserCompany(User $user, int $companyId): void
+    {
+        if ((int) $user->company_id !== $companyId && ! $user->companies()->whereKey($companyId)->exists()) {
+            throw new RuntimeException('User tidak memiliki akses ke company MO.');
+        }
     }
 }
