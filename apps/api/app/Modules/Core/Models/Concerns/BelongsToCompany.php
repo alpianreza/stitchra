@@ -5,6 +5,7 @@ namespace Modules\Core\Models\Concerns;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
+use LogicException;
 use Modules\Core\Support\CurrentCompany;
 
 /**
@@ -30,8 +31,20 @@ trait BelongsToCompany
         static::addGlobalScope(new BelongsToCompanyScope);
 
         static::creating(function (Model $model): void {
-            if (empty($model->company_id) && CurrentCompany::id() !== null) {
-                $model->company_id = CurrentCompany::id();
+            $currentCompanyId = CurrentCompany::id();
+
+            if (empty($model->company_id)) {
+                if ($currentCompanyId === null) {
+                    throw new LogicException('company_id wajib diisi ketika tidak ada company aktif.');
+                }
+
+                $model->company_id = $currentCompanyId;
+
+                return;
+            }
+
+            if ($currentCompanyId !== null && (int) $model->company_id !== $currentCompanyId) {
+                throw new LogicException('Tidak dapat membuat data untuk company lain dalam konteks aktif.');
             }
         });
     }

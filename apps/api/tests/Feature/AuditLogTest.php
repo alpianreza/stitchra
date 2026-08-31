@@ -1,5 +1,6 @@
 <?php
 
+use LogicException;
 use Modules\Core\Models\AuditLog;
 use Modules\Core\Models\User;
 use Modules\Core\Services\AuditService;
@@ -36,12 +37,35 @@ test('audit log update menyimpan before dan after', function () {
     expect($log->after)->toBe(['name' => 'Baru']);
 });
 
-test('audit log tidak punya updated_at dan tidak bisa diupdate', function () {
+test('audit log tidak dapat diubah', function () {
     $user = User::factory()->create(['company_id' => 1]);
     $this->actingAs($user);
 
     $log = app(AuditService::class)->record('create', $user);
+    $log->action = 'tampered';
+    $log->save();
+})->throws(LogicException::class, 'append-only');
 
-    // Append-only: tidak ada kolom updated_at
-    expect($log->updated_at)->toBeNull();
-})->throws(\Exception::class);
+test('audit log tidak dapat dihapus', function () {
+    $user = User::factory()->create(['company_id' => 1]);
+    $this->actingAs($user);
+
+    app(AuditService::class)->record('create', $user)->delete();
+})->throws(LogicException::class, 'append-only');
+
+test('audit log meredaksi field sensitif termasuk nested payload', function () {
+    $user = User::factory()->create(['company_id' => 1]);
+    $this->actingAs($user);
+
+    $log = app(AuditService::class)->record('update', $user, after: [
+        'name' => 'Agen',
+        'password' => 'plain-secret',
+        'integration' => ['api_token' => 'token-value', 'label' => 'GitHub'],
+    ]);
+
+    expect($log->after)->toBe([
+        'name' => 'Agen',
+        'password' => '[REDACTED]',
+        'integration' => ['api_token' => '[REDACTED]', 'label' => 'GitHub'],
+    ]);
+});

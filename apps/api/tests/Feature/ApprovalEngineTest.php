@@ -13,7 +13,10 @@ use Modules\Sales\Services\SalesOrderService;
 function approver(string $roleCode): User
 {
     $user = User::factory()->create(['company_id' => 1]);
-    $role = Role::create(['company_id' => 1, 'code' => $roleCode, 'name' => $roleCode]);
+    $role = Role::withoutGlobalScopes()->firstOrCreate(
+        ['company_id' => 1, 'code' => $roleCode],
+        ['name' => $roleCode],
+    );
     $user->roles()->sync([$role->id]);
 
     return $user;
@@ -22,8 +25,8 @@ function approver(string $roleCode): User
 /** Helper: flow approval 2 step untuk doc_type */
 function makeFlow(string $docType, string $role1, string $role2): ApprovalFlow
 {
-    $r1 = Role::create(['company_id' => 1, 'code' => $role1, 'name' => $role1]);
-    $r2 = Role::create(['company_id' => 1, 'code' => $role2, 'name' => $role2]);
+    $r1 = Role::withoutGlobalScopes()->firstOrCreate(['company_id' => 1, 'code' => $role1], ['name' => $role1]);
+    $r2 = Role::withoutGlobalScopes()->firstOrCreate(['company_id' => 1, 'code' => $role2], ['name' => $role2]);
 
     $flow = ApprovalFlow::create(['company_id' => 1, 'doc_type' => $docType, 'version' => 1, 'mode' => 'sequential', 'is_active' => true]);
     ApprovalFlowStep::create(['flow_id' => $flow->id, 'step_no' => 1, 'role_id' => $r1->id]);
@@ -32,22 +35,7 @@ function makeFlow(string $docType, string $role1, string $role2): ApprovalFlow
     return $flow;
 }
 
-/** Helper: SO draft dengan 1 line */
-function makeSo(): SalesOrder
-{
-    $customer = Customer::create(['company_id' => 1, 'code' => 'C-'.uniqid(), 'name' => 'Buyer']);
-
-    $creator = approver('creator_'.uniqid());
-
-    return app(SalesOrderService::class)->create(
-        companyId: 1,
-        header: ['customer_id' => $customer->id, 'order_date' => now()->toDateString()],
-        lines: [],  // akan error — lihat test terpisah
-        creator: $creator,
-    );
-}
-
-test('BR-015: approval sequential 2 step — submit → approve step1 → step2 → APPROVED', function () {
+test('BR-015: approval sequential menolak request stale dan menyelesaikan dua step', function () {
     makeFlow('SO', 'sales_mgr', 'management');
 
     $customer = Customer::create(['company_id' => 1, 'code' => 'C-'.uniqid(), 'name' => 'Buyer']);
@@ -71,14 +59,18 @@ test('BR-015: approval sequential 2 step — submit → approve step1 → step2 
     expect($request->current_step)->toBe(1);
 
     $engine = app(ApprovalEngine::class);
+    $salesManager = approver('sales_mgr');
+    $management = approver('management');
 
-    // Step 1 oleh role sales_mgr
-    $engine->approve($request, approver('sales_mgr'));
+    $engine->approve($request, $salesManager);
     expect($request->fresh()->current_step)->toBe(2);
     expect($request->fresh()->status)->toBe('PENDING');
 
-    // Step 2 oleh role management → APPROVED, SO status → APPROVED (via listener)
-    $engine->approve($request->fresh(), approver('management'));
+    // Object request lama masih menunjuk step 1 dan tidak boleh melompati step 2.
+    expect(fn () => $engine->approve($request, $management))
+        ->toThrow(RuntimeException::class, 'Step approval sudah berubah');
+
+    $engine->approve($request->fresh(), $management);
     expect($request->fresh()->status)->toBe('APPROVED');
     expect($so->fresh()->status)->toBe('APPROVED');
 });
@@ -99,7 +91,6 @@ test('BR-015: approver salah role ditolak', function () {
 
     $request = ApprovalRequest::withoutGlobalScopes()->where('doc_type', 'SO')->where('doc_id', $so->id)->first();
 
-    // User tanpa role sales_mgr tidak bisa approve step 1
     app(ApprovalEngine::class)->approve($request, approver('random_role'));
 })->throws(RuntimeException::class);
 
