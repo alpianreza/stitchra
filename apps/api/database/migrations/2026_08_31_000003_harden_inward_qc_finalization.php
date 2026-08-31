@@ -9,9 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('inward_inspections', function (Blueprint $table): void {
-            $table->timestamp('finalized_at', 6)->nullable()->after('result');
-        });
+        if (! Schema::hasColumn('inward_inspections', 'finalized_at')) {
+            Schema::table('inward_inspections', function (Blueprint $table): void {
+                $table->timestamp('finalized_at', 6)->nullable()->after('result');
+            });
+        }
 
         DB::statement('ALTER TABLE gr_lines DROP CHECK chk_gr_lines_status');
         DB::statement("ALTER TABLE gr_lines ADD CONSTRAINT chk_gr_lines_status CHECK (status IN ('QUALITY_HOLD','PARTIAL','RELEASED','REJECTED_RETURNED'))");
@@ -21,6 +23,8 @@ return new class extends Migration
     {
         DB::statement('ALTER TABLE gr_lines DROP CHECK chk_gr_lines_status');
         DB::statement("ALTER TABLE gr_lines ADD CONSTRAINT chk_gr_lines_status CHECK (status IN ('QUALITY_HOLD','RELEASED','REJECTED_RETURNED'))");
-        Schema::table('inward_inspections', fn (Blueprint $table) => $table->dropColumn('finalized_at'));
+        if (Schema::hasColumn('inward_inspections', 'finalized_at')) {
+            Schema::table('inward_inspections', fn (Blueprint $table) => $table->dropColumn('finalized_at'));
+        }
     }
 };

@@ -26,7 +26,6 @@ class ReceivingService
         if ($lines === []) {
             throw new RuntimeException('GR wajib punya minimal 1 line.');
         }
-
         $poLineIds = array_map(static fn (array $line): int => (int) ($line['po_line_id'] ?? 0), $lines);
         if (in_array(0, $poLineIds, true) || count($poLineIds) !== count(array_unique($poLineIds))) {
             throw new RuntimeException('Setiap PO line hanya boleh muncul satu kali dalam satu GR.');
@@ -114,49 +113,64 @@ class ReceivingService
                     'status' => 'QUALITY_HOLD',
                 ]);
 
-                foreach ($rolls as $rollData) {
-                    $qtyBuy = (float) ($rollData['qty_buy'] ?? 0);
-                    if ($qtyBuy <= 0) {
-                        throw new RuntimeException('qty_buy roll wajib lebih besar dari nol.');
-                    }
-                    $gsm = (float) ($rollData['gsm_actual'] ?? $material->gsm ?? 0);
-                    $widthCm = (float) ($rollData['width_actual_cm'] ?? $material->width_cm ?? 0);
-                    if ($gsm <= 0 || $widthCm <= 0) {
-                        throw new RuntimeException('GSM dan width wajib tersedia untuk konversi roll.');
-                    }
-                    $conversion = round(1000 / ($gsm * ($widthCm / 100)), 6);
-                    $qtyMeter = isset($rollData['qty_meter_actual'])
-                        ? (float) $rollData['qty_meter_actual']
-                        : round($qtyBuy * $conversion, 4);
-                    if ($qtyMeter <= 0) {
-                        throw new RuntimeException('qty_meter_actual roll wajib lebih besar dari nol.');
-                    }
+                if ($material->isRollTracked()) {
+                    foreach ($rolls as $rollData) {
+                        $qtyBuy = (float) ($rollData['qty_buy'] ?? 0);
+                        if ($qtyBuy <= 0) {
+                            throw new RuntimeException('qty_buy roll wajib lebih besar dari nol.');
+                        }
+                        $gsm = (float) ($rollData['gsm_actual'] ?? $material->gsm ?? 0);
+                        $widthCm = (float) ($rollData['width_actual_cm'] ?? $material->width_cm ?? 0);
+                        if ($gsm <= 0 || $widthCm <= 0) {
+                            throw new RuntimeException('GSM dan width wajib tersedia untuk konversi roll.');
+                        }
+                        $conversion = round(1000 / ($gsm * ($widthCm / 100)), 6);
+                        $qtyMeter = isset($rollData['qty_meter_actual'])
+                            ? (float) $rollData['qty_meter_actual']
+                            : round($qtyBuy * $conversion, 4);
+                        if ($qtyMeter <= 0) {
+                            throw new RuntimeException('qty_meter_actual roll wajib lebih besar dari nol.');
+                        }
 
-                    $grLine->rolls()->create([
-                        'company_id' => $companyId,
-                        'roll_no' => $rollData['roll_no'],
-                        'material_id' => $material->id,
-                        'lot_no' => $rollData['lot_no'] ?? null,
-                        'shade_group_id' => $rollData['shade_group_id'] ?? null,
-                        'qty_buy' => $qtyBuy,
-                        'qty_meter_actual' => $qtyMeter,
-                        'conversion_rate' => $conversion,
-                        'gsm_actual' => $rollData['gsm_actual'] ?? null,
-                        'width_actual_cm' => $rollData['width_actual_cm'] ?? null,
-                        'qty_remaining_meter' => $qtyMeter,
-                        'status' => 'QUALITY_HOLD',
-                    ]);
+                        $roll = $grLine->rolls()->create([
+                            'company_id' => $companyId,
+                            'roll_no' => $rollData['roll_no'],
+                            'material_id' => $material->id,
+                            'lot_no' => $rollData['lot_no'] ?? null,
+                            'shade_group_id' => $rollData['shade_group_id'] ?? null,
+                            'qty_buy' => $qtyBuy,
+                            'qty_meter_actual' => $qtyMeter,
+                            'conversion_rate' => $conversion,
+                            'gsm_actual' => $rollData['gsm_actual'] ?? null,
+                            'width_actual_cm' => $rollData['width_actual_cm'] ?? null,
+                            'qty_remaining_meter' => $qtyMeter,
+                            'status' => 'QUALITY_HOLD',
+                        ]);
+
+                        $itsLines[] = [
+                            'material_id' => $poLine->material_id,
+                            'warehouse_id' => $warehouse->id,
+                            'location_id' => $lineData['location_id'] ?? null,
+                            'lot_no' => $roll->lot_no,
+                            'roll_id' => $roll->id,
+                            'qty' => $qtyBuy,
+                            'uom_id' => $poLine->uom_id,
+                            'unit_cost' => (float) $poLine->unit_price,
+                            'source_document_line_id' => $grLine->id,
+                        ];
+                    }
+                } else {
+                    $itsLines[] = [
+                        'material_id' => $poLine->material_id,
+                        'warehouse_id' => $warehouse->id,
+                        'location_id' => $lineData['location_id'] ?? null,
+                        'lot_no' => $lineData['lot_no'] ?? null,
+                        'qty' => $qty,
+                        'uom_id' => $poLine->uom_id,
+                        'unit_cost' => (float) $poLine->unit_price,
+                        'source_document_line_id' => $grLine->id,
+                    ];
                 }
-
-                $itsLines[] = [
-                    'material_id' => $poLine->material_id,
-                    'warehouse_id' => $warehouse->id,
-                    'location_id' => $lineData['location_id'] ?? null,
-                    'qty' => $qty,
-                    'uom_id' => $poLine->uom_id,
-                    'unit_cost' => (float) $poLine->unit_price,
-                    'source_document_line_id' => $grLine->id,
-                ];
 
                 $poLine->received_qty = (float) $poLine->received_qty + $qty;
                 $poLine->save();
@@ -170,10 +184,7 @@ class ReceivingService
 
             $gr->update(['status' => 'POSTED', 'updated_by' => $user->id]);
             $po->refreshReceivingStatus();
-            $this->audit->record('create', $gr, after: [
-                'doc_no' => $gr->doc_no,
-                'movement' => $movement->doc_no,
-            ]);
+            $this->audit->record('create', $gr, after: ['doc_no' => $gr->doc_no, 'movement' => $movement->doc_no]);
 
             return $gr->load('lines.rolls');
         });
