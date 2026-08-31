@@ -9,29 +9,36 @@ This file records implementation evidence. The locked business blueprint remains
 - Application code exists across Core, Master Data, Sales, Inventory, MRP/Production, Cutting, Quality, Packing/Shipment, Costing, and Finance domains.
 - Automated feature tests exist for the principal domain flows.
 - Production readiness is **not yet approved**.
-- Phase 1 and Phase 2 hardening are implemented in code, but runtime verification remains blocked until deterministic lockfiles are committed and CI completes successfully.
+- Phase 1–3 hardening is implemented in code, but runtime verification remains blocked until deterministic lockfiles are committed and CI completes successfully.
 
 ## Phase 1 hardening evidence
 
-- Concurrency-safe document numbering and serialized approval transitions.
-- Stale approval-request rejection and post-commit approval events.
+- Concurrency-safe numbering and serialized approval transitions.
+- Stale approval rejection and post-commit events.
 - Tenant context validation, cleanup, and cross-company write rejection.
-- Append-only audit protections and recursive sensitive-field redaction.
-- Granular permission middleware on domain routes; dynamic Shop Floor and Reporting permissions remain enforced in controllers.
-- Scoped Sanctum API tokens with configurable expiry and device names.
-- Docker failure propagation, Node 24 alignment, MySQL 8.4 pinning, corrected mounts, and removal of the API/MinIO port collision.
-- Regression tests for stale approvals, audit immutability/redaction, cross-company writes, expiring tokens, and domain-route permission gates.
+- Append-only audit protection and sensitive-field redaction.
+- Granular server-side permissions and scoped, expiring API tokens.
+- Corrected deterministic container build behavior and service networking.
 
 ## Phase 2 hardening evidence
 
-- Generic search only queries fields that exist for the selected master entity.
-- Pagination/filter input is validated.
-- CRUD and CSV import share tenant-scoped foreign-key and uniqueness validation.
-- Composite database constraints are represented in application validation.
-- CSV header, row-count, PHP 8.5 parsing, and database-error disclosure are hardened.
-- BR-003 material tracking and positive rate/GSM/width constraints are enforced.
-- Referenced critical master records are blocked from deletion with `409 Conflict`.
-- Regression tests cover search, pagination, cross-company references, composite unique, material tracking, deletion guards, and CSV import failures.
+- Safe generic search and validated pagination/filter input.
+- Shared tenant-scoped CRUD/import validation.
+- Composite uniqueness aligned with database constraints.
+- Hardened CSV headers, row limits, PHP 8.5 parsing, and error disclosure.
+- BR-003 material tracking and positive master rate constraints.
+- Deletion guards for referenced critical master records.
+
+## Phase 3 hardening evidence
+
+- BOM/routing version creation and approval transitions use row locks.
+- BOM/routing submit rolls back status if approval creation fails.
+- Product Development HTTP boundaries validate tenant ownership and return domain errors as `422`.
+- Costing rejects missing/zero material prices, line rates, overhead rates, and SAM.
+- Cost-sheet versions are serialized and protected by a composite unique index.
+- Sales Order creation validates tenant ownership, colorway/style consistency, matrix uniqueness, and creator company access.
+- SO submit and confirm use locked, transactional state transitions.
+- Regression tests cover Stage 3 rollback, tenant/matrix, missing-cost-input, versioning, exact costing, and confirmation-gate scenarios.
 
 These items are implementation evidence only. Tests have **not** been declared green in this environment.
 
@@ -40,8 +47,8 @@ These items are implementation evidence only. Tests have **not** been declared g
 | Phase | Implementation evidence | Review status |
 |---|---|---|
 | 1 — Core Foundation | Core hardening and regression tests present | CI/runtime verification pending |
-| 2 — Master Data | Master validation/import/delete hardening and tests present | CI/runtime verification pending |
-| 3 — Sales/BOM/Routing/Estimated Costing | Code and feature tests present | Review required |
+| 2 — Master Data | Validation/import/delete hardening and tests present | CI/runtime verification pending |
+| 3 — Sales/BOM/Routing/Estimated Costing | State, tenant, versioning, costing hardening and tests present | CI/runtime verification pending |
 | 4 — Inventory/Purchasing/Receiving | Code and feature tests present | Concurrency review required |
 | 5 — MRP/Planning/MO | Code and feature tests present | Review required |
 | 6 — Cutting/Sewing/Finishing/WIP | Partial-to-broad implementation evidence | Device/offline decisions and review required |
@@ -52,15 +59,15 @@ These items are implementation evidence only. Tests have **not** been declared g
 ## Immediate blockers
 
 1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json` from the current manifests.
-2. Run the full PHP and web CI jobs from a clean checkout and retain evidence of the results.
-3. Add real multi-process concurrency tests for numbering, approval, and inventory.
-4. Complete the dedicated browser-session versus shop-floor device-token design and security review.
+2. Run full PHP and web CI from a clean checkout and retain evidence.
+3. Add real multi-process concurrency tests for numbering, approval, inventory, and version generation.
+4. Complete dedicated browser-session versus shop-floor device-token design and security review.
 
 ## Exit criteria before production
 
 1. CI is green with deterministic dependency lockfiles.
-2. Real multi-process concurrency tests pass for numbering, approval, and inventory.
+2. Real multi-process concurrency tests pass for numbering, approval, inventory, and versioning.
 3. Cross-company endpoint isolation tests pass for every tenant-owned resource.
 4. Browser auth and shop-floor device-token flows are separated and security-reviewed.
-5. Production Compose/deployment configuration uses external secrets, internal-only data services, backups, monitoring, and tested restore procedures.
+5. Production deployment uses external secrets, internal-only data services, backups, monitoring, and tested restores.
 6. UAT and pilot production are formally approved by the owner.
