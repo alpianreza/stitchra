@@ -8,8 +8,14 @@ return new class extends Migration
 {
     public function up():void
     {
-        Schema::table('journals',function(Blueprint $table){if(!Schema::hasColumn('journals','posting_key'))$table->string('posting_key',64)->nullable()->after('source_document_id');});
-        Schema::table('journals',function(Blueprint $table){$table->unique('posting_key','uq_journals_posting_key');$table->unique('reverses_journal_id','uq_journals_reversal');});
+        if(!Schema::hasColumn('journals','posting_key'))Schema::table('journals',fn(Blueprint $table)=>$table->string('posting_key',64)->nullable()->after('source_document_id'));
+        if(!Schema::hasIndex('journals','uq_journals_posting_key'))Schema::table('journals',fn(Blueprint $table)=>$table->unique('posting_key','uq_journals_posting_key'));
+        if(!Schema::hasIndex('journals','uq_journals_reversal'))Schema::table('journals',fn(Blueprint $table)=>$table->unique('reverses_journal_id','uq_journals_reversal'));
     }
-    public function down():void{Schema::table('journals',function(Blueprint $table){$table->dropUnique('uq_journals_posting_key');$table->dropUnique('uq_journals_reversal');if(Schema::hasColumn('journals','posting_key'))$table->dropColumn('posting_key');});}
+    public function down():void
+    {
+        if(Schema::hasIndex('journals','uq_journals_posting_key'))Schema::table('journals',fn(Blueprint $table)=>$table->dropUnique('uq_journals_posting_key'));
+        if(Schema::hasIndex('journals','uq_journals_reversal'))Schema::table('journals',fn(Blueprint $table)=>$table->dropUnique('uq_journals_reversal'));
+        if(Schema::hasColumn('journals','posting_key'))Schema::table('journals',fn(Blueprint $table)=>$table->dropColumn('posting_key'));
+    }
 };
