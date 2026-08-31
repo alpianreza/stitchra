@@ -1,45 +1,46 @@
-# Stitchra — Project Status
+# Stitchra — Final Implementation Audit Status
 
 > Updated: 31 August 2026
 
-## Current state
+## Executive status
 
-Phase 1–8 implementation hardening is present on `main`. Production readiness is **not approved**: deterministic lockfiles, clean CI, migration smoke tests, real concurrency tests, accounting validation, and UAT are still outstanding.
+Phases 1–9 have implementation hardening and regression-test evidence on `main`. **Stitchra is not yet production-approved.** No full PHP/web test suite or migration smoke test has been confirmed in this environment.
 
-## Evidence by stage
+## Implemented evidence
 
-- 1–3: core concurrency/tenant/audit/permissions, master validation, Sales/BOM/Routing/Cost versioning.
-- 4: ITS locking/idempotency, exact inventory dimensions, receiving/QC, valuation, and 3-way match.
-- 5: strict MRP selection/conversion, unique MO, dimensional reservations, exact issue, delta backflush.
-- 6: cutting ceilings, issued-roll marker consumption, immutable BOM snapshot, serialized scans, finishing/rework gates.
-- 7: serialized QC cycles, cumulative packing, one shipment per PL, matrix tolerance/closure, safe partial subcon returns.
-- 8: composite GL periods, balanced/idempotent journals, unique reversals, locked AR/AP, historical actual costing, and latest-style BEP.
+1. Core: concurrency-safe numbering/approval, tenant isolation, audit controls, scoped expiring tokens, granular permissions.
+2. Master Data: tenant-safe CRUD/import, schema-aligned validation, deletion guards.
+3. Sales/PD: locked BOM/routing/cost versions, transactional transitions, SO matrix integrity.
+4. Inventory/Purchasing/Receiving: ITS locking/idempotency, exact dimensions, receiving/QC, valuation, 3-way match.
+5. MRP/MO: strict selection/conversion, unique MO, dimensional hard reservation, exact issue, delta backflush.
+6. Shop floor: cutting ceilings, issued-roll marker use, serialized scans, finishing/rework gates.
+7. Outbound: QC cycles, cumulative packing, one shipment per PL, matrix tolerance/closure, partial subcon returns.
+8. Finance: composite GL periods, balanced/idempotent journals, locked AR/AP, historical actual costing, BEP.
+9. Reporting: domain permissions, corrected KPI counting, MO-level variance, bounded/export-safe reports, readiness check.
 
-## Known gaps
+## Unresolved design/functional items
 
-- BR-042 roll warehouse/dispatched/consumed/returned state model.
-- Offline scan replay key and separate shop-floor device authentication.
-- Formal AQL validation and attachment controls.
-- MO standard-cost-sheet snapshot.
-- Tax/withholding, FX revaluation, bank reconciliation, and accounting period-close sign-off.
-- Real lockfiles and clean CI/runtime evidence.
+- BR-042: explicit roll quantities for warehouse, dispatched, consumed, and returned states.
+- Offline scan client replay key/conflict UX and separate device authentication.
+- MO snapshot of the approved standard cost sheet id.
+- Formal buyer AQL table/config validation and attachment controls.
+- Tax/withholding, FX revaluation, bank reconciliation, and accounting close checklist.
+- Customer AQL endpoints, size-range lines, UOM conversion CRUD, operation-version/SMV management, location management, and effective-period validation remain functional backlog from earlier phases.
 
-## Phase status
-
-| Phase | Status |
-|---|---|
-| 1–3 | Implementation hardening present; CI pending |
-| 4 | Implementation hardening present; CI/concurrency pending |
-| 5 | Implementation hardening present; BR-042/CI/concurrency pending |
-| 6 | Implementation hardening present; offline/device/CI pending |
-| 7 | Implementation hardening present; AQL/CI/concurrency pending |
-| 8 | Implementation hardening present; accounting/CI/concurrency pending |
-| 9 | Reporting/dashboard/operational hardening requires dedicated audit |
-
-## Immediate blockers
+## Verification blockers
 
 1. Generate and commit `apps/api/composer.lock` and `apps/web/package-lock.json` externally.
-2. Run clean migrations plus PHP/web CI and retain evidence.
-3. Add multi-process tests for critical counters, stock, planning, shop-floor, outbound, and finance transitions.
-4. Resolve BR-042, offline replay, device auth, and cost-sheet snapshot design.
-5. Obtain AQL, accounting, UAT, and pilot approval.
+2. Run clean MySQL migrations/seeds and the full PHP suite.
+3. Run web lint/typecheck/build and Playwright.
+4. Add real multi-process concurrency tests for critical counters and transitions.
+5. Execute production-scale load/query-plan tests, backup restore drill, security review, UAT, and pilot.
+
+## Repository notes
+
+- Latest implementation work is on `main`.
+- Lockfiles were not generated or pushed by this audit.
+- Temporary branch `chore/generate-lockfiles` still requires manual deletion in GitHub because the connected integration exposes no branch-delete operation.
+
+## Production decision
+
+**NO-GO until every verification blocker is completed and formally approved.**

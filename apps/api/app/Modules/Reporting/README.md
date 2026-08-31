@@ -1,29 +1,27 @@
 # Modul Reporting & Dashboard
 
-8 report inti + dashboard KPI — read-only di atas data yang dijaga ITS/approval/audit.
+## Core reports
 
-## Endpoint
-| Method | Path | Permission |
-|---|---|---|
-| GET | `/api/reporting/reports` | `reporting.report.view` |
-| GET | `/api/reporting/reports/{name}` | `reporting.report.view` |
-| GET | `/api/reporting/reports/{name}/export` | `reporting.report.export` (CSV download) |
-| GET | `/api/dashboard/kpis` | `reporting.dashboard.view` |
+- `order_status` — tenant-scoped SO quantity and value.
+- `wip_summary` — ACTIVE/REWORK bundles by MO and stage.
+- `production_efficiency` — final routing-operation OUT only, preventing repeated bundle output across operations.
+- `qc_summary` — verdict counts and defect Pareto.
+- `stock_aging` — current balance value and balance-row age; this is not FIFO lot age.
+- `consumption_variance` — MO allocation actual consumption versus BOM snapshot estimate.
+- `otd` — shipped date versus non-null ex-factory date.
+- `bep_position` — one latest approved cost sheet per style.
 
-## Report registry
-| Report | Isi | Rule terkait |
-|---|---|---|
-| `order_status` | SO lifecycle + qty + nilai | — |
-| `wip_summary` | WIP per MO per stage | BR-063 |
-| `production_efficiency` | output & SAM earned vs kapasitas line per hari (`?date=`) | BR-033 |
-| `qc_summary` | verdict per stage + Pareto defect | BR-008/072 |
-| `stock_aging` | umur & nilai stok per material/gudang | BR-005/006 |
-| `consumption_variance` | BOM estimated vs actual per style | BR-031 |
-| `otd` | on-time delivery (ship vs ex-factory) | BR-021 |
-| `bep_position` | qty shipped vs BEP per style (`?fixed_cost_share=`) | BR-104 |
+## Security and bounds
 
-## Dashboard KPI
-open_orders (count+value), mo_by_status, today_output_pcs, wip_pcs, qc_pass_rate_7d_pct, pending_my_approvals, overdue_deliveries, stock_value.
+- Each report maps to its own domain permission; one reporting permission no longer opens all reports.
+- API reports default to 1,000 rows and cap at 5,000.
+- Reporting endpoints are rate-limited; export has a stricter limit.
+- CSV supports object/array rows, uses explicit PHP 8.5-safe escaping, includes UTF-8 BOM, and neutralizes spreadsheet formulas.
+- Unknown reports return 404; invalid parameters return validation/422 errors.
+- Dashboard pending approvals joins role company ownership correctly.
 
-## Catatan
-Semua query agregasi SQL read-only, company-scoped (BR-011). Tidak ada tabel baru.
+## KPI correctness
+
+Today output counts a bundle only at the final sewing routing operation. QC 7-day pass rate uses the latest final inspection per MO. All KPI queries are company-scoped.
+
+Runtime/CI has not been declared green because deterministic lockfiles and clean test execution are still unavailable.
