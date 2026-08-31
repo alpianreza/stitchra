@@ -5,85 +5,19 @@ namespace Modules\Subcon\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
+use Modules\Core\Support\CurrentCompany;
 use Modules\Production\Models\ProductionOrder;
 use Modules\Subcon\Models\SubconOrder;
 use Modules\Subcon\Services\SubconService;
+use RuntimeException;
 
 class SubconOrderController extends Controller
 {
-    public function __construct(private SubconService $service) {}
-
-    public function index(Request $request): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('subcon.jwo.view'), 403);
-
-        $query = SubconOrder::with('supplier', 'productionOrder');
-        if ($status = $request->query('status')) {
-            $query->where('status', $status);
-        }
-
-        return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
-    }
-
-    /** Buat + kirim subcon order (supplier wajib type SUBCON; bahan pendamping → SUBCON_OUT) */
-    public function store(Request $request, ProductionOrder $productionOrder): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('subcon.jwo.create'), 403);
-
-        $data = $request->validate([
-            'supplier_id' => 'required|integer|exists:suppliers,id',
-            'operation_id' => 'nullable|integer|exists:operations,id',
-            'expected_return' => 'nullable|date',
-            'fee_per_pcs' => 'required|numeric|min:0',
-            'warehouse_id' => 'required|integer|exists:warehouses,id',
-            'lines' => 'required|array|min:1',
-            'lines.*.material_id' => 'nullable|integer|exists:materials,id',
-            'lines.*.bundle_id' => 'nullable|integer|exists:bundles,id',
-            'lines.*.qty_sent' => 'required|numeric|min:0.0001',
-            'lines.*.uom_id' => 'nullable|integer|exists:uoms,id',
-        ]);
-
-        try {
-            $order = $this->service->createAndSend(
-                \Modules\Core\Support\CurrentCompany::id(),
-                $productionOrder,
-                (int) $data['supplier_id'],
-                $data['lines'],
-                $data,
-                $request->user(),
-            );
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        return response()->json($order, 201);
-    }
-
-    /** Terima hasil subcon — SUBCON_IN + fee (BR-091/080) */
-    public function receive(Request $request, SubconOrder $subconOrder): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('subcon.movement.create'), 403);
-
-        $data = $request->validate([
-            'returns' => 'required|array|min:1',
-            'returns.*.line_id' => 'required|integer|exists:subcon_order_lines,id',
-            'returns.*.qty_returned' => 'required|numeric|min:0.0001',
-            'returns.*.warehouse_id' => 'required|integer|exists:warehouses,id',
-        ]);
-
-        try {
-            $order = $this->service->receive($subconOrder, $data['returns'], $request->user());
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        return response()->json($order);
-    }
-
-    public function show(Request $request, SubconOrder $subconOrder): JsonResponse
-    {
-        abort_unless($request->user()->hasPermission('subcon.jwo.view'), 403);
-
-        return response()->json($subconOrder->load('lines', 'fees', 'supplier'));
-    }
+    public function __construct(private SubconService $service){}
+    public function index(Request $request):JsonResponse{$data=$request->validate(['status'=>['nullable',Rule::in(SubconOrder::STATUSES)],'per_page'=>'nullable|integer|min:1|max:100']);$q=SubconOrder::with('supplier','productionOrder');if(!empty($data['status']))$q->where('status',$data['status']);return response()->json($q->orderByDesc('id')->paginate($data['per_page']??25));}
+    public function store(Request $request,ProductionOrder $productionOrder):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['supplier_id'=>['required','integer',Rule::exists('suppliers','id')->where(fn($q)=>$q->where('company_id',$company)->where('type','SUBCON'))],'operation_id'=>['nullable','integer',Rule::exists('operations','id')->where('company_id',$company)],'expected_return'=>'nullable|date','fee_per_pcs'=>'required|numeric|min:0','warehouse_id'=>['required','integer',Rule::exists('warehouses','id')->where('company_id',$company)],'lines'=>'required|array|min:1','lines.*.material_id'=>['nullable','integer',Rule::exists('materials','id')->where('company_id',$company)],'lines.*.bundle_id'=>['nullable','integer',Rule::exists('bundles','id')->where('company_id',$company)],'lines.*.qty_sent'=>'required|numeric|gt:0','lines.*.uom_id'=>['nullable','integer',Rule::exists('uoms','id')->where('company_id',$company)]]);return $this->domain(fn()=>response()->json($this->service->createAndSend($company,$productionOrder,(int)$data['supplier_id'],$data['lines'],$data,$request->user()),201));}
+    public function receive(Request $request,SubconOrder $subconOrder):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['returns'=>'required|array|min:1','returns.*.line_id'=>'required|integer|exists:subcon_order_lines,id','returns.*.qty_returned'=>'required|numeric|gt:0','returns.*.warehouse_id'=>['required','integer',Rule::exists('warehouses','id')->where('company_id',$company)]]);return $this->domain(fn()=>response()->json($this->service->receive($subconOrder,$data['returns'],$request->user())));}
+    public function show(Request $request,SubconOrder $subconOrder):JsonResponse{return response()->json($subconOrder->load('lines','fees','supplier'));}
+    private function domain(callable $callback):JsonResponse{try{return $callback();}catch(RuntimeException $e){return response()->json(['message'=>$e->getMessage()],422);}}
 }
