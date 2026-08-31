@@ -24,24 +24,37 @@ test('CRUD customer lengkap dengan permission yang benar', function () {
         'master.customer.update', 'master.customer.delete',
     ]);
 
-    // Create
     $res = $this->actingAs($user)->postJson('/api/master/customers', [
         'code' => 'CUST-001', 'name' => 'Buyer A', 'currency' => 'USD',
     ]);
     $res->assertCreated();
     $id = $res->json('id');
 
-    // Read
     $this->actingAs($user)->getJson("/api/master/customers/{$id}")->assertOk()
         ->assertJsonPath('code', 'CUST-001');
 
-    // Update
     $this->actingAs($user)->putJson("/api/master/customers/{$id}", ['name' => 'Buyer A Intl'])
         ->assertOk()->assertJsonPath('name', 'Buyer A Intl');
 
-    // Delete (soft)
     $this->actingAs($user)->deleteJson("/api/master/customers/{$id}")->assertOk();
     expect(Customer::withTrashed()->find($id)->deleted_at)->not->toBeNull();
+});
+
+test('search generik hanya memakai kolom yang tersedia', function () {
+    $user = masterUser(['master.customer.view']);
+    Customer::create(['company_id' => 1, 'code' => 'SEARCH-1', 'name' => 'Buyer Searchable']);
+
+    $this->actingAs($user)
+        ->getJson('/api/master/customers?q=Searchable')
+        ->assertOk()
+        ->assertJsonPath('data.0.code', 'SEARCH-1');
+});
+
+test('filter pagination invalid ditolak', function () {
+    $user = masterUser(['master.customer.view']);
+
+    $this->actingAs($user)->getJson('/api/master/customers?per_page=0')
+        ->assertUnprocessable();
 });
 
 test('tanpa permission → 403 (BR-110 server-side)', function () {
@@ -59,13 +72,23 @@ test('kode duplikat per company ditolak (validasi unik)', function () {
         ->assertUnprocessable();
 });
 
+test('referensi master lintas company ditolak saat validasi', function () {
+    $user = masterUser(['master.style.create']);
+    $otherCompanyCustomer = Customer::withoutGlobalScopes()->create([
+        'company_id' => 2, 'code' => 'OTHER-'.uniqid(), 'name' => 'Company B',
+    ]);
+
+    $this->actingAs($user)->postJson('/api/master/styles', [
+        'style_no' => 'STYLE-X',
+        'customer_id' => $otherCompanyCustomer->id,
+        'category' => 'WOVEN',
+    ])->assertUnprocessable();
+});
+
 test('BR-002: konversi kg ke meter dari GSM & lebar benar', function () {
     $material = new Material(['gsm' => 180, 'width_cm' => 150]);
 
-    // 90 kg, GSM 180, lebar 1.5 m → 90*1000/(180*1.5) = 333.333 m
     expect($material->kgToMeter(90))->toBeGreaterThan(333.33)->toBeLessThan(333.34);
-
-    // Data tidak lengkap → null (tidak mengarang)
     expect((new Material())->kgToMeter(90))->toBeNull();
 });
 
@@ -85,7 +108,6 @@ test('BR-011: company B tidak melihat data company A', function () {
     $userA = masterUser(['master.customer.view']);
     Customer::create(['company_id' => 1, 'code' => 'A-ONLY', 'name' => 'Milik A']);
 
-    // Simulasi company lain
     $userB = User::factory()->create(['company_id' => 2]);
     $roleB = Role::create(['company_id' => 2, 'code' => 'md_b', 'name' => 'B']);
     $perm = Permission::firstOrCreate(['code' => 'master.customer.view']);
@@ -94,5 +116,5 @@ test('BR-011: company B tidak melihat data company A', function () {
 
     $this->actingAs($userB)
         ->getJson('/api/master/customers', ['X-Company-Id' => 1])
-        ->assertForbidden(); // header ke company yang tidak diizinkan
+        ->assertForbidden();
 });

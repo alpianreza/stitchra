@@ -25,23 +25,33 @@ class MasterDataController extends Controller
         $config = $this->config($entity);
         $this->authorize($request, $config['entity'], 'view');
 
-        $query = $config['model']::query();
+        $filters = $request->validate([
+            'q' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'active' => ['sometimes', 'boolean'],
+            'per_page' => ['sometimes', 'integer', 'between:1,100'],
+        ]);
 
-        if ($search = $request->query('q')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('code', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%")
-                  ->orWhere('style_no', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%");
+        $query = $config['model']::query();
+        $searchFields = array_values(array_intersect(
+            ['code', 'name', 'style_no', 'nik', 'period'],
+            array_keys($config['rules']),
+        ));
+
+        if (($search = $filters['q'] ?? null) !== null && $search !== '' && $searchFields !== []) {
+            $query->where(function ($nested) use ($search, $searchFields): void {
+                foreach ($searchFields as $index => $field) {
+                    $method = $index === 0 ? 'where' : 'orWhere';
+                    $nested->{$method}($field, 'like', "%{$search}%");
+                }
             });
         }
-        if ($request->query('active') !== null) {
-            $query->where('is_active', (bool) $request->query('active'));
+
+        $model = new $config['model'];
+        if (array_key_exists('active', $filters) && in_array('is_active', $model->getFillable(), true)) {
+            $query->where('is_active', $filters['active']);
         }
 
-        $perPage = min((int) $request->query('per_page', 25), 100);
-
-        return response()->json($query->orderByDesc('id')->paginate($perPage));
+        return response()->json($query->orderByDesc('id')->paginate($filters['per_page'] ?? 25));
     }
 
     public function store(Request $request, string $entity): JsonResponse
@@ -92,11 +102,10 @@ class MasterDataController extends Controller
         $this->authorize($request, $config['entity'], 'delete');
 
         $record = $config['model']::findOrFail($id);
-
-        // Master yang dipakai transaksi tidak boleh dihapus (soft delete dijaga FK RESTRICT di DB)
+        $before = $record->toArray();
         $record->delete();
 
-        $this->audit->record('delete', $record, before: $record->toArray(), request: $request);
+        $this->audit->record('delete', $record, before: $before, request: $request);
 
         return response()->json(['message' => 'Dihapus (soft delete).']);
     }
@@ -109,7 +118,6 @@ class MasterDataController extends Controller
         return $config;
     }
 
-    /** BR-110: server-side permission check */
     private function authorize(Request $request, string $entityCode, string $action): void
     {
         $permission = "master.{$entityCode}.{$action}";
@@ -121,23 +129,47 @@ class MasterDataController extends Controller
 
     private function validateData(Request $request, array $config, bool $isUpdate = false): array
     {
-        $rules = $config['rules'];
+        $companyId = CurrentCompany::id();
+        $rules = $this->tenantScopedRules($config['rules'], $companyId);
 
         if ($isUpdate) {
-            $rules = collect($rules)->mapWithKeys(fn ($rule, $field) => [$field => 'sometimes|'.$rule])->all();
+            $rules = collect($rules)->mapWithKeys(function (array $rule, string $field): array {
+                array_unshift($rule, 'sometimes');
+
+                return [$field => $rule];
+            })->all();
         }
 
-        // Unik per company untuk kolom code/style_no/nik bila ada
-        $companyId = CurrentCompany::id();
         foreach (['code', 'style_no', 'nik'] as $uniqueField) {
             if (isset($rules[$uniqueField])) {
                 $table = (new $config['model'])->getTable();
-                $rules[$uniqueField] .= '|'.Rule::unique($table, $uniqueField)
+                $rules[$uniqueField][] = Rule::unique($table, $uniqueField)
                     ->where('company_id', $companyId)
                     ->ignore($isUpdate ? $request->route('id') : null);
             }
         }
 
         return $request->validate($rules);
+    }
+
+    /** Scope every registry exists rule to the active company. */
+    private function tenantScopedRules(array $rules, int $companyId): array
+    {
+        foreach ($rules as $field => $rule) {
+            $segments = is_array($rule) ? $rule : explode('|', $rule);
+
+            foreach ($segments as $index => $segment) {
+                if (! is_string($segment) || ! preg_match('/^exists:([^,]+)(?:,([^,]+))?$/', $segment, $matches)) {
+                    continue;
+                }
+
+                $segments[$index] = Rule::exists($matches[1], $matches[2] ?? 'id')
+                    ->where('company_id', $companyId);
+            }
+
+            $rules[$field] = $segments;
+        }
+
+        return $rules;
     }
 }
