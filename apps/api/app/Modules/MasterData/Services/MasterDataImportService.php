@@ -17,7 +17,6 @@ class MasterDataImportService
     public function import(string $entity, UploadedFile $file, int $userId): IntegrationJob
     {
         $config = MasterDataRegistry::get($entity);
-
         if ($config === null) {
             throw new RuntimeException("Entity [{$entity}] tidak dikenal.");
         }
@@ -66,7 +65,6 @@ class MasterDataImportService
 
             while (($row = $this->readCsv($handle)) !== false) {
                 $total++;
-
                 if ($total > $maxRows) {
                     $errors[] = ['row' => $total, 'message' => "Batas maksimum {$maxRows} baris terlampaui."];
                     break;
@@ -79,8 +77,8 @@ class MasterDataImportService
                 }
 
                 $data = array_map(static fn ($value) => trim((string) $value) === '' ? null : trim((string) $value), $data);
-                $rules = MasterDataValidation::rules($config, $companyId, $data);
-                $validator = Validator::make($data, $rules);
+                $data = MasterDataValidation::normalize($data);
+                $validator = Validator::make($data, MasterDataValidation::rules($config, $companyId, $data));
 
                 if ($validator->fails()) {
                     $errors[] = ['row' => $total, 'message' => $validator->errors()->first()];
@@ -123,10 +121,7 @@ class MasterDataImportService
 
     private function failJob(IntegrationJob $job, string $message): IntegrationJob
     {
-        $job->update([
-            'status' => 'FAILED',
-            'errors' => [['row' => 0, 'message' => $message]],
-        ]);
+        $job->update(['status' => 'FAILED', 'errors' => [['row' => 0, 'message' => $message]]]);
 
         return $job;
     }

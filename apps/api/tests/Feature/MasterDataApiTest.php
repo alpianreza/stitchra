@@ -20,15 +20,12 @@ function masterUser(array $permissions): User
 
 test('CRUD customer lengkap dengan permission yang benar', function () {
     $user = masterUser(['master.customer.view', 'master.customer.create', 'master.customer.update', 'master.customer.delete']);
-
-    $res = $this->actingAs($user)->postJson('/api/master/customers', [
-        'code' => 'CUST-001', 'name' => 'Buyer A', 'currency' => 'USD',
-    ])->assertCreated();
+    $res = $this->actingAs($user)->postJson('/api/master/customers', ['code' => 'CUST-001', 'name' => 'Buyer A', 'currency' => 'usd'])->assertCreated();
     $id = $res->json('id');
 
+    $res->assertJsonPath('currency', 'USD');
     $this->actingAs($user)->getJson("/api/master/customers/{$id}")->assertOk()->assertJsonPath('code', 'CUST-001');
-    $this->actingAs($user)->putJson("/api/master/customers/{$id}", ['name' => 'Buyer A Intl'])
-        ->assertOk()->assertJsonPath('name', 'Buyer A Intl');
+    $this->actingAs($user)->putJson("/api/master/customers/{$id}", ['name' => 'Buyer A Intl'])->assertOk()->assertJsonPath('name', 'Buyer A Intl');
     $this->actingAs($user)->deleteJson("/api/master/customers/{$id}")->assertOk();
     expect(Customer::withTrashed()->find($id)->deleted_at)->not->toBeNull();
 });
@@ -36,9 +33,7 @@ test('CRUD customer lengkap dengan permission yang benar', function () {
 test('search generik hanya memakai kolom yang tersedia', function () {
     $user = masterUser(['master.customer.view']);
     Customer::create(['company_id' => 1, 'code' => 'SEARCH-1', 'name' => 'Buyer Searchable']);
-
-    $this->actingAs($user)->getJson('/api/master/customers?q=Searchable')
-        ->assertOk()->assertJsonPath('data.0.code', 'SEARCH-1');
+    $this->actingAs($user)->getJson('/api/master/customers?q=Searchable')->assertOk()->assertJsonPath('data.0.code', 'SEARCH-1');
 });
 
 test('filter pagination invalid ditolak', function () {
@@ -46,7 +41,7 @@ test('filter pagination invalid ditolak', function () {
     $this->actingAs($user)->getJson('/api/master/customers?per_page=0')->assertUnprocessable();
 });
 
-test('tanpa permission → 403 (BR-110 server-side)', function () {
+test('tanpa permission → 403', function () {
     $user = masterUser(['master.customer.view']);
     $this->actingAs($user)->postJson('/api/master/customers', ['code' => 'X', 'name' => 'X'])->assertForbidden();
 });
@@ -57,24 +52,37 @@ test('kode duplikat per company ditolak', function () {
     $this->actingAs($user)->postJson('/api/master/customers', ['code' => 'DUP', 'name' => 'Dua'])->assertUnprocessable();
 });
 
-test('composite unique exchange rate ditolak sebagai validation error', function () {
+test('composite unique dan rate nol ditolak sebagai validation error', function () {
     $user = masterUser(['master.finance.create']);
     $currency = Currency::create(['company_id' => 1, 'code' => 'TST', 'name' => 'Test Currency']);
     $payload = ['currency_id' => $currency->id, 'rate_date' => '2026-08-31', 'rate' => 15000];
 
+    $this->actingAs($user)->postJson('/api/master/exchange-rates', array_merge($payload, ['rate' => 0]))->assertUnprocessable();
     $this->actingAs($user)->postJson('/api/master/exchange-rates', $payload)->assertCreated();
     $this->actingAs($user)->postJson('/api/master/exchange-rates', $payload)->assertUnprocessable();
 });
 
+test('BR-003: fabric wajib roll dan trim wajib lot', function () {
+    $user = masterUser(['master.material.create']);
+
+    $this->actingAs($user)->postJson('/api/master/materials', [
+        'code' => 'FAB-BAD', 'name' => 'Fabric Bad', 'type' => 'fabric', 'tracking_level' => 'lot',
+    ])->assertUnprocessable();
+
+    $this->actingAs($user)->postJson('/api/master/materials', [
+        'code' => 'FAB-OK', 'name' => 'Fabric OK', 'type' => 'fabric',
+        'tracking_level' => 'roll', 'gsm' => 180, 'width_cm' => 150,
+    ])->assertCreated()->assertJsonPath('tracking_level', 'ROLL');
+
+    $this->actingAs($user)->postJson('/api/master/materials', [
+        'code' => 'TRIM-BAD', 'name' => 'Trim Bad', 'type' => 'trim', 'tracking_level' => 'roll',
+    ])->assertUnprocessable();
+});
+
 test('referensi master lintas company ditolak saat validasi', function () {
     $user = masterUser(['master.style.create']);
-    $otherCompanyCustomer = Customer::withoutGlobalScopes()->create([
-        'company_id' => 2, 'code' => 'OTHER-'.uniqid(), 'name' => 'Company B',
-    ]);
-
-    $this->actingAs($user)->postJson('/api/master/styles', [
-        'style_no' => 'STYLE-X', 'customer_id' => $otherCompanyCustomer->id, 'category' => 'WOVEN',
-    ])->assertUnprocessable();
+    $otherCompanyCustomer = Customer::withoutGlobalScopes()->create(['company_id' => 2, 'code' => 'OTHER-'.uniqid(), 'name' => 'Company B']);
+    $this->actingAs($user)->postJson('/api/master/styles', ['style_no' => 'STYLE-X', 'customer_id' => $otherCompanyCustomer->id, 'category' => 'WOVEN'])->assertUnprocessable();
 });
 
 test('BR-002: konversi kg ke meter dari GSM & lebar benar', function () {
@@ -86,18 +94,16 @@ test('BR-002: konversi kg ke meter dari GSM & lebar benar', function () {
 test('validasi master: supplier type harus terkontrol', function () {
     $user = masterUser(['master.supplier.create']);
     $this->actingAs($user)->postJson('/api/master/suppliers', ['code' => 'S1', 'name' => 'S', 'type' => 'NGASAL'])->assertUnprocessable();
-    $this->actingAs($user)->postJson('/api/master/suppliers', ['code' => 'S1', 'name' => 'S', 'type' => 'FABRIC'])->assertCreated();
+    $this->actingAs($user)->postJson('/api/master/suppliers', ['code' => 'S1', 'name' => 'S', 'type' => 'fabric'])->assertCreated()->assertJsonPath('type', 'FABRIC');
 });
 
 test('BR-011: company B tidak melihat data company A', function () {
     $userA = masterUser(['master.customer.view']);
     Customer::create(['company_id' => 1, 'code' => 'A-ONLY', 'name' => 'Milik A']);
-
     $userB = User::factory()->create(['company_id' => 2]);
     $roleB = Role::create(['company_id' => 2, 'code' => 'md_b', 'name' => 'B']);
     $perm = Permission::firstOrCreate(['code' => 'master.customer.view']);
     $roleB->permissions()->sync([$perm->id]);
     $userB->roles()->sync([$roleB->id]);
-
     $this->actingAs($userB)->getJson('/api/master/customers', ['X-Company-Id' => 1])->assertForbidden();
 });

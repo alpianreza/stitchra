@@ -124,15 +124,17 @@ class MasterDataController extends Controller
         $companyId = CurrentCompany::id();
         abort_if($companyId === null, 500, 'Company context tidak tersedia.');
 
+        $submitted = MasterDataValidation::normalize($request->all());
+        $request->merge($submitted);
         $values = $record === null
-            ? $request->all()
-            : array_merge($record->getAttributes(), $request->all());
+            ? $submitted
+            : array_merge($record->getAttributes(), $submitted);
 
         $rules = MasterDataValidation::rules(
             config: $config,
             companyId: $companyId,
             values: $values,
-            presentFields: $record === null ? null : array_keys($request->all()),
+            presentFields: $record === null ? null : array_keys($submitted),
             ignoreId: $record?->getKey(),
         );
 
