@@ -5,19 +5,21 @@ namespace Modules\Core\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Modules\Core\Models\User;
 use Modules\Core\Services\AuditService;
 
 /**
- * BR-111: auth security — hashing modern (model cast 'hashed' = bcrypt/argon),
- * lockout setelah N kali gagal, rate limit login, session/token aman (Sanctum).
+ * BR-111: auth security — hashing modern, lockout, rate limit, dan token Sanctum.
+ * Endpoint ini menerbitkan API/device token; browser SPA dapat memakai stateful cookie.
  */
 class AuthController extends Controller
 {
     private const MAX_FAILED = 5;
     private const LOCKOUT_MINUTES = 15;
+    private const TOKEN_ABILITY = 'api:access';
 
     public function __construct(private AuditService $audit) {}
 
@@ -26,22 +28,25 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'device_name' => ['sometimes', 'string', 'max:100'],
         ]);
 
-        // Rate limit per email+IP (BR-111)
-        $key = 'login:'.strtolower($credentials['email']).'|'.$request->ip();
-        if (RateLimiter::tooManyAttempts($key, 10)) {
+        $emailKey = 'login:email:'.strtolower($credentials['email']).'|'.$request->ip();
+        $ipKey = 'login:ip:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($emailKey, 10) || RateLimiter::tooManyAttempts($ipKey, 50)) {
             abort(429, 'Terlalu banyak percobaan login. Coba lagi nanti.');
         }
 
         $user = User::withoutGlobalScopes()->where('email', $credentials['email'])->first();
 
         if ($user && $user->isLockedOut()) {
-            abort(423, 'Akun terkunci sampai '.$user->locked_until->toDateTimeString()); // 423 Locked
+            abort(423, 'Akun terkunci sampai '.$user->locked_until->toDateTimeString());
         }
 
-        if (! $user || ! $user->is_active || ! password_verify($credentials['password'], $user->password)) {
-            RateLimiter::hit($key, 300);
+        if (! $user || ! $user->is_active || ! Hash::check($credentials['password'], $user->password)) {
+            RateLimiter::hit($emailKey, 300);
+            RateLimiter::hit($ipKey, 300);
 
             if ($user) {
                 $user->failed_logins++;
@@ -55,15 +60,24 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => ['Kredensial tidak valid.']]);
         }
 
-        RateLimiter::clear($key);
+        RateLimiter::clear($emailKey);
+        RateLimiter::clear($ipKey);
         $user->fill(['failed_logins' => 0, 'locked_until' => null, 'last_login_at' => now()])->save();
 
-        $token = $user->createToken('api')->plainTextToken;
+        $ttlMinutes = max(1, (int) config('sanctum.expiration', 480));
+        $expiresAt = now()->addMinutes($ttlMinutes);
+        $tokenName = $credentials['device_name'] ?? 'api-client';
+        $newToken = $user->createToken($tokenName, [self::TOKEN_ABILITY], $expiresAt);
 
-        $this->audit->record('login', $user, request: $request);
+        $this->audit->record('login', $user, after: [
+            'token_name' => $tokenName,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ], request: $request);
 
         return response()->json([
-            'token' => $token,
+            'token' => $newToken->plainTextToken,
+            'token_type' => 'Bearer',
+            'expires_at' => $expiresAt->toIso8601String(),
             'user' => $this->payload($user),
         ]);
     }
