@@ -33,6 +33,10 @@ class InventoryTransactionService
         if ($companyId <= 0 || $sourceType === '' || $sourceId <= 0) {
             throw new RuntimeException('ITS: company dan source document wajib valid.');
         }
+        $this->assertUserCompany($user, $companyId);
+        foreach ($lines as $line) {
+            $this->assertLineCompany($companyId, $line);
+        }
 
         return DB::transaction(function () use ($movementType, $companyId, $sourceType, $sourceId, $lines, $user): StockMovement {
             $sourceKey = [
@@ -44,10 +48,8 @@ class InventoryTransactionService
 
             $docNo = $this->numbering->next($companyId, $this->docTypeFor($movementType));
             $inserted = DB::table('stock_movements')->insertOrIgnore(array_merge($sourceKey, [
-                'doc_no' => $docNo,
-                'created_by' => $user->id,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'doc_no' => $docNo, 'created_by' => $user->id,
+                'created_at' => now(), 'updated_at' => now(),
             ]));
 
             $movement = StockMovement::withoutGlobalScopes()->where($sourceKey)->lockForUpdate()->firstOrFail();
@@ -58,12 +60,7 @@ class InventoryTransactionService
             foreach ($lines as $line) {
                 $this->postLine($movement, $movementType, $line, $user);
             }
-
-            $this->audit->record('create', $movement, after: [
-                'movement_type' => $movementType,
-                'lines' => count($lines),
-            ]);
-
+            $this->audit->record('create', $movement, after: ['movement_type' => $movementType, 'lines' => count($lines)]);
             return $movement;
         });
     }
@@ -101,11 +98,10 @@ class InventoryTransactionService
                 }
             }
             $balance->on_hand = (float) $balance->on_hand - $qty;
-        } elseif ($isIn) {
+        } else {
             if ($type === 'SUBCON_IN' && (float) $balance->in_transit_subcon < $qty) {
                 throw new RuntimeException('ITS: qty SUBCON_IN melebihi stok in-transit.');
             }
-
             $oldQty = (float) $balance->on_hand;
             $balance->on_hand = $oldQty + $qty;
             if ($type === 'PURCHASE_RECEIPT') {
@@ -114,7 +110,6 @@ class InventoryTransactionService
             if ($type === 'SUBCON_IN') {
                 $balance->in_transit_subcon = (float) $balance->in_transit_subcon - $qty;
             }
-
             if (isset($line['unit_cost'])) {
                 $unitCost = (float) $line['unit_cost'];
                 if ($unitCost < 0) {
@@ -126,29 +121,20 @@ class InventoryTransactionService
 
         $balance->save();
         StockLedger::create([
-            'company_id' => $movement->company_id,
-            'movement_type' => $type,
-            'item_type' => $line['item_type'] ?? 'MATERIAL',
-            'material_id' => $line['material_id'] ?? null,
-            'style_id' => $line['style_id'] ?? null,
-            'colorway_id' => $line['colorway_id'] ?? null,
-            'size_id' => $line['size_id'] ?? null,
-            'warehouse_id' => $line['warehouse_id'],
-            'location_id' => $line['location_id'] ?? null,
-            'lot_no' => $line['lot_no'] ?? null,
-            'roll_id' => $line['roll_id'] ?? null,
-            'ownership' => $line['ownership'] ?? 'COMPANY',
-            'qty_in' => $isIn ? $qty : 0,
-            'qty_out' => $isOut ? $qty : 0,
-            'uom_id' => $line['uom_id'],
-            'unit_cost' => $line['unit_cost'] ?? null,
+            'company_id' => $movement->company_id, 'movement_type' => $type,
+            'item_type' => $line['item_type'] ?? 'MATERIAL', 'material_id' => $line['material_id'] ?? null,
+            'style_id' => $line['style_id'] ?? null, 'colorway_id' => $line['colorway_id'] ?? null,
+            'size_id' => $line['size_id'] ?? null, 'warehouse_id' => $line['warehouse_id'],
+            'location_id' => $line['location_id'] ?? null, 'lot_no' => $line['lot_no'] ?? null,
+            'roll_id' => $line['roll_id'] ?? null, 'ownership' => $line['ownership'] ?? 'COMPANY',
+            'qty_in' => $isIn ? $qty : 0, 'qty_out' => $isOut ? $qty : 0,
+            'uom_id' => $line['uom_id'], 'unit_cost' => $line['unit_cost'] ?? null,
             'total_cost' => isset($line['unit_cost']) ? round($qty * (float) $line['unit_cost'], 4) : null,
             'running_balance' => $balance->on_hand,
             'source_document_type' => $movement->source_document_type,
             'source_document_id' => $movement->source_document_id,
             'source_document_line_id' => $line['source_document_line_id'] ?? null,
-            'created_at' => now(),
-            'created_by' => $user->id,
+            'created_at' => now(), 'created_by' => $user->id,
         ]);
     }
 
@@ -157,23 +143,26 @@ class InventoryTransactionService
         if ($qty <= 0) {
             throw new RuntimeException('ITS: qty release harus > 0.');
         }
+        $this->assertUserCompany($user, $companyId);
+        $this->assertLineCompany($companyId, $line);
 
         DB::transaction(function () use ($companyId, $line, $qty, $user): void {
             $balance = $this->lockBalance($companyId, $line);
             if ((float) $balance->quality_hold < $qty) {
                 throw new RuntimeException("ITS: quality_hold tidak cukup untuk release ({$balance->quality_hold} < {$qty}).");
             }
-
             $balance->quality_hold = (float) $balance->quality_hold - $qty;
             $balance->save();
 
             StockLedger::create([
                 'company_id' => $companyId, 'movement_type' => 'QUALITY_RELEASE',
                 'item_type' => $line['item_type'] ?? 'MATERIAL', 'material_id' => $line['material_id'] ?? null,
-                'warehouse_id' => $line['warehouse_id'], 'location_id' => $line['location_id'] ?? null,
-                'lot_no' => $line['lot_no'] ?? null, 'roll_id' => $line['roll_id'] ?? null,
-                'ownership' => $line['ownership'] ?? 'COMPANY', 'qty_in' => 0, 'qty_out' => 0,
-                'uom_id' => $line['uom_id'], 'running_balance' => $balance->on_hand,
+                'style_id' => $line['style_id'] ?? null, 'colorway_id' => $line['colorway_id'] ?? null,
+                'size_id' => $line['size_id'] ?? null, 'warehouse_id' => $line['warehouse_id'],
+                'location_id' => $line['location_id'] ?? null, 'lot_no' => $line['lot_no'] ?? null,
+                'roll_id' => $line['roll_id'] ?? null, 'ownership' => $line['ownership'] ?? 'COMPANY',
+                'qty_in' => 0, 'qty_out' => 0, 'uom_id' => $line['uom_id'],
+                'running_balance' => $balance->on_hand,
                 'source_document_type' => $line['source_document_type'] ?? 'inward_inspections',
                 'source_document_id' => $line['source_document_id'],
                 'source_document_line_id' => $line['source_document_line_id'] ?? null,
@@ -184,9 +173,11 @@ class InventoryTransactionService
 
     public function adjust(int $companyId, array $line, float $qtyDelta, string $sourceType, int $sourceId, User $user): void
     {
-        if ($qtyDelta === 0.0) {
-            throw new RuntimeException('ITS: qty adjustment tidak boleh 0.');
+        if ($qtyDelta === 0.0 || trim($sourceType) === '' || $sourceId <= 0) {
+            throw new RuntimeException('ITS: source dan qty adjustment wajib valid.');
         }
+        $this->assertUserCompany($user, $companyId);
+        $this->assertLineCompany($companyId, $line);
 
         DB::transaction(function () use ($companyId, $line, $qtyDelta, $sourceType, $sourceId, $user): void {
             $balance = $this->lockBalance($companyId, $line);
@@ -194,12 +185,10 @@ class InventoryTransactionService
             if ($newOnHand < 0) {
                 throw new RuntimeException('ITS: adjustment membuat stok negatif — ditolak.');
             }
-
             if ($qtyDelta > 0 && isset($line['unit_cost'])) {
                 $oldQty = (float) $balance->on_hand;
                 $balance->avg_cost = round((($oldQty * (float) ($balance->avg_cost ?? 0)) + ($qtyDelta * (float) $line['unit_cost'])) / $newOnHand, 6);
             }
-
             $balance->on_hand = $newOnHand;
             $balance->save();
 
@@ -207,11 +196,13 @@ class InventoryTransactionService
                 'company_id' => $companyId,
                 'movement_type' => $sourceType === 'stock_opnames' ? 'OPNAME_ADJUSTMENT' : 'ADJUSTMENT',
                 'item_type' => $line['item_type'] ?? 'MATERIAL', 'material_id' => $line['material_id'] ?? null,
-                'warehouse_id' => $line['warehouse_id'], 'location_id' => $line['location_id'] ?? null,
-                'lot_no' => $line['lot_no'] ?? null, 'roll_id' => $line['roll_id'] ?? null,
-                'ownership' => $line['ownership'] ?? 'COMPANY',
+                'style_id' => $line['style_id'] ?? null, 'colorway_id' => $line['colorway_id'] ?? null,
+                'size_id' => $line['size_id'] ?? null, 'warehouse_id' => $line['warehouse_id'],
+                'location_id' => $line['location_id'] ?? null, 'lot_no' => $line['lot_no'] ?? null,
+                'roll_id' => $line['roll_id'] ?? null, 'ownership' => $line['ownership'] ?? 'COMPANY',
                 'qty_in' => $qtyDelta > 0 ? $qtyDelta : 0, 'qty_out' => $qtyDelta < 0 ? abs($qtyDelta) : 0,
                 'uom_id' => $line['uom_id'], 'unit_cost' => $line['unit_cost'] ?? null,
+                'total_cost' => isset($line['unit_cost']) ? round(abs($qtyDelta) * (float) $line['unit_cost'], 4) : null,
                 'running_balance' => $balance->on_hand, 'source_document_type' => $sourceType,
                 'source_document_id' => $sourceId, 'source_document_line_id' => $line['source_document_line_id'] ?? null,
                 'created_at' => now(), 'created_by' => $user->id,
@@ -229,14 +220,10 @@ class InventoryTransactionService
             'lot_no' => $line['lot_no'] ?? null, 'roll_id' => $line['roll_id'] ?? null,
             'ownership' => $line['ownership'] ?? 'COMPANY',
         ];
-
         $normalized = $key;
         ksort($normalized);
         $balanceKey = hash('sha256', json_encode($normalized, JSON_THROW_ON_ERROR));
-
-        DB::table('stock_balance_locks')->insertOrIgnore([
-            'balance_key' => $balanceKey, 'created_at' => now(), 'updated_at' => now(),
-        ]);
+        DB::table('stock_balance_locks')->insertOrIgnore(['balance_key' => $balanceKey, 'created_at' => now(), 'updated_at' => now()]);
         DB::table('stock_balance_locks')->where('balance_key', $balanceKey)->lockForUpdate()->first();
 
         $balance = StockBalance::withoutGlobalScopes()->where($key)->lockForUpdate()->first();
@@ -244,18 +231,68 @@ class InventoryTransactionService
             $balance = StockBalance::create($key);
             $balance = StockBalance::withoutGlobalScopes()->whereKey($balance->id)->lockForUpdate()->firstOrFail();
         }
-
         return $balance;
+    }
+
+    private function assertLineCompany(int $companyId, array $line): void
+    {
+        $itemType = $line['item_type'] ?? 'MATERIAL';
+        $ownership = $line['ownership'] ?? 'COMPANY';
+        if (! in_array($itemType, ['MATERIAL', 'WIP', 'FG'], true) || ! in_array($ownership, ['COMPANY', 'BUYER'], true)) {
+            throw new RuntimeException('ITS: item_type atau ownership tidak valid.');
+        }
+        $this->assertCompanyRow('warehouses', (int) ($line['warehouse_id'] ?? 0), $companyId, 'warehouse');
+        $this->assertCompanyRow('uoms', (int) ($line['uom_id'] ?? 0), $companyId, 'UOM');
+
+        if ($itemType === 'MATERIAL') {
+            $this->assertCompanyRow('materials', (int) ($line['material_id'] ?? 0), $companyId, 'material');
+        } else {
+            $this->assertCompanyRow('styles', (int) ($line['style_id'] ?? 0), $companyId, 'style');
+            if (! empty($line['colorway_id'])) {
+                $valid = DB::table('colorways')->join('styles', 'styles.id', '=', 'colorways.style_id')
+                    ->where('colorways.id', $line['colorway_id'])->where('styles.company_id', $companyId)
+                    ->where('colorways.style_id', $line['style_id'])->exists();
+                if (! $valid) throw new RuntimeException('ITS: colorway tidak valid untuk style/company.');
+            }
+            if (! empty($line['size_id'])) {
+                $this->assertCompanyRow('sizes', (int) $line['size_id'], $companyId, 'size');
+            }
+        }
+
+        if (! empty($line['location_id'])) {
+            $valid = DB::table('locations')->join('warehouses', 'warehouses.id', '=', 'locations.warehouse_id')
+                ->where('locations.id', $line['location_id'])->where('warehouses.id', $line['warehouse_id'])
+                ->where('warehouses.company_id', $companyId)->exists();
+            if (! $valid) throw new RuntimeException('ITS: location tidak valid untuk warehouse/company.');
+        }
+        if (! empty($line['roll_id'])) {
+            $query = DB::table('fabric_rolls')->where('id', $line['roll_id'])->where('company_id', $companyId);
+            if (! empty($line['material_id'])) $query->where('material_id', $line['material_id']);
+            if (! $query->exists()) throw new RuntimeException('ITS: roll tidak valid untuk material/company.');
+        }
+    }
+
+    private function assertCompanyRow(string $table, int $id, int $companyId, string $label): void
+    {
+        if ($id <= 0 || ! DB::table($table)->where('id', $id)->where('company_id', $companyId)->exists()) {
+            throw new RuntimeException("ITS: {$label} tidak ditemukan pada company aktif.");
+        }
+    }
+
+    private function assertUserCompany(User $user, int $companyId): void
+    {
+        if ((int) $user->company_id !== $companyId && ! $user->companies()->whereKey($companyId)->exists()) {
+            throw new RuntimeException('ITS: user tidak memiliki akses ke company movement.');
+        }
     }
 
     private function docTypeFor(string $movementType): string
     {
         return match ($movementType) {
             'PURCHASE_RECEIPT' => 'GR', 'MATERIAL_ISSUE' => 'MI',
-            'TRANSFER_IN', 'TRANSFER_OUT' => 'TRF',
-            'PRODUCTION_RETURN' => 'MI', 'PRODUCTION_RECEIPT' => 'OUT',
-            'SHIPMENT' => 'SHP', 'SUBCON_OUT', 'SUBCON_IN' => 'JW',
-            'PURCHASE_RETURN', 'OPENING' => 'ADJ',
+            'TRANSFER_IN', 'TRANSFER_OUT' => 'TRF', 'PRODUCTION_RETURN' => 'MI',
+            'PRODUCTION_RECEIPT' => 'OUT', 'SHIPMENT' => 'SHP',
+            'SUBCON_OUT', 'SUBCON_IN' => 'JW', 'PURCHASE_RETURN', 'OPENING' => 'ADJ',
             default => throw new RuntimeException("ITS: numbering tidak tersedia untuk [{$movementType}]."),
         };
     }
