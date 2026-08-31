@@ -5,130 +5,122 @@ namespace Modules\ShopFloor\Services;
 use Illuminate\Support\Facades\DB;
 use Modules\Core\Models\User;
 use Modules\Cutting\Models\Bundle;
+use Modules\Production\Models\ProductionOrder;
 use Modules\ShopFloor\Models\ProductionScan;
 use RuntimeException;
 
-/**
- * BR-062: scan IN/OUT bundle per operasi = bukti kehadiran fisik.
- * BR-063: WIP = bundle × stage (dari scan, bukan input manual).
- * Validasi urutan: OUT butuh IN; IN operasi N+1 butuh OUT operasi N (sesuai routing MO).
- */
 class ScanService
 {
-    /**
-     * Catat scan. $bundleNo dari scanner (keyboard-wedge) atau input manual.
-     * $data: operation_id, direction (IN/OUT), stage (SEWING/FINISHING), line_id?, employee_id?
-     */
     public function scan(int $companyId, string $bundleNo, array $data, User $user): ProductionScan
     {
         return DB::transaction(function () use ($companyId, $bundleNo, $data, $user): ProductionScan {
-            $bundle = Bundle::where('company_id', $companyId)
-                ->where('bundle_no', $bundleNo)
-                ->where('status', 'ACTIVE')
-                ->firstOrFail();
-
-            $mo = $bundle->productionOrder;
-            $direction = $data['direction'];
-            $operationId = (int) $data['operation_id'];
-            $stage = $data['stage'];
-
-            // Operasi harus bagian dari routing MO (snapshot — BR-030)
-            $routingOps = $mo->routingVersion->operations()->orderBy('seq')->get();
-            $routingOp = $routingOps->firstWhere('operation_id', $operationId);
-            if ($routingOp === null) {
-                throw new RuntimeException("Operasi #{$operationId} tidak ada di routing MO {$mo->doc_no}.");
+            $this->assertUserCompany($user, $companyId);
+            $direction = strtoupper((string) ($data['direction'] ?? ''));
+            $stage = strtoupper((string) ($data['stage'] ?? ''));
+            if (! in_array($direction, ProductionScan::DIRECTIONS, true) || ! in_array($stage, ProductionScan::STAGES, true)) {
+                throw new RuntimeException('Direction atau stage scan tidak valid.');
             }
 
-            $lastScan = ProductionScan::where('bundle_id', $bundle->id)
-                ->where('operation_id', $operationId)
-                ->orderByDesc('scanned_at')
-                ->first();
+            $bundle = Bundle::withoutGlobalScopes()->where('company_id', $companyId)
+                ->where('bundle_no', $bundleNo)->where('status', 'ACTIVE')->lockForUpdate()->first();
+            if ($bundle === null) throw new RuntimeException('Bundle aktif tidak ditemukan pada company ini.');
+            $mo = ProductionOrder::withoutGlobalScopes()->where('company_id', $companyId)
+                ->whereKey($bundle->production_order_id)->lockForUpdate()->firstOrFail();
+            if (! in_array($mo->status, ['CUTTING','SEWING','FINISHING'], true)) {
+                throw new RuntimeException("Status MO {$mo->status} tidak mengizinkan scan shop floor.");
+            }
+
+            $operationId = (int) ($data['operation_id'] ?? 0);
+            $routingOps = $mo->routingVersion->operations()->orderBy('seq')->get();
+            $routingOp = $routingOps->firstWhere('operation_id', $operationId);
+            if ($routingOp === null) throw new RuntimeException("Operasi #{$operationId} tidak ada di routing snapshot MO.");
+
+            $lineId = $data['line_id'] ?? $mo->line_id;
+            if ($lineId !== null && ! DB::table('lines')->where('company_id', $companyId)->where('id', $lineId)->exists()) {
+                throw new RuntimeException('Line scan tidak ditemukan pada company ini.');
+            }
+            $employeeId = $data['employee_id'] ?? null;
+            if ($employeeId !== null && ! DB::table('employees')->where('company_id', $companyId)->where('id', $employeeId)->exists()) {
+                throw new RuntimeException('Employee scan tidak ditemukan pada company ini.');
+            }
+
+            $existingDirection = ProductionScan::withoutGlobalScopes()
+                ->where('bundle_id', $bundle->id)->where('operation_id', $operationId)
+                ->where('stage', $stage)->where('direction', $direction)->lockForUpdate()->first();
+            if ($existingDirection !== null) {
+                throw new RuntimeException("Bundle {$bundleNo}: duplicate {$direction} pada operasi dan stage yang sama.");
+            }
+            $lastScan = ProductionScan::withoutGlobalScopes()->where('bundle_id', $bundle->id)
+                ->where('operation_id', $operationId)->where('stage', $stage)
+                ->orderByDesc('scanned_at')->orderByDesc('id')->lockForUpdate()->first();
 
             if ($direction === 'OUT') {
-                // OUT butuh IN terakhir yang belum di-OUT
                 if ($lastScan === null || $lastScan->direction !== 'IN') {
                     throw new RuntimeException("Bundle {$bundleNo}: OUT tanpa IN pada operasi ini.");
                 }
             } else {
-                // IN: bundle tidak boleh sedang "di dalam" operasi yang sama (double IN)
-                if ($lastScan !== null && $lastScan->direction === 'IN') {
-                    throw new RuntimeException("Bundle {$bundleNo}: double IN pada operasi yang sama.");
-                }
-                // Urutan routing: operasi pertama boleh langsung IN; selanjutnya butuh OUT dari operasi sebelumnya
-                $prevOp = $routingOps->where('seq', '<', $routingOp->seq)->sortByDesc('seq')->first();
-                if ($prevOp !== null) {
-                    $prevOut = ProductionScan::where('bundle_id', $bundle->id)
-                        ->where('operation_id', $prevOp->operation_id)
-                        ->where('direction', 'OUT')
-                        ->exists();
-                    if (! $prevOut) {
+                if ($lastScan !== null) throw new RuntimeException("Bundle {$bundleNo}: operasi/stage ini sudah pernah dimulai.");
+                if ($stage === 'SEWING') {
+                    $prevOp = $routingOps->where('seq', '<', $routingOp->seq)->sortByDesc('seq')->first();
+                    if ($prevOp !== null && ! ProductionScan::withoutGlobalScopes()
+                        ->where('bundle_id', $bundle->id)->where('operation_id', $prevOp->operation_id)
+                        ->where('stage', 'SEWING')->where('direction', 'OUT')->exists()) {
                         throw new RuntimeException("Bundle {$bundleNo}: belum selesai operasi sebelumnya (seq {$prevOp->seq}).");
+                    }
+                } else {
+                    $completedSewingOps = ProductionScan::withoutGlobalScopes()->where('bundle_id', $bundle->id)
+                        ->where('stage', 'SEWING')->where('direction', 'OUT')->pluck('operation_id')->unique();
+                    if ($routingOps->pluck('operation_id')->diff($completedSewingOps)->isNotEmpty()) {
+                        throw new RuntimeException("Bundle {$bundleNo}: seluruh operasi sewing wajib OUT sebelum finishing.");
                     }
                 }
             }
 
             $scan = ProductionScan::create([
-                'company_id' => $companyId,
-                'bundle_id' => $bundle->id,
-                'operation_id' => $operationId,
-                'production_order_id' => $mo->id,
-                'line_id' => $data['line_id'] ?? $mo->line_id,
-                'employee_id' => $data['employee_id'] ?? null,
-                'direction' => $direction,
-                'stage' => $stage,
-                'scanned_at' => now(),
+                'company_id' => $companyId, 'bundle_id' => $bundle->id, 'operation_id' => $operationId,
+                'production_order_id' => $mo->id, 'line_id' => $lineId, 'employee_id' => $employeeId,
+                'direction' => $direction, 'stage' => $stage, 'scanned_at' => now(),
             ]);
-
-            // Transisi stage bundle & MO (BR-012/063)
             $bundle->update(['current_stage' => $stage]);
             $this->advanceMoStatus($mo, $stage);
-
             return $scan;
         });
     }
 
-    /** WIP per MO per stage (BR-063) — agregasi dari scan, tanpa tabel agregat (anti double-count). */
-    public function wipByStage(int $moId): array
+    public function wipByStage(int $companyId, int $moId): array
     {
-        return Bundle::where('production_order_id', $moId)
-            ->where('status', 'ACTIVE')
-            ->selectRaw('current_stage, COUNT(*) as bundle_count, SUM(qty) as pcs')
-            ->groupBy('current_stage')
-            ->get()
-            ->mapWithKeys(fn ($r) => [$r->current_stage => ['bundles' => (int) $r->bundle_count, 'pcs' => (float) $r->pcs]])
-            ->all();
-    }
-
-    /** Daily output per line (scan OUT per tanggal) */
-    public function dailyOutput(int $lineId, string $date): array
-    {
-        return ProductionScan::where('line_id', $lineId)
-            ->where('direction', 'OUT')
-            ->whereDate('scanned_at', $date)
-            ->selectRaw('stage, operation_id, SUM(bundles.qty) as pcs, COUNT(DISTINCT bundle_id) as bundles')
-            ->join('bundles', 'bundles.id', '=', 'production_scans.bundle_id')
-            ->groupBy('stage', 'operation_id')
-            ->get()
-            ->all();
-    }
-
-    /** Transisi status MO sesuai stage (BR-012) — maju saja, tidak mundur. */
-    private function advanceMoStatus($mo, string $stage): void
-    {
-        $target = match ($stage) {
-            'SEWING' => 'SEWING',
-            'FINISHING' => 'FINISHING',
-            default => null,
-        };
-
-        if ($target === null) {
-            return;
+        if (! ProductionOrder::withoutGlobalScopes()->where('company_id', $companyId)->whereKey($moId)->exists()) {
+            throw new RuntimeException('MO tidak ditemukan pada company ini.');
         }
+        return Bundle::withoutGlobalScopes()->where('company_id', $companyId)->where('production_order_id', $moId)
+            ->where('status', 'ACTIVE')->selectRaw('current_stage, COUNT(*) as bundle_count, SUM(qty) as pcs')
+            ->groupBy('current_stage')->get()
+            ->mapWithKeys(fn ($row) => [$row->current_stage => ['bundles' => (int) $row->bundle_count, 'pcs' => (float) $row->pcs]])->all();
+    }
 
-        $order = ['PLANNED' => 0, 'RELEASED' => 1, 'CUTTING' => 2, 'SEWING' => 3, 'FINISHING' => 4, 'QC' => 5, 'PACKED' => 6, 'CLOSED' => 7];
+    public function dailyOutput(int $companyId, int $lineId, string $date): array
+    {
+        if (! DB::table('lines')->where('company_id', $companyId)->where('id', $lineId)->exists()) {
+            throw new RuntimeException('Line tidak ditemukan pada company ini.');
+        }
+        return ProductionScan::withoutGlobalScopes()->where('production_scans.company_id', $companyId)
+            ->where('production_scans.line_id', $lineId)->where('direction', 'OUT')->whereDate('scanned_at', $date)
+            ->join('bundles', 'bundles.id', '=', 'production_scans.bundle_id')
+            ->selectRaw('production_scans.stage, production_scans.operation_id, SUM(bundles.qty) as pcs, COUNT(DISTINCT production_scans.bundle_id) as bundles')
+            ->groupBy('production_scans.stage', 'production_scans.operation_id')->get()->all();
+    }
 
-        if (($order[$target] ?? 0) > ($order[$mo->status] ?? 0)) {
-            $mo->update(['status' => $target]);
+    private function advanceMoStatus(ProductionOrder $mo, string $stage): void
+    {
+        $target = $stage === 'SEWING' ? 'SEWING' : 'FINISHING';
+        $order = ['PLANNED'=>0,'RELEASED'=>1,'CUTTING'=>2,'SEWING'=>3,'FINISHING'=>4,'QC'=>5,'PACKED'=>6,'CLOSED'=>7];
+        if (($order[$target] ?? 0) > ($order[$mo->status] ?? 0)) $mo->update(['status' => $target]);
+    }
+
+    private function assertUserCompany(User $user, int $companyId): void
+    {
+        if ((int) $user->company_id !== $companyId && ! $user->companies()->whereKey($companyId)->exists()) {
+            throw new RuntimeException('User tidak memiliki akses ke company scan.');
         }
     }
 }
