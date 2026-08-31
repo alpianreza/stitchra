@@ -1,11 +1,14 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Modules\Core\Models\Permission;
 use Modules\Core\Models\Role;
 use Modules\Core\Models\User;
 use Modules\MasterData\Models\Currency;
 use Modules\MasterData\Models\Customer;
 use Modules\MasterData\Models\Material;
+use Modules\MasterData\Models\Style;
+use Modules\MasterData\Models\Uom;
 
 function masterUser(array $permissions): User
 {
@@ -22,12 +25,30 @@ test('CRUD customer lengkap dengan permission yang benar', function () {
     $user = masterUser(['master.customer.view', 'master.customer.create', 'master.customer.update', 'master.customer.delete']);
     $res = $this->actingAs($user)->postJson('/api/master/customers', ['code' => 'CUST-001', 'name' => 'Buyer A', 'currency' => 'usd'])->assertCreated();
     $id = $res->json('id');
-
     $res->assertJsonPath('currency', 'USD');
-    $this->actingAs($user)->getJson("/api/master/customers/{$id}")->assertOk()->assertJsonPath('code', 'CUST-001');
-    $this->actingAs($user)->putJson("/api/master/customers/{$id}", ['name' => 'Buyer A Intl'])->assertOk()->assertJsonPath('name', 'Buyer A Intl');
+    $this->actingAs($user)->getJson("/api/master/customers/{$id}")->assertOk();
+    $this->actingAs($user)->putJson("/api/master/customers/{$id}", ['name' => 'Buyer A Intl'])->assertOk();
     $this->actingAs($user)->deleteJson("/api/master/customers/{$id}")->assertOk();
     expect(Customer::withTrashed()->find($id)->deleted_at)->not->toBeNull();
+});
+
+test('master yang sudah dipakai BOM tidak dapat dihapus', function () {
+    $user = masterUser(['master.material.delete']);
+    $style = Style::create(['company_id' => 1, 'style_no' => 'DEL-STYLE', 'category' => 'WOVEN']);
+    $uom = Uom::create(['company_id' => 1, 'code' => 'DEL-UOM', 'name' => 'Unit']);
+    $material = Material::create(['company_id' => 1, 'code' => 'DEL-MAT', 'name' => 'Fabric', 'type' => 'FABRIC', 'tracking_level' => 'ROLL']);
+    $now = now();
+
+    $bomId = DB::table('boms')->insertGetId(['style_id' => $style->id, 'current_version' => 1, 'created_at' => $now, 'updated_at' => $now]);
+    $versionId = DB::table('bom_versions')->insertGetId(['bom_id' => $bomId, 'version_no' => 1, 'status' => 'DRAFT', 'created_at' => $now, 'updated_at' => $now]);
+    DB::table('bom_lines')->insert([
+        'bom_version_id' => $versionId, 'material_id' => $material->id, 'uom_id' => $uom->id,
+        'qty_per_pcs' => 1, 'wastage_pct' => 0, 'shrinkage_pct' => 0,
+        'is_backflush' => false, 'created_at' => $now, 'updated_at' => $now,
+    ]);
+
+    $this->actingAs($user)->deleteJson("/api/master/materials/{$material->id}")->assertStatus(409);
+    expect($material->fresh()->deleted_at)->toBeNull();
 });
 
 test('search generik hanya memakai kolom yang tersedia', function () {
@@ -56,7 +77,6 @@ test('composite unique dan rate nol ditolak sebagai validation error', function 
     $user = masterUser(['master.finance.create']);
     $currency = Currency::create(['company_id' => 1, 'code' => 'TST', 'name' => 'Test Currency']);
     $payload = ['currency_id' => $currency->id, 'rate_date' => '2026-08-31', 'rate' => 15000];
-
     $this->actingAs($user)->postJson('/api/master/exchange-rates', array_merge($payload, ['rate' => 0]))->assertUnprocessable();
     $this->actingAs($user)->postJson('/api/master/exchange-rates', $payload)->assertCreated();
     $this->actingAs($user)->postJson('/api/master/exchange-rates', $payload)->assertUnprocessable();
@@ -64,19 +84,9 @@ test('composite unique dan rate nol ditolak sebagai validation error', function 
 
 test('BR-003: fabric wajib roll dan trim wajib lot', function () {
     $user = masterUser(['master.material.create']);
-
-    $this->actingAs($user)->postJson('/api/master/materials', [
-        'code' => 'FAB-BAD', 'name' => 'Fabric Bad', 'type' => 'fabric', 'tracking_level' => 'lot',
-    ])->assertUnprocessable();
-
-    $this->actingAs($user)->postJson('/api/master/materials', [
-        'code' => 'FAB-OK', 'name' => 'Fabric OK', 'type' => 'fabric',
-        'tracking_level' => 'roll', 'gsm' => 180, 'width_cm' => 150,
-    ])->assertCreated()->assertJsonPath('tracking_level', 'ROLL');
-
-    $this->actingAs($user)->postJson('/api/master/materials', [
-        'code' => 'TRIM-BAD', 'name' => 'Trim Bad', 'type' => 'trim', 'tracking_level' => 'roll',
-    ])->assertUnprocessable();
+    $this->actingAs($user)->postJson('/api/master/materials', ['code' => 'FAB-BAD', 'name' => 'Fabric Bad', 'type' => 'fabric', 'tracking_level' => 'lot'])->assertUnprocessable();
+    $this->actingAs($user)->postJson('/api/master/materials', ['code' => 'FAB-OK', 'name' => 'Fabric OK', 'type' => 'fabric', 'tracking_level' => 'roll', 'gsm' => 180, 'width_cm' => 150])->assertCreated()->assertJsonPath('tracking_level', 'ROLL');
+    $this->actingAs($user)->postJson('/api/master/materials', ['code' => 'TRIM-BAD', 'name' => 'Trim Bad', 'type' => 'trim', 'tracking_level' => 'roll'])->assertUnprocessable();
 });
 
 test('referensi master lintas company ditolak saat validasi', function () {

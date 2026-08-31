@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
+use Modules\MasterData\Support\MasterDataDeletionGuard;
 use Modules\MasterData\Support\MasterDataRegistry;
 use Modules\MasterData\Support\MasterDataValidation;
 
@@ -94,9 +95,10 @@ class MasterDataController extends Controller
         $this->authorize($request, $config['entity'], 'delete');
 
         $record = $config['model']::findOrFail($id);
+        MasterDataDeletionGuard::assertDeletable($record);
+
         $before = $record->toArray();
         $record->delete();
-
         $this->audit->record('delete', $record, before: $before, request: $request);
 
         return response()->json(['message' => 'Dihapus (soft delete).']);
@@ -126,18 +128,14 @@ class MasterDataController extends Controller
 
         $submitted = MasterDataValidation::normalize($request->all());
         $request->merge($submitted);
-        $values = $record === null
-            ? $submitted
-            : array_merge($record->getAttributes(), $submitted);
+        $values = $record === null ? $submitted : array_merge($record->getAttributes(), $submitted);
 
-        $rules = MasterDataValidation::rules(
+        return $request->validate(MasterDataValidation::rules(
             config: $config,
             companyId: $companyId,
             values: $values,
             presentFields: $record === null ? null : array_keys($submitted),
             ignoreId: $record?->getKey(),
-        );
-
-        return $request->validate($rules);
+        ));
     }
 }
