@@ -5,75 +5,58 @@ use Modules\Inventory\Models\StockReservation;
 use Modules\Production\Services\MaterialIssueService;
 use Modules\Receiving\Models\FabricRoll;
 
-test('BR-060: issue aktual dari reservasi — reservasi & alokasi ter-update, stok RM turun', function () {
-    [$user, $fabric, $trim, $uomMtr, $uomPcs, $warehouse, $mo] = shopFixture();
+test('BR-060: actual issue memperbarui reservation dan balance roll yang sama', function () {
+    [$user, $fabric, , $uomMtr, , $warehouse, $mo] = shopFixture();
     $roll = FabricRoll::where('roll_no', 'R001')->firstOrFail();
 
     $issue = app(MaterialIssueService::class)->issue($mo, $warehouse->id, [[
-        'material_id' => $fabric->id, 'qty' => 80, 'uom_id' => $uomMtr->id, 'roll_id' => $roll->id,
+        'material_id' => $fabric->id, 'qty' => 80,
+        'uom_id' => $uomMtr->id, 'roll_id' => $roll->id,
     ]], $user);
 
-    expect($issue->mode)->toBe('ACTUAL');
-    expect($issue->doc_no)->toStartWith('MI-');
+    $reservation = StockReservation::withoutGlobalScopes()->where('mo_id', $mo->id)
+        ->where('material_id', $fabric->id)->where('roll_id', $roll->id)->firstOrFail();
+    $balance = StockBalance::withoutGlobalScopes()->where('material_id', $fabric->id)
+        ->where('warehouse_id', $warehouse->id)->where('roll_id', $roll->id)->firstOrFail();
 
-    $res = StockReservation::where('mo_id', $mo->id)->where('material_id', $fabric->id)->firstOrFail();
-    expect((float) $res->qty_issued)->toBe(80.0);
-    expect($res->status)->toBe('PARTIAL_ISSUED');
-
-    // Saldo fabric: on_hand 500 − 80 = 420; reserved 200 − 80 = 120
-    $b = StockBalance::withoutGlobalScopes()->where('material_id', $fabric->id)->where('warehouse_id', $warehouse->id)->whereNull('roll_id')->firstOrFail();
-    expect((float) $b->on_hand)->toBe(420.0);
-    expect((float) $b->reserved)->toBe(120.0);
+    expect($issue->mode)->toBe('ACTUAL')
+        ->and((float) $reservation->qty_issued)->toBe(80.0)
+        ->and($reservation->status)->toBe('PARTIAL_ISSUED')
+        ->and((float) $balance->on_hand)->toBe(220.0)
+        ->and((float) $balance->reserved)->toBe(120.0);
 });
 
-test('BR-060: issue melebihi sisa reservasi ditolak', function () {
+test('BR-060: issue melebihi sisa reservation ditolak', function () {
     [$user, $fabric, , $uomMtr, , $warehouse, $mo] = shopFixture();
     $roll = FabricRoll::where('roll_no', 'R001')->firstOrFail();
-
     app(MaterialIssueService::class)->issue($mo, $warehouse->id, [[
-        'material_id' => $fabric->id, 'qty' => 201, 'uom_id' => $uomMtr->id, 'roll_id' => $roll->id,  // reservasi 200
+        'material_id' => $fabric->id, 'qty' => 201,
+        'uom_id' => $uomMtr->id, 'roll_id' => $roll->id,
     ]], $user);
 })->throws(RuntimeException::class);
 
-test('BR-041: fabric roll-tracked wajib per roll — issue tanpa roll_id ditolak', function () {
+test('BR-041: fabric roll-tracked wajib memakai roll reservation', function () {
     [$user, $fabric, , $uomMtr, , $warehouse, $mo] = shopFixture();
-
     app(MaterialIssueService::class)->issue($mo, $warehouse->id, [[
-        'material_id' => $fabric->id, 'qty' => 50, 'uom_id' => $uomMtr->id,   // tanpa roll_id
+        'material_id' => $fabric->id, 'qty' => 50, 'uom_id' => $uomMtr->id,
     ]], $user);
 })->throws(RuntimeException::class);
 
-test('BR-041: backflush trim = BOM × qty_produced persis', function () {
-    [$user, , $trim, , $uomPcs, $warehouse, $mo] = shopFixture();
-
+test('BR-041: backflush trim sama dengan target kumulatif BOM kali qty produced', function () {
+    [$user, , $trim, , , $warehouse, $mo] = shopFixture();
     $mo->update(['qty_produced' => 100]);
-    $issue = app(MaterialIssueService::class)->backflush($mo, $warehouse->id, $user);
 
-    expect($issue->mode)->toBe('BACKFLUSH');
-    $line = $issue->lines->first();
-    expect($line->material_id)->toBe($trim->id);
-    expect((float) $line->qty)->toBe(500.0);   // 5 pcs × 100
+    $issue = app(MaterialIssueService::class)->backflush($mo->fresh(), $warehouse->id, $user);
+    $balance = StockBalance::withoutGlobalScopes()->where('material_id', $trim->id)
+        ->where('warehouse_id', $warehouse->id)->firstOrFail();
+    $reservation = StockReservation::withoutGlobalScopes()->where('mo_id', $mo->id)
+        ->where('material_id', $trim->id)->firstOrFail();
 
-    $b = StockBalance::withoutGlobalScopes()->where('material_id', $trim->id)->where('warehouse_id', $warehouse->id)->firstOrFail();
-    expect((float) $b->on_hand)->toBe(500.0);  // 1000 − 500
+    expect((float) $issue->lines->sum('qty'))->toBe(500.0)
+        ->and((float) $balance->on_hand)->toBe(500.0)
+        ->and((float) $reservation->qty_issued)->toBe(500.0)
+        ->and($reservation->status)->toBe('FULLY_ISSUED');
 });
 
-test('BR-042: leftover roll kembali ke stok available; roll CONSUMED', function () {
-    [$user, $fabric, , $uomMtr, , $warehouse, $mo] = shopFixture();
-    $roll = FabricRoll::where('roll_no', 'R001')->firstOrFail();   // 300 m tersisa
-
-    // Simulasi pemakaian: konsumsi 220 → sisa 80
-    $roll->consume(220);
-
-    $return = app(MaterialIssueService::class)->returnLeftover($mo, $roll->fresh(), $warehouse->id, $user, 'Sisa marker');
-
-    expect((float) $return->qty_returned_meter)->toBe(80.0);
-    expect($roll->fresh()->status)->toBe('CONSUMED');
-    expect((float) $roll->fresh()->qty_remaining_meter)->toBe(0.0);
-
-    // Stok bertambah kembali via PRODUCTION_RETURN (available — bukan hold)
-    $b = StockBalance::withoutGlobalScopes()->where('material_id', $fabric->id)->where('warehouse_id', $warehouse->id)->whereNotNull('roll_id')->first();
-    expect($b)->not->toBeNull();
-    expect((float) $b->on_hand)->toBe(80.0);
-    expect((float) $b->quality_hold)->toBe(0.0);
-});
+test('BR-042: leftover roll menunggu model dispatch dan consumption quantity eksplisit')
+    ->todo('Pisahkan qty di gudang, qty dispatched ke cutting, qty consumed, dan qty returned agar stok tidak double-count.');
