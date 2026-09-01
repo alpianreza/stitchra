@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui";
 
 interface Pl { id: number; doc_no: string; sales_order?: { doc_no: string } }
 interface Shipment {
@@ -25,6 +26,7 @@ export default function ShipmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shipmentToApprove, setShipmentToApprove] = useState<Shipment | null>(null);
 
   function load() {
     api.get<{ data: Shipment[] }>("/shipping/shipments?per_page=100").then((r) => setShipments(r.data)).catch((e) => setError(e.message));
@@ -55,11 +57,13 @@ export default function ShipmentsPage() {
     }
   }
 
-  async function approveTolerance(id: number) {
-    if (!window.confirm("Approve shipment di luar toleransi buyer? (tercatat audit)")) return;
-    setBusy(true); setError(null);
+  async function approveTolerance() {
+    if (!shipmentToApprove) return;
+    setBusy(true); setError(null); setMessage(null);
     try {
-      await api.post(`/shipping/shipments/${id}/approve-over-tolerance`, {});
+      await api.post(`/shipping/shipments/${shipmentToApprove.id}/approve-over-tolerance`, {});
+      setMessage(`Toleransi shipment ${shipmentToApprove.doc_no} disetujui dan tercatat dalam audit.`);
+      setShipmentToApprove(null);
       load();
     } catch (e: any) {
       setError(e.message);
@@ -94,7 +98,7 @@ export default function ShipmentsPage() {
       <h1 className="text-xl font-bold">Shipment</h1>
 
       {error && <pre className="whitespace-pre-wrap rounded bg-red-50 p-3 text-sm text-red-700">{error}</pre>}
-      {message && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
+      {message && <p role="status" aria-live="polite" className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
 
       <section className="grid grid-cols-2 gap-3 rounded-xl border bg-white p-4 md:grid-cols-5">
         <label className="text-sm">
@@ -123,7 +127,7 @@ export default function ShipmentsPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white">
+      <section className="overflow-x-auto rounded-xl border bg-white">
         <div className="flex items-center gap-3 border-b p-3">
           <span className="text-sm font-medium">Gudang FG untuk ship:</span>
           <select value={fgWarehouseId} onChange={(e) => setFgWarehouseId(e.target.value)} className="rounded border px-2 py-1 text-sm">
@@ -131,7 +135,7 @@ export default function ShipmentsPage() {
             {fgWarehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
           </select>
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b bg-slate-50 text-left">
             <tr>
               <th className="px-3 py-2 font-medium">No. Shipment</th>
@@ -155,7 +159,7 @@ export default function ShipmentsPage() {
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
                     {s.tolerance_check !== "OK" && !s.over_tolerance_approved && s.status !== "SHIPPED" && (
-                      <button onClick={() => approveTolerance(s.id)} disabled={busy} className="rounded bg-amber-500 px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
+                      <button onClick={() => { setMessage(null); setShipmentToApprove(s); }} disabled={busy} className="rounded bg-amber-500 px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
                         Approve Toleransi
                       </button>
                     )}
@@ -172,6 +176,30 @@ export default function ShipmentsPage() {
           </tbody>
         </table>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(shipmentToApprove)}
+        title="Approve Toleransi Buyer?"
+        description="Shipment berada di luar toleransi buyer dan memerlukan persetujuan eksplisit."
+        confirmLabel="Approve Toleransi"
+        variant="danger"
+        loading={busy}
+        onConfirm={approveTolerance}
+        onCancel={() => { if (!busy) setShipmentToApprove(null); }}
+      >
+        {shipmentToApprove && (
+          <div className="space-y-3">
+            <dl className="grid grid-cols-2 gap-3 rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3 text-sm">
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Shipment</dt><dd className="mt-0.5 font-mono font-semibold">{shipmentToApprove.doc_no}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Tolerance check</dt><dd className="mt-0.5 font-semibold text-[var(--color-danger)]">{shipmentToApprove.tolerance_check}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Sales order</dt><dd className="mt-0.5 font-mono font-medium">{shipmentToApprove.sales_order?.doc_no ?? "—"}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Customer</dt><dd className="mt-0.5 font-medium">{shipmentToApprove.sales_order?.customer?.name ?? "—"}</dd></div>
+              <div className="col-span-2"><dt className="text-xs text-[var(--color-text-muted)]">Tanggal kirim</dt><dd className="mt-0.5 font-medium">{shipmentToApprove.ship_date}</dd></div>
+            </dl>
+            <p className="text-sm text-[var(--color-danger)]">Persetujuan ini tercatat dalam audit dan mengizinkan shipment melanjutkan proses di luar toleransi buyer.</p>
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
