@@ -2,41 +2,5 @@
 
 namespace Modules\Purchasing\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Modules\Core\Models\Concerns\BelongsToCompany;
-use Modules\MasterData\Models\Supplier;
-
-/** BR-050: 3-way match (PO–GR–invoice) */
-class SupplierInvoice extends Model
-{
-    use BelongsToCompany;
-
-    public const MATCH_STATUSES = ['PENDING','MATCHED','MISMATCH'];
-    public const STATUSES = ['DRAFT','SUBMITTED','APPROVED','REJECTED','PAID','CANCELLED'];
-
-    protected $fillable = [
-        'company_id', 'doc_no', 'supplier_id', 'purchase_order_id',
-        'supplier_invoice_no', 'invoice_date', 'due_date', 'total_amount',
-        'match_status', 'status', 'created_by', 'updated_by',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'invoice_date' => 'date', 'due_date' => 'date',
-            'total_amount' => 'decimal:4',
-        ];
-    }
-
-    public function lines(): HasMany
-    {
-        return $this->hasMany(SupplierInvoiceLine::class);
-    }
-
-    public function supplier(): BelongsTo
-    {
-        return $this->belongsTo(Supplier::class);
-    }
-}
+use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;use Illuminate\Database\Eloquent\Relations\HasMany;use Modules\Core\Models\Concerns\BelongsToCompany;use Modules\Finance\Models\FinanceTaxLine;use Modules\MasterData\Models\Supplier;
+class SupplierInvoice extends Model{use BelongsToCompany;public const MATCH_STATUSES=['PENDING','MATCHED','MISMATCH'];public const STATUSES=['DRAFT','SUBMITTED','APPROVED','REJECTED','PAID','CANCELLED'];protected $fillable=['company_id','doc_no','supplier_id','purchase_order_id','supplier_invoice_no','invoice_date','due_date','currency_id','exchange_rate','subtotal_amount','tax_amount','withholding_amount','total_amount','base_amount','match_status','status','created_by','updated_by'];protected function casts():array{return['invoice_date'=>'date','due_date'=>'date','exchange_rate'=>'decimal:6','subtotal_amount'=>'decimal:4','tax_amount'=>'decimal:4','withholding_amount'=>'decimal:4','total_amount'=>'decimal:4','base_amount'=>'decimal:4'];}public function lines():HasMany{return$this->hasMany(SupplierInvoiceLine::class);}public function supplier():BelongsTo{return$this->belongsTo(Supplier::class);}public function taxLines():HasMany{return$this->hasMany(FinanceTaxLine::class,'document_id')->where('document_type','AP_INVOICE');}}
