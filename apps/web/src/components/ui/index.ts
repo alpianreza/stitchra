@@ -1,4 +1,5 @@
 export { Button, type ButtonProps } from "./Button";
+export { ConfirmDialog } from "./ConfirmDialog";
 export { DataTable, type DataTableColumn } from "./DataTable";
 export { EmptyState, ErrorState, Skeleton } from "./FeedbackStates";
 export { FilterBar, FilterSelect } from "./FilterBar";
