@@ -51,7 +51,13 @@ RUN apk add --no-cache \
     libpng \
     libjpeg-turbo \
     libwebp \
-    freetype
+    freetype \
+    && apk add --no-cache --virtual .build-deps-php \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
+    freetype-dev
 
 RUN docker-php-ext-configure gd \
       --with-freetype \
@@ -64,7 +70,8 @@ RUN docker-php-ext-configure gd \
       bcmath \
       pcntl \
       posix \
-      opcache
+      opcache \
+    && apk del .build-deps-php
 
 # Tunning PHP untuk import Excel / payload besar
 RUN printf 'upload_max_filesize=100M\npost_max_size=120M\nmemory_limit=512M\n' \
