@@ -4,18 +4,18 @@
 
 ## Executive status
 
-Phases 1–9 and Stages 10A–10D have implementation hardening and regression-test evidence on `main`. **Not production-approved:** full dependency install, PHP/web tests, and clean MySQL migrations have not run in this environment.
+Phases 1–9 and Stages 10A–10E have implementation hardening and regression-test evidence on `main`. **Not production-approved:** dependency installation, full tests, and clean MySQL migrations have not run here.
 
 ## Stage 10 additions
 
-- 10A: meter/yard fabric UOM and no-double-count leftover return.
-- 10B: scoped device tokens and replay-safe versioned offline scans.
-- 10C: immutable MO standard-cost snapshot and stable actual-cost variance.
-- 10D: tax/withholding snapshots plus realized AR/AP FX settlement.
+- 10A: meter/yard fabric UOM and controlled leftover return.
+- 10B: scoped devices and replay-safe offline scans.
+- 10C: immutable MO standard-cost snapshot.
+- 10D: tax/withholding and realized AR/AP FX.
+- 10E: period-end unrealized FX revaluation, close gate, and next-period reversal.
 
 ## Remaining finance scope
 
-- Unrealized period-end FX revaluation and next-period reversal.
 - Bank statement import, matching, reconciliation, and approval.
 - Formal period-close checklist and accounting sign-off.
 - Country-specific tax filing/e-invoicing requirements.
@@ -23,11 +23,11 @@ Phases 1–9 and Stages 10A–10D have implementation hardening and regression-t
 ## Verification blockers
 
 1. Commit real Composer and npm lockfiles.
-2. Smoke-test migrations `000015`–`000018` on clean and representative copied data.
+2. Smoke-test migrations `000015`–`000019` on clean and representative data.
 3. Run full PHP/static/web/Playwright suites.
-4. Run multiprocess concurrency/offline replay tests.
+4. Run payment-versus-close and other multiprocess concurrency tests.
 5. Protect `main`; complete load, restore, security, accounting, UAT, and pilot reviews.
 
 ## Production decision
 
-**NO-GO until verification blockers are completed and approved.**
+**NO-GO until blockers are completed and approved.**
