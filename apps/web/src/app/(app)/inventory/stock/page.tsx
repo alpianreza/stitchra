@@ -1,88 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { DataTable, FilterBar, FilterSelect, PageHeader, type DataTableColumn } from "@/components/ui";
 
-interface Row {
-  material_code: string | null;
-  material_name: string | null;
-  warehouse_code: string | null;
-  lot_no: string | null;
-  roll_id: number | null;
-  ownership: string;
-  on_hand: number;
-  reserved: number;
-  quality_hold: number;
-  available: number;
-  avg_cost: number | null;
-}
-
+interface Row { material_code: string | null; material_name: string | null; warehouse_code: string | null; lot_no: string | null; roll_id: number | null; ownership: string; on_hand: number; reserved: number; quality_hold: number; available: number; avg_cost: number | null }
 interface Warehouse { id: number; code: string; name: string }
 
-/** Inquiry stok — on_hand / reserved / quality_hold / available (BR-006) */
 export default function StockInquiryPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.get<{ data: Warehouse[] }>("/master/warehouses?per_page=100").then((r) => setWarehouses(r.data)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    api.get<{ data: Row[] }>(`/inventory/stock${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`)
-      .then((r) => setRows(r.data))
-      .catch((e) => setError(e.message));
+  useEffect(() => { api.get<{ data: Warehouse[] }>("/master/warehouses?per_page=100").then((response) => setWarehouses(response.data)).catch(() => {}); }, []);
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    api.get<{ data: Row[] }>(`/inventory/stock${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`).then((response) => setRows(response.data)).catch((requestError) => setError(requestError.message)).finally(() => setLoading(false));
   }, [warehouseId]);
+  useEffect(load, [load]);
 
-  const fmt = (n: number | null) => n === null ? "—" : Number(n).toLocaleString("id-ID", { maximumFractionDigits: 4 });
+  const fmt = (value: number | null) => value === null ? "—" : Number(value).toLocaleString("id-ID", { maximumFractionDigits: 4 });
+  const columns: DataTableColumn<Row>[] = [
+    { key: "material", header: "Material", cell: (row) => <div><p className="font-mono font-semibold">{row.material_code ?? "—"}</p><p className="text-xs text-[var(--color-text-muted)]">{row.material_name ?? "—"}</p></div> },
+    { key: "warehouse", header: "Gudang", cell: (row) => row.warehouse_code ?? "—" },
+    { key: "tracking", header: "Lot / Roll", cell: (row) => row.roll_id ? `Roll #${row.roll_id}` : (row.lot_no ?? "—") },
+    { key: "ownership", header: "Ownership", cell: (row) => row.ownership },
+    { key: "onHand", header: "On Hand", align: "right", cell: (row) => <span className="tabular-nums">{fmt(row.on_hand)}</span> },
+    { key: "reserved", header: "Reserved", align: "right", cell: (row) => <span className="font-medium tabular-nums text-[var(--color-warning)]">{fmt(row.reserved)}</span> },
+    { key: "hold", header: "Quality Hold", align: "right", cell: (row) => <span className="tabular-nums text-[var(--color-text-muted)]">{fmt(row.quality_hold)}</span> },
+    { key: "available", header: "Available", align: "right", cell: (row) => <strong className="tabular-nums">{fmt(row.available)}</strong> },
+    { key: "cost", header: "Avg Cost", align: "right", cell: (row) => <span className="tabular-nums">{fmt(row.avg_cost)}</span> },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Inquiry Stok</h1>
-        <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
+      <PageHeader eyebrow="Inventory" title="Inquiry Stok" description="Saldo on hand, reservation, quality hold, dan availability per material." />
+      <FilterBar resultSummary={`${rows.length} saldo stok`}>
+        <FilterSelect label="Gudang" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
           <option value="">Semua gudang</option>
-          {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-        </select>
-      </div>
-
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">Material</th>
-              <th className="px-3 py-2 font-medium">Gudang</th>
-              <th className="px-3 py-2 font-medium">Lot / Roll</th>
-              <th className="px-3 py-2 font-medium">Ownership</th>
-              <th className="px-3 py-2 text-right font-medium">On Hand</th>
-              <th className="px-3 py-2 text-right font-medium">Reserved</th>
-              <th className="px-3 py-2 text-right font-medium">Quality Hold</th>
-              <th className="px-3 py-2 text-right font-medium">Available</th>
-              <th className="px-3 py-2 text-right font-medium">Avg Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2"><span className="font-mono">{r.material_code}</span> {r.material_name}</td>
-                <td className="px-3 py-2">{r.warehouse_code}</td>
-                <td className="px-3 py-2">{r.roll_id ? `Roll #${r.roll_id}` : (r.lot_no ?? "—")}</td>
-                <td className="px-3 py-2">{r.ownership}</td>
-                <td className="px-3 py-2 text-right">{fmt(r.on_hand)}</td>
-                <td className="px-3 py-2 text-right text-amber-700">{fmt(r.reserved)}</td>
-                <td className="px-3 py-2 text-right text-slate-500">{fmt(r.quality_hold)}</td>
-                <td className="px-3 py-2 text-right font-bold">{fmt(r.available)}</td>
-                <td className="px-3 py-2 text-right">{fmt(r.avg_cost)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">Belum ada saldo stok.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+          {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
+        </FilterSelect>
+      </FilterBar>
+      <DataTable caption="Inquiry saldo stok" columns={columns} rows={rows} getRowKey={(row) => `${row.material_code}-${row.warehouse_code}-${row.lot_no}-${row.roll_id}-${row.ownership}`} loading={loading} error={error} onRetry={load} emptyTitle="Belum ada saldo stok" emptyDescription={warehouseId ? "Gudang yang dipilih belum memiliki saldo stok." : "Saldo stok akan muncul setelah transaksi inventory diposting."} minWidth="1080px" mobileCard={(row) => (
+        <article className="space-y-3 p-4"><div><p className="font-mono font-semibold">{row.material_code ?? "—"}</p><p className="text-sm">{row.material_name ?? "—"}</p><p className="text-xs text-[var(--color-text-muted)]">{row.warehouse_code ?? "—"} · {row.roll_id ? `Roll #${row.roll_id}` : (row.lot_no ?? "Tanpa lot")}</p></div><dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-[var(--color-text-muted)]">On Hand</dt><dd className="font-semibold tabular-nums">{fmt(row.on_hand)}</dd></div><div><dt className="text-[var(--color-text-muted)]">Available</dt><dd className="font-bold tabular-nums">{fmt(row.available)}</dd></div><div><dt className="text-[var(--color-text-muted)]">Reserved</dt><dd className="font-medium tabular-nums text-[var(--color-warning)]">{fmt(row.reserved)}</dd></div><div><dt className="text-[var(--color-text-muted)]">Quality Hold</dt><dd className="tabular-nums">{fmt(row.quality_hold)}</dd></div></dl></article>
+      )} />
     </div>
   );
 }

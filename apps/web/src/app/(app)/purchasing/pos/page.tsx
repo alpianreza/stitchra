@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Button, DataTable, FilterBar, FilterSelect, PageHeader, StatusBadge, type DataTableColumn } from "@/components/ui";
 
 interface Po {
   id: number;
@@ -13,90 +14,55 @@ interface Po {
   total_amount: string;
   supplier?: { name: string };
 }
-
 interface Page { data: Po[]; total: number }
 
-/** Daftar PO + aksi submit untuk approval (BR-015) */
 export default function PurchaseOrdersPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [acting, setActing] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  function load() {
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
     api.get<Page>(`/purchasing/pos${status ? `?status=${status}` : ""}`)
       .then(setPage)
-      .catch((e) => setError(e.message));
-  }
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, [status]);
 
-  useEffect(load, [status]);
+  useEffect(load, [load]);
 
   async function submit(id: number) {
     setActing(id); setError(null);
-    try {
-      await api.post(`/purchasing/pos/${id}/submit`, {});
-      load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setActing(null);
-    }
+    try { await api.post(`/purchasing/pos/${id}/submit`, {}); load(); }
+    catch (requestError: any) { setError(requestError.message); }
+    finally { setActing(null); }
   }
 
-  const fmt = (n: string) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(Number(n));
+  const fmt = (value: string) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(Number(value));
+  const columns: DataTableColumn<Po>[] = [
+    { key: "document", header: "No. PO", cell: (po) => <span className="font-mono font-semibold">{po.doc_no}</span> },
+    { key: "supplier", header: "Supplier", cell: (po) => po.supplier?.name ?? "—" },
+    { key: "order", header: "Tgl Order", cell: (po) => po.order_date },
+    { key: "expected", header: "Ekspektasi", cell: (po) => po.expected_date ?? "—" },
+    { key: "total", header: "Total", align: "right", cell: (po) => <span className="font-medium tabular-nums">{fmt(po.total_amount)}</span> },
+    { key: "status", header: "Status", cell: (po) => <StatusBadge status={po.status} /> },
+    { key: "action", header: "Aksi", align: "right", cell: (po) => po.status === "DRAFT" ? <Button size="sm" variant="primary" loading={acting === po.id} onClick={() => submit(po.id)}>Submit</Button> : "—" },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Purchase Order</h1>
-        <div className="flex items-center gap-2">
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
-            <option value="">Semua status</option>
-            {["DRAFT", "SUBMITTED", "APPROVED", "PARTIAL_RECEIVED", "RECEIVED", "CLOSED"].map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <Link href="/purchasing/pos/new" className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white">+ Buat PO</Link>
-        </div>
-      </div>
-
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">No. PO</th>
-              <th className="px-3 py-2 font-medium">Supplier</th>
-              <th className="px-3 py-2 font-medium">Tgl Order</th>
-              <th className="px-3 py-2 font-medium">Ekspektasi</th>
-              <th className="px-3 py-2 text-right font-medium">Total</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(page?.data ?? []).map((po) => (
-              <tr key={po.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono">{po.doc_no}</td>
-                <td className="px-3 py-2">{po.supplier?.name ?? "—"}</td>
-                <td className="px-3 py-2">{po.order_date}</td>
-                <td className="px-3 py-2">{po.expected_date ?? "—"}</td>
-                <td className="px-3 py-2 text-right">{fmt(po.total_amount)}</td>
-                <td className="px-3 py-2"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{po.status}</span></td>
-                <td className="px-3 py-2">
-                  {po.status === "DRAFT" && (
-                    <button onClick={() => submit(po.id)} disabled={acting === po.id} className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
-                      Submit
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {page && page.data.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">Belum ada PO.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <PageHeader eyebrow="Purchasing" title="Purchase Order" description="Kelola komitmen pembelian dan status penerimaan supplier." actions={<Link href="/purchasing/pos/new" className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">Buat PO</Link>} />
+      <FilterBar resultSummary={page ? `${page.total} purchase order` : undefined}>
+        <FilterSelect label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">Semua status</option>
+          {["DRAFT", "SUBMITTED", "APPROVED", "PARTIAL_RECEIVED", "RECEIVED", "CLOSED"].map((item) => <option key={item}>{item}</option>)}
+        </FilterSelect>
+      </FilterBar>
+      <DataTable caption="Daftar purchase order" columns={columns} rows={page?.data ?? []} getRowKey={(po) => po.id} loading={loading} error={error} onRetry={load} emptyTitle="Belum ada purchase order" emptyDescription="Buat purchase order pertama untuk memulai proses pembelian." minWidth="900px" mobileCard={(po) => (
+        <article className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono font-semibold">{po.doc_no}</p><p className="text-sm">{po.supplier?.name ?? "—"}</p></div><StatusBadge status={po.status} /></div><dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-[var(--color-text-muted)]">Ekspektasi</dt><dd className="font-medium">{po.expected_date ?? "—"}</dd></div><div><dt className="text-[var(--color-text-muted)]">Total</dt><dd className="font-semibold tabular-nums">{fmt(po.total_amount)}</dd></div></dl>{po.status === "DRAFT" && <Button className="w-full" size="sm" variant="primary" loading={acting === po.id} onClick={() => submit(po.id)}>Submit untuk Approval</Button>}</article>
+      )} />
     </div>
   );
 }
