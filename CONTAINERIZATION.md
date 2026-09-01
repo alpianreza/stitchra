@@ -1,81 +1,84 @@
+---
+title: Stitchra Containerization Guide
+status: ACTIVE
+version: 1.1
+last_updated: 2026-09-01
+authority: OPERATIONS
+---
+
 # Stitchra Containerization Guide
+
+For production readiness and dependency-lock status, use the canonical [Project Status](./docs/00-governance/PROJECT_STATUS.md). This guide describes intended Docker operations and does not claim that migrations or tests have passed.
 
 ## Quick Start
 
 ```bash
-# Build and start all services
 docker compose -f infra/docker-compose.yml up -d --build
-
-# Initialize Laravel
-docker exec stitchra-api php artisan key:generate
-docker exec stitchra-api php artisan migrate --seed
-
-# Create MinIO bucket
-docker exec stitchra-minio mc mb minio/stitchra
+docker compose -f infra/docker-compose.yml exec api php artisan key:generate
+docker compose -f infra/docker-compose.yml exec api php artisan migrate --seed
 ```
 
 ## Services
 
-- **API (Laravel)** — http://localhost:8000 or http://localhost/api
-- **Web (Next.js)** — http://localhost:3000 or http://localhost
-- **MinIO Console** — http://localhost:9001 (user: stitchra, pass: stitchra_secret)
-- **MySQL** — localhost:3306
-- **Redis** — localhost:6379
+- API: <http://localhost:8000> or <http://localhost/api>
+- Web: <http://localhost:3000> or <http://localhost>
+- MinIO Console: <http://localhost:9001>
+- MySQL: `localhost:3306`
+- Redis: `localhost:6379`
+
+Credentials and secrets must come from environment configuration; this document intentionally does not publish defaults.
 
 ## Architecture
 
-### Multi-stage Builds
-- **Dockerfile.api**: Composer deps compiled in builder, lightweight runtime with PHP-FPM + Nginx
-- **Dockerfile.web**: Node modules in builder, production runtime with dumb-init for signals
+- Multi-stage Dockerfiles for API and web.
+- Dependencies are built separately from application code for layer caching.
+- Next.js runs as a non-root user where configured by the current Dockerfile.
+- Service readiness is managed through Compose health checks and dependencies.
+- Services communicate on the Compose network using service DNS names.
+- Nginx routes application and API traffic according to `infra` configuration.
 
-### Layer Caching
-- Dependencies pinned via `package-lock.json` and `composer.lock`
-- Code copied separately to maximize cache hits
-- Non-root user for Next.js (nextjs:1001)
+Do not infer dependency reproducibility from this guide. Verify lockfiles and current blockers in [Project Status](./docs/00-governance/PROJECT_STATUS.md).
 
-### Health Checks
-- All services have readiness probes
-- Compose service dependencies configured with health conditions
-- API and Web include HTTP endpoint checks
+## Common Operations
 
-### Networking
-- All services on `stitchra` bridge network
-- Internal DNS: `service_name:port` (e.g., `mysql:3306`)
-- Nginx reverse proxy routes `/api/*` to API, `/` to Web
-
-## Development Tips
-
-### Rebuild after code changes
 ```bash
+# Build and start
 docker compose -f infra/docker-compose.yml build
 docker compose -f infra/docker-compose.yml up -d
+
+# Inspect status and logs
+docker compose -f infra/docker-compose.yml ps
+docker compose -f infra/docker-compose.yml logs -f api web
+
+# Run documented checks
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pest
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pint --test
+docker compose -f infra/docker-compose.yml exec web npm run build
+
+# Stop
+docker compose -f infra/docker-compose.yml down
 ```
 
-### View logs
-```bash
-docker compose -f infra/docker-compose.yml logs -f api
-docker compose -f infra/docker-compose.yml logs -f web
-```
+Resetting volumes is destructive and should only be used for an intentional local reset:
 
-### Access containers
-```bash
-docker exec -it stitchra-api sh
-docker exec -it stitchra-web sh
-```
-
-### Reset all (careful!)
 ```bash
 docker compose -f infra/docker-compose.yml down -v
 docker compose -f infra/docker-compose.yml up -d --build
 ```
 
-## Production Considerations
+## Production Requirements
 
-- Replace `APP_DEBUG=true` and `TELESCOPE_ENABLED=false` with appropriate values
-- Use strong passwords for MySQL and MinIO
-- Set `NODE_ENV` to `production` in web service (already done)
-- Use external secret management (Docker Secrets, env files, or CI/CD secrets)
-- Configure real domain in `SANCTUM_STATEFUL_DOMAINS`
-- Set up proper logging (ELK, Datadog, etc.)
-- Enable HTTPS via reverse proxy or managed certificate service
-- Add resource limits: `cpu_shares`, `mem_limit` in compose for each service
+- Disable debug tooling in production.
+- Use external secret management and strong credentials.
+- Configure real domains, HTTPS, trusted hosts, and security headers.
+- Configure production logging, monitoring, and alert routing.
+- Define resource limits and capacity expectations.
+- Validate object-storage access and malware/file policies.
+- Complete clean migration, backup/restore, security, accounting, AQL, concurrency, and UAT evidence listed in Project Status.
+
+## Related Documents
+
+- [Documentation Index](./docs/README.md)
+- [Project Status](./docs/00-governance/PROJECT_STATUS.md)
+- [Database Blueprint](./docs/ERP_GARMENT_DATABASE_BLUEPRINT.md)
+- [Decision Log](./docs/DECISION_LOG.md)

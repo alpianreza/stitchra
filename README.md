@@ -1,62 +1,53 @@
 # Stitchra — ERP Garment
 
-Apparel Manufacturing Management System berbasis Laravel 13, Next.js 16, MySQL, Redis, dan MinIO.
+Apparel Manufacturing Management System untuk proses garment end-to-end, dibangun sebagai Laravel modular monolith dengan frontend Next.js.
 
-> Status: implementasi sudah sampai Stage 10G, tetapi belum production-approved. Lihat [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
+> **Readiness:** implementation and hardening records exist through Stage 10G, but the system is not production-approved. See the canonical [Project Status](./docs/00-governance/PROJECT_STATUS.md).
 
-## Struktur
+## Architecture Summary
+
+- Backend: Laravel 13 under `apps/api`
+- Frontend: Next.js 16 / React under `apps/web`
+- Data: MySQL 8.x, Redis, and MinIO
+- Runtime: Docker Compose and Nginx under `infra`
+- Direction: on-premise first, cloud-ready, with documented PostgreSQL portability constraints
+
+Detailed business and architecture authority is indexed in [`docs/README.md`](./docs/README.md).
+
+## Repository Structure
 
 ```text
-apps/api/   Backend Laravel
-apps/web/   Frontend Next.js
-infra/      Docker Compose, Dockerfile, Nginx, MySQL
-docs/       Blueprint, business rules, dan phase notes
+apps/api/       Laravel API and modular business domains
+apps/web/       Next.js web application
+infra/          Docker Compose, Dockerfiles, Nginx, and service configuration
+docs/           Business authority, architecture, governance, roadmap, and phase history
 ```
 
-## Jalankan dari VS Code dengan Docker
+## Quick Start
 
-Prasyarat: Git, VS Code, Docker Desktop/Compose v2, internet pada build pertama, serta port `80`, `3000`, `3306`, `6379`, `8000`, `9000`, dan `9001`. PHP, Composer, Node, dan database lokal tidak wajib.
+Prerequisites: Git, Docker Desktop or Docker Compose v2, and available local service ports.
 
 ```bash
 git clone https://github.com/alpianreza/stitchra.git
 cd stitchra
-code .
-```
-
-Buat environment API:
-
-```bash
-# macOS/Linux/Git Bash
 cp apps/api/.env.example apps/api/.env
-
-# PowerShell:
-# Copy-Item apps/api/.env.example apps/api/.env
-```
-
-Build, start dependency services, lalu generate key:
-
-```bash
 docker compose -f infra/docker-compose.yml build
 docker compose -f infra/docker-compose.yml up -d mysql redis minio
-docker compose -f infra/docker-compose.yml ps
 docker compose -f infra/docker-compose.yml run --rm --no-deps api php artisan key:generate
-```
-
-Tunggu MySQL, Redis, dan MinIO berstatus `healthy`, kemudian:
-
-```bash
 docker compose -f infra/docker-compose.yml up -d
 docker compose -f infra/docker-compose.yml exec api php artisan db:seed --force
 ```
 
-Buka:
+Open:
 
-- App/Nginx: <http://localhost>
-- Frontend: <http://localhost:3000>
+- Application: <http://localhost>
+- Web: <http://localhost:3000>
 - API: <http://localhost:8000>
 - MinIO Console: <http://localhost:9001>
 
-Command umum:
+See [Containerization Guide](./CONTAINERIZATION.md) for operations and troubleshooting.
+
+## Development and Testing
 
 ```bash
 docker compose -f infra/docker-compose.yml logs -f api web
@@ -67,35 +58,12 @@ docker compose -f infra/docker-compose.yml exec web npm run test:e2e
 docker compose -f infra/docker-compose.yml down
 ```
 
-Build pertama masih menggunakan `composer install`/`npm install` tanpa lockfile. Dependency belum deterministik sampai `composer.lock` dan `package-lock.json` asli dibuat dan di-commit.
+These commands describe the intended workflow; they are not evidence that tests passed. Current verification blockers and lockfile status are maintained only in the [canonical Project Status](./docs/00-governance/PROJECT_STATUS.md).
 
-Jika dependency berubah:
+## Deployment
 
-```bash
-docker compose -f infra/docker-compose.yml build --no-cache api web
-docker compose -f infra/docker-compose.yml up -d --force-recreate api web nginx
-```
+Deployment is on-premise-first through Docker and Nginx. Before production, complete secrets, HTTPS, monitoring, backup/restore, migration, concurrency, accounting, security, and UAT requirements from the [Project Status](./docs/00-governance/PROJECT_STATUS.md).
 
-Reset seluruh volume lokal:
+## Documentation
 
-```bash
-docker compose -f infra/docker-compose.yml down -v
-docker compose -f infra/docker-compose.yml up -d --build
-```
-
-Troubleshooting:
-
-- Dependency hilang: recreate Compose; `/app/vendor` dan `/app/node_modules` harus menjadi volume terpisah.
-- Migration gagal: lihat `docker compose -f infra/docker-compose.yml logs api` dan `docker compose -f infra/docker-compose.yml exec api php artisan migrate:status`.
-- Windows lambat: simpan repo pada filesystem WSL2.
-
-Migration `000015`–`000021` masih memerlukan clean dan representative-data smoke test sebelum production.
-
-## Dokumentasi
-
-- [Business rules](./docs/ERP_GARMENT_BUSINESS_RULES.md)
-- [Roadmap](./docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md)
-- [Decision log](./docs/DECISION_LOG.md)
-- [Project status](./PROJECT_STATUS.md)
-
-Kode belum berarti sistem telah lolos full test, migration smoke test, UAT, security review, atau accounting sign-off.
+Start at the [Documentation Index](./docs/README.md). It defines canonical sources, authority precedence, lifecycle status, and phase-history navigation.
