@@ -1,6 +1,6 @@
 {
     "name": "stitchra/api",
-    "description": "Stitchra ERP Garment — backend (modular monolith)",
+    "description": "Stitchra ERP Garment â€” backend (modular monolith)",
     "type": "project",
     "require": {
         "php": "^8.5",
@@ -8,6 +8,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/horizon": "^5.0",
         "laravel/reverb": "^1.0",
+        "predis/predis": "^2.0",
         "maatwebsite/excel": "^3.1",
         "spatie/browsershot": "^5.0"
     },

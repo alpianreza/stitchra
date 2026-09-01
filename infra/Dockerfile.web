@@ -1,42 +1,46 @@
-# Multi-stage build for Next.js
-# Stage 1: Builder — keep the Node major aligned with CI.
+# syntax=docker/dockerfile:1
+
+############ Stage 1: Builder ############
 FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-COPY apps/web/package.json ./
-RUN npm install --no-audit --no-fund
+COPY apps/web/package.json apps/web/package-lock.json* ./
+RUN npm install
 
-COPY apps/web/ .
+COPY apps/web/ ./
 
-# Never pipe or mask the build exit code.
+# Di-inline saat build oleh Next.js (dipakai apps/web/src/lib/api.ts)
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
-# Stage 2: Runtime
+############ Stage 2: Runtime (output standalone) ############
 FROM node:24-alpine
-
-WORKDIR /app
 
 RUN apk add --no-cache dumb-init
 
-COPY apps/web/package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+WORKDIR /app
 
-COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY apps/web/src ./src
-COPY apps/web/next.config.ts apps/web/tsconfig.json ./
 
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001 && \
-    chown -R nextjs:nodejs /app
+RUN addgroup -g 1001 -S nodejs \
+    && adduser -S nextjs -u 1001 -G nodejs \
+    && chown -R nextjs:nodejs /app
 
 USER nextjs
 
+ENV NODE_ENV=production \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000',(r)=>{if(r.statusCode!==200)throw new Error('status '+r.statusCode)})" || exit 1
 
-ENTRYPOINT ["/sbin/dumb-init", "--"]
-CMD ["npm", "start"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["node", "server.js"]

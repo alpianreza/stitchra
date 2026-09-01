@@ -3,79 +3,76 @@
 ## Quick Start
 
 ```bash
-# Build and start all services
+# Build and start all services (mysql, redis, minio, api, reverb, web, nginx)
 docker compose -f infra/docker-compose.yml up -d --build
 
-# Initialize Laravel
-docker exec stitchra-api php artisan key:generate
-docker exec stitchra-api php artisan migrate --seed
-
-# Create MinIO bucket
-docker exec stitchra-minio mc mb minio/stitchra
+# Seed data awal (sekali)
+docker exec stitchra-api php artisan db:seed --force
 ```
 
-## Services
+Migrasi berjalan otomatis saat container api start (`php artisan migrate --force`).
+`APP_KEY` dev sudah di-set di compose dan dipakai bersama oleh api & reverb (signature websocket harus cocok).
 
-- **API (Laravel)** — http://localhost:8000 or http://localhost/api
-- **Web (Next.js)** — http://localhost:3000 or http://localhost
-- **MinIO Console** — http://localhost:9001 (user: stitchra, pass: stitchra_secret)
-- **MySQL** — localhost:3306
-- **Redis** — localhost:6379
+## Services & Port (host)
+
+| Service | URL / Port host | Catatan |
+|---|---|---|
+| Nginx reverse proxy | http://localhost | `/api/*` -> api, sisanya -> web |
+| API (Laravel) | http://localhost:8001 | akses langsung (8000 di host ini terpakai proses lain) |
+| Web (Next.js) | http://localhost:3000 | juga lewat http://localhost |
+| MinIO Console | http://localhost:9001 | user `stitchra` / pass `stitchra_secret` |
+| MySQL | localhost:3307 | 3306 dipakai MySQL XAMPP di host ini |
+| Redis | localhost:6379 | |
+
+Bucket S3 `stitchra` dibuat otomatis oleh service one-shot `minio-init`.
 
 ## Architecture
 
 ### Multi-stage Builds
-- **Dockerfile.api**: Composer deps compiled in builder, lightweight runtime with PHP-FPM + Nginx
-- **Dockerfile.web**: Node modules in builder, production runtime with dumb-init for signals
+- **Dockerfile.api**: composer deps + vendor di builder; runtime PHP-FPM + Nginx dalam satu container; healthcheck `/up` (route health framework Laravel)
+- **Dockerfile.web**: build Next.js di builder; runtime memakai `output: standalone` (`node server.js`), non-root user, dumb-init untuk signal handling
 
 ### Layer Caching
-- Dependencies pinned via `package-lock.json` and `composer.lock`
-- Code copied separately to maximize cache hits
-- Non-root user for Next.js (nextjs:1001)
+- Dependency (composer/npm) di-layer terpisah dari source
+- `.dockerignore` di root repo membuang `.git`, `docs/`, `node_modules`, `vendor`, `.next`, artefak lain dari build context
 
 ### Health Checks
-- All services have readiness probes
-- Compose service dependencies configured with health conditions
-- API and Web include HTTP endpoint checks
+- Service inti punya readiness probe; compose `depends_on` memakai `condition: service_healthy` (mysql, redis)
+- `api`: `curl http://localhost/up`; `web`: HTTP 200 di `/`
 
 ### Networking
-- All services on `stitchra` bridge network
-- Internal DNS: `service_name:port` (e.g., `mysql:3306`)
-- Nginx reverse proxy routes `/api/*` to API, `/` to Web
+- Semua service di jaringan `stitchra` bridge; DNS internal `mysql:3306`, `redis:6379`, `minio:9000`
+- Nginx meroute `/api/*` ke api, `/` ke web
+- Browser memanggil API langsung di `http://localhost:8001` via `NEXT_PUBLIC_API_URL` (build arg web)
 
 ## Development Tips
 
-### Rebuild after code changes
+### Rebuild setelah ubah kode
+Kode dibake ke image (tanpa bind mount source agar vendor/node_modules hasil build tidak tertimpa):
 ```bash
-docker compose -f infra/docker-compose.yml build
+docker compose -f infra/docker-compose.yml build api web
 docker compose -f infra/docker-compose.yml up -d
 ```
 
-### View logs
+### Logs & akses container
 ```bash
 docker compose -f infra/docker-compose.yml logs -f api
 docker compose -f infra/docker-compose.yml logs -f web
-```
-
-### Access containers
-```bash
 docker exec -it stitchra-api sh
 docker exec -it stitchra-web sh
 ```
 
-### Reset all (careful!)
+### Reset penuh (HAPUS semua data!)
 ```bash
 docker compose -f infra/docker-compose.yml down -v
-docker compose -f infra/docker-compose.yml up -d --build
 ```
 
 ## Production Considerations
 
-- Replace `APP_DEBUG=true` and `TELESCOPE_ENABLED=false` with appropriate values
-- Use strong passwords for MySQL and MinIO
-- Set `NODE_ENV` to `production` in web service (already done)
-- Use external secret management (Docker Secrets, env files, or CI/CD secrets)
-- Configure real domain in `SANCTUM_STATEFUL_DOMAINS`
-- Set up proper logging (ELK, Datadog, etc.)
-- Enable HTTPS via reverse proxy or managed certificate service
-- Add resource limits: `cpu_shares`, `mem_limit` in compose for each service
+- Ganti semua secret dev di `infra/docker-compose.yml` (`APP_KEY`, MySQL, MinIO, Reverb) - pakai secret management (Docker Secrets, env files CI/CD)
+- `APP_DEBUG=false`, `APP_ENV=production`, `TELESCOPE_ENABLED=false`
+- Set domain asli di `SANCTUM_STATEFUL_DOMAINS`, `FRONTEND_URL`, dan build arg `NEXT_PUBLIC_API_URL`
+- Enable HTTPS via reverse proxy / managed certificate
+- Tambah resource limits per service di compose
+- `spatie/browsershot` butuh Chromium di runtime bila fitur PDF/ekspor dipakai (belum termasuk di image)
+- Laravel Horizon belum punya service sendiri; bila dibutuhkan jalankan `php artisan horizon` di container terpisah (ext `pcntl`/`posix` sudah terpasang di image api)

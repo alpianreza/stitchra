@@ -23,13 +23,10 @@ docs/       → blueprint bisnis (LOCKED v1.x)
 
 ## Quickstart (dev)
 ```bash
-cp apps/api/.env.example apps/api/.env
 docker compose -f infra/docker-compose.yml up -d --build
-docker exec stitchra-api composer install
-docker exec stitchra-api php artisan key:generate
-docker exec stitchra-api php artisan migrate --seed
+docker exec stitchra-api php artisan db:seed --force   # seed data awal (sekali)
 ```
-Web: http://localhost · API: http://localhost:8000 · MinIO console: http://localhost:9001
+Web: http://localhost · API: http://localhost:8001 (langsung) / http://localhost/api (via Nginx) · MinIO console: http://localhost:9001
 
 ## Status implementasi
 
