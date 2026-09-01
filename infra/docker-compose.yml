@@ -12,31 +12,26 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "3306:3306"
+    ports: ["3306:3306"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - stitchra
+    networks: [stitchra]
 
   redis:
     image: redis:8-alpine
     container_name: stitchra-redis
     command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
+    volumes: [redis_data:/data]
+    ports: ["6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - stitchra
+    networks: [stitchra]
 
   minio:
     image: minio/minio:latest
@@ -45,18 +40,14 @@ services:
       MINIO_ROOT_USER: stitchra
       MINIO_ROOT_PASSWORD: stitchra_secret
     command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    volumes: [minio_data:/data]
+    ports: ["9000:9000", "9001:9001"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - stitchra
+    networks: [stitchra]
 
   api:
     build:
@@ -96,26 +87,21 @@ services:
       FRONTEND_URL: http://localhost
       TELESCOPE_ENABLED: false
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    ports:
-      - "8000:80"
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    ports: ["8000:80"]
     volumes:
-      # Paths are relative to this compose file in infra/.
       - ../apps/api:/app
+      - /app/vendor
       - api_storage:/app/storage
-    networks:
-      - stitchra
+    networks: [stitchra]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
 
   web:
     build:
@@ -124,34 +110,28 @@ services:
     container_name: stitchra-web
     environment:
       NODE_ENV: production
-    depends_on:
-      - api
-    ports:
-      - "3000:3000"
+    depends_on: [api]
+    ports: ["3000:3000"]
     volumes:
       - ../apps/web:/app
+      - /app/node_modules
       - /app/.next
-    networks:
-      - stitchra
+    networks: [stitchra]
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
 
   nginx:
     image: nginx:alpine
     container_name: stitchra-nginx
     volumes:
       - ./nginx/docker.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "80:80"
-    depends_on:
-      - api
-      - web
-    networks:
-      - stitchra
+    ports: ["80:80"]
+    depends_on: [api, web]
+    networks: [stitchra]
 
 volumes:
   mysql_data:

@@ -1,38 +1,190 @@
 # Stitchra — ERP Garment
 
-Apparel Manufacturing Management System. Dibangun berdasarkan blueprint bisnis di [`docs/`](./docs) — **baca blueprint dulu sebelum coding**.
+Apparel Manufacturing Management System berbasis Laravel 13, Next.js 16, MySQL, Redis, dan MinIO.
 
-## Prinsip
-> Kode mengikuti business specification, bukan sebaliknya. Semua business rule: `docs/ERP_GARMENT_BUSINESS_RULES.md`. Semua keputusan: `docs/DECISION_LOG.md`.
+> Status: implementasi sudah sampai Stage 10E, tetapi belum production-approved. Lihat [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 
-## Stack (DEC-2026-08-13-02/03)
-- **Backend:** Laravel 13 + PHP 8.5 (modular monolith, modul = Module Map)
-- **Frontend:** Next.js 16 + React (SPA via Sanctum)
-- **DB:** MySQL 8.x (sementara) → portabel ke PostgreSQL (aturan: Database Blueprint §7)
-- **Cache/Queue:** Redis 8 + Horizon · **Realtime:** Reverb · **Storage:** S3-compatible (MinIO lokal)
-- **Infra:** Docker on-premise + Nginx · **CI/CD:** GitHub Actions
-- **Test:** Pest + PHPUnit + Playwright
+## Struktur repository
 
-## Struktur
-```
-apps/api    → backend Laravel (modul per domain)
-apps/web    → frontend Next.js
-infra/      → docker-compose, nginx, Dockerfiles
-docs/       → blueprint bisnis (LOCKED v1.x)
+```text
+apps/api/   Backend Laravel
+apps/web/   Frontend Next.js
+infra/      Docker Compose, Dockerfile, Nginx, MySQL
+apps/api/.env.example  Contoh environment API
+docs/       Blueprint, business rules, dan phase notes
 ```
 
-## Quickstart (dev)
+## Cara paling cepat menjalankan dari VS Code
+
+### Prasyarat
+
+- Git
+- VS Code
+- Docker Desktop dengan Docker Compose v2
+- Internet untuk mengunduh image dan dependency pada build pertama
+- Port lokal `80`, `3000`, `3306`, `6379`, `8000`, `9000`, dan `9001` tersedia
+
+PHP, Composer, Node, npm, MySQL, dan Redis lokal tidak wajib untuk cara Docker ini.
+
+### 1. Clone dan buka repository
+
+```bash
+git clone https://github.com/alpianreza/stitchra.git
+cd stitchra
+code .
+```
+
+Jalankan command berikut dari terminal VS Code pada folder root `stitchra`.
+
+### 2. Buat environment API
+
+macOS/Linux/Git Bash:
+
 ```bash
 cp apps/api/.env.example apps/api/.env
-docker compose -f infra/docker-compose.yml up -d --build
-docker exec stitchra-api composer install
-docker exec stitchra-api php artisan key:generate
-docker exec stitchra-api php artisan migrate --seed
 ```
-Web: http://localhost · API: http://localhost:8000 · MinIO console: http://localhost:9001
 
-## Status implementasi
+PowerShell:
 
-Kode dan feature test sudah mencakup beberapa domain lintas fase. Keberadaan kode belum berarti fase telah lolos review/UAT. Status aktual, pekerjaan hardening, dan exit criteria production dicatat di [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
+```powershell
+Copy-Item apps/api/.env.example apps/api/.env
+```
 
-Roadmap resmi tetap tersedia di [`docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`](./docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md).
+Jangan commit file `.env` atau secret lokal.
+
+### 3. Build image
+
+```bash
+docker compose -f infra/docker-compose.yml build
+```
+
+Build pertama menjalankan `composer install` dan `npm install`. Repo belum memiliki `composer.lock` dan `package-lock.json`, sehingga hasil dependency belum deterministik sampai lockfile asli dibuat dan di-commit.
+
+### 4. Jalankan service data terlebih dahulu
+
+```bash
+docker compose -f infra/docker-compose.yml up -d mysql redis minio
+```
+
+Tunggu sampai status ketiganya `healthy`:
+
+```bash
+docker compose -f infra/docker-compose.yml ps
+```
+
+### 5. Generate application key
+
+```bash
+docker compose -f infra/docker-compose.yml run --rm --no-deps api php artisan key:generate
+```
+
+Command ini menulis `APP_KEY` ke `apps/api/.env` pada working copy.
+
+### 6. Jalankan seluruh aplikasi
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+```
+
+API container otomatis menjalankan migration pada environment local. Setelah API sehat, jalankan seed satu kali:
+
+```bash
+docker compose -f infra/docker-compose.yml exec api php artisan db:seed --force
+```
+
+### 7. Buka aplikasi
+
+- Aplikasi melalui Nginx: <http://localhost>
+- Frontend langsung: <http://localhost:3000>
+- API langsung: <http://localhost:8000>
+- MinIO API: <http://localhost:9000>
+- MinIO Console: <http://localhost:9001>
+
+Lihat log jika service belum sehat:
+
+```bash
+docker compose -f infra/docker-compose.yml logs -f api web
+```
+
+## Command development sehari-hari
+
+```bash
+# Status container
+docker compose -f infra/docker-compose.yml ps
+
+# Laravel test
+docker compose -f infra/docker-compose.yml exec api php artisan test
+
+# Pest
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pest
+
+# Laravel Pint check
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pint --test
+
+# Next.js build
+docker compose -f infra/docker-compose.yml exec web npm run build
+
+# Playwright
+docker compose -f infra/docker-compose.yml exec web npm run test:e2e
+
+# Masuk shell API
+docker compose -f infra/docker-compose.yml exec api sh
+
+# Matikan container tanpa menghapus data
+docker compose -f infra/docker-compose.yml down
+```
+
+Jika `composer.json` atau `package.json` berubah, rebuild image dan recreate container:
+
+```bash
+docker compose -f infra/docker-compose.yml build --no-cache api web
+docker compose -f infra/docker-compose.yml up -d --force-recreate api web nginx
+```
+
+## Reset database lokal
+
+Perintah berikut menghapus seluruh database, Redis, storage volume, dan dependency volume Docker lokal:
+
+```bash
+docker compose -f infra/docker-compose.yml down -v
+docker compose -f infra/docker-compose.yml up -d --build
+```
+
+Setelah reset, generate ulang key bila `.env` juga dihapus, lalu jalankan seed.
+
+## Troubleshooting
+
+### `vendor/autoload.php` atau package frontend tidak ditemukan
+
+Pastikan Compose terbaru memiliki anonymous volume `/app/vendor` dan `/app/node_modules`, lalu recreate:
+
+```bash
+docker compose -f infra/docker-compose.yml down
+docker compose -f infra/docker-compose.yml up -d --build --force-recreate
+```
+
+### API gagal saat migration
+
+```bash
+docker compose -f infra/docker-compose.yml logs api
+docker compose -f infra/docker-compose.yml exec api php artisan migrate:status
+```
+
+Migration `000015`–`000019` masih memerlukan clean dan representative-data smoke test sebelum deployment production.
+
+### Port sudah digunakan
+
+Hentikan service yang memakai port terkait atau ubah mapping sisi kiri pada `infra/docker-compose.yml`.
+
+### Windows
+
+Simpan repository pada filesystem WSL2 bila bind-mount Docker Desktop terasa lambat. Jalankan command dari terminal WSL/Git Bash atau gunakan padanan PowerShell untuk operasi file.
+
+## Dokumentasi
+
+- Business rules: [`docs/ERP_GARMENT_BUSINESS_RULES.md`](./docs/ERP_GARMENT_BUSINESS_RULES.md)
+- Implementation roadmap: [`docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md`](./docs/ERP_GARMENT_IMPLEMENTATION_ROADMAP.md)
+- Decision log: [`docs/DECISION_LOG.md`](./docs/DECISION_LOG.md)
+- Status audit: [`PROJECT_STATUS.md`](./PROJECT_STATUS.md)
+
+Kode yang tersedia belum berarti sistem telah lolos full test, migration smoke test, UAT, security review, atau accounting sign-off.
