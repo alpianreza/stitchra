@@ -1,20 +1,20 @@
-# Finance, Tax, FX, and Actual Costing
+# Finance
 
-## Period-end FX revaluation
+## Bank reconciliation
 
-- Foreign AR/AP outstanding is reconstructed as of calendar month-end using only payments dated on or before that date.
-- Carrying rate comes from the invoice snapshot; closing rate comes from the latest company exchange rate not later than month-end.
-- AR gain/loss = revalued base − carrying base. AP gain/loss uses the opposite sign.
-- Each company/period has one immutable run, deterministic input hash, per-document lines, aggregate totals, and linked journals.
-- Repeating the same run is idempotent. Changed exposure or rates causes a conflict instead of silent reposting.
-- Explicit mappings are required for `AR_FX_REVALUE_GAIN`, `AR_FX_REVALUE_LOSS`, `AP_FX_REVALUE_GAIN`, and `AP_FX_REVALUE_LOSS`.
-- Reversal posts on day one of the following open period and is unique per original journal.
-- A period with foreign exposure cannot close without a matching revaluation hash.
+- Company bank accounts bind a currency and bank GL account.
+- JSON statement import validates date range, direction, positive amounts, row limit, and opening + credits − debits = closing.
+- Canonical SHA-256 fingerprints reject duplicate bank transactions across imports.
+- AR receipts match CREDIT lines; AP payments match DEBIT lines; bank/payment currencies must match.
+- Partial and many-to-many matching are supported with ceilings on both statement lines and source payments.
+- Unmatched lines may be ignored only with an explicit audited reason.
+- Bank-fee lines post through the explicit `BANK_FEE` account mapping.
+- Reconciliation approval requires every line to be MATCHED or IGNORED and then locks further service-level changes.
 
-## Tax and settlement
+## FX and tax
 
-Tax/withholding lines are immutable. AR/AP payments snapshot settlement rates and post realized FX differences. The application never guesses tax or FX accounts.
+Stages 10C–10E provide immutable MO standard cost, tax/withholding snapshots, realized FX settlement, month-end revaluation, close gate, and next-period reversal.
 
 ## Still pending
 
-Bank statement import/matching/reconciliation, formal close checklist, jurisdiction-specific tax returns/e-invoicing, and accounting/UAT sign-off.
+Formal close checklist, country-specific tax filing/e-invoicing, accounting sign-off, and runtime/UAT verification.
