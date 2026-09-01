@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  DataTable,
+  FilterBar,
+  FilterSelect,
+  PageHeader,
+  StatusBadge,
+  type DataTableColumn,
+} from "@/components/ui";
 
 interface So {
   id: number;
@@ -16,78 +24,88 @@ interface So {
 
 interface Page { data: So[]; total: number }
 
-const STATUS_BADGE: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-700",
-  SUBMITTED: "bg-blue-100 text-blue-700",
-  APPROVED: "bg-indigo-100 text-indigo-700",
-  CONFIRMED: "bg-green-100 text-green-700",
-  IN_PROGRESS: "bg-amber-100 text-amber-700",
-  CLOSED: "bg-slate-200 text-slate-600",
-  CANCELLED: "bg-red-100 text-red-700",
-  REJECTED: "bg-red-100 text-red-700",
-};
+const STATUSES = ["DRAFT", "SUBMITTED", "APPROVED", "CONFIRMED", "IN_PROGRESS", "CLOSED"];
 
 export default function SalesOrdersPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     api.get<Page>(`/sales/orders${status ? `?status=${status}` : ""}`)
       .then(setPage)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [status]);
+
+  useEffect(load, [load]);
+
+  const columns: DataTableColumn<So>[] = [
+    { key: "doc_no", header: "No. SO", cell: (so) => <span className="font-mono font-semibold">{so.doc_no}</span> },
+    { key: "customer", header: "Customer", cell: (so) => so.customer?.name ?? "—" },
+    { key: "order_date", header: "Tanggal Order", cell: (so) => so.order_date },
+    { key: "ex_factory", header: "Ex-Factory", cell: (so) => so.ex_factory_date ?? "—" },
+    { key: "lines", header: "Lines", align: "right", className: "tabular-nums", cell: (so) => so.lines_count ?? "—" },
+    { key: "status", header: "Status", cell: (so) => <StatusBadge status={so.status} /> },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Sales Order</h1>
-        <div className="flex items-center gap-2">
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
-            <option value="">Semua status</option>
-            {["DRAFT", "SUBMITTED", "APPROVED", "CONFIRMED", "IN_PROGRESS", "CLOSED"].map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <Link href="/sales/orders/new" className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white">
-            + Buat SO
+      <PageHeader
+        eyebrow="Sales"
+        title="Sales Order"
+        description="Kelola order pelanggan, tanggal ex-factory, dan status dokumen."
+        actions={
+          <Link href="/sales/orders/new" className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">
+            Buat SO
           </Link>
-        </div>
-      </div>
+        }
+      />
 
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <FilterBar summary={page ? `${page.total.toLocaleString("id-ID")} sales order` : undefined}>
+        <FilterSelect label="Filter status" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">Semua status</option>
+          {STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
+        </FilterSelect>
+      </FilterBar>
 
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">No. SO</th>
-              <th className="px-3 py-2 font-medium">Customer</th>
-              <th className="px-3 py-2 font-medium">Tanggal Order</th>
-              <th className="px-3 py-2 font-medium">Ex-Factory</th>
-              <th className="px-3 py-2 font-medium">Lines</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(page?.data ?? []).map((so) => (
-              <tr key={so.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono">{so.doc_no}</td>
-                <td className="px-3 py-2">{so.customer?.name ?? "—"}</td>
-                <td className="px-3 py-2">{so.order_date}</td>
-                <td className="px-3 py-2">{so.ex_factory_date ?? "—"}</td>
-                <td className="px-3 py-2">{so.lines_count ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[so.status] ?? "bg-slate-100"}`}>
-                    {so.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {page && page.data.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">Belum ada sales order.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        caption="Daftar sales order"
+        columns={columns}
+        rows={page?.data ?? []}
+        getRowKey={(so) => so.id}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        emptyTitle="Belum ada sales order"
+        emptyDescription={status ? "Tidak ada sales order dengan status yang dipilih." : "Buat sales order pertama untuk memulai workflow order pelanggan."}
+        emptyAction={
+          !status ? (
+            <Link href="/sales/orders/new" className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">
+              Buat Sales Order
+            </Link>
+          ) : undefined
+        }
+        minWidth="760px"
+        mobileCard={(so) => (
+          <article className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono font-semibold text-[var(--color-text)]">{so.doc_no}</p>
+                <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">{so.customer?.name ?? "Customer tidak tersedia"}</p>
+              </div>
+              <StatusBadge status={so.status} />
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-xs">
+              <div><dt className="text-[var(--color-text-muted)]">Order</dt><dd className="mt-0.5 font-medium">{so.order_date}</dd></div>
+              <div><dt className="text-[var(--color-text-muted)]">Ex-Factory</dt><dd className="mt-0.5 font-medium">{so.ex_factory_date ?? "—"}</dd></div>
+            </dl>
+          </article>
+        )}
+      />
     </div>
   );
 }
