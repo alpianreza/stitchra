@@ -1,15 +1,28 @@
-# Modul Finance, Actual Costing, and BEP
+# Finance, Actual Costing, Tax, and FX
 
-## MO standard cost snapshot
+## Tax and withholding
 
-- MO captures the approved cost sheet matching its exact BOM and routing versions.
-- Snapshot stores component costs, FOB, margin, source document/version, SHA-256 hash, and timestamp.
-- Once hashed, snapshot fields are immutable while normal MO status/quantity updates remain allowed.
-- MO release requires an exact approved snapshot; unrelease retains it.
-- Legacy/manual MOs attach one approved snapshot at first actual-cost computation and then remain stable.
-- Actual variance reads the MO snapshot, never the latest mutable style cost sheet.
-- Material, labor, overhead, subcon, other, total, and snapshot identity are returned in variance output.
+- Company-scoped tax codes support output tax, input tax, withholding receivable, and withholding payable.
+- Taxable base cannot exceed invoice subtotal; duplicate tax codes are rejected.
+- Invoice equation: `total = subtotal + tax - withholding`.
+- Tax lines snapshot code, kind, rate, base, and amount and are immutable/append-only.
+- AR tax is finalized with shipment invoice creation.
+- AP tax is finalized only after MATCHED + APPROVED and before any payment.
+- Nonzero tax posting requires explicit `AR_TAX`, `AR_WITHHOLDING`, `AP_TAX`, or `AP_WITHHOLDING` account mappings.
 
-## Remaining finance scope
+## Foreign-currency settlement
 
-Tax/withholding, FX revaluation, bank reconciliation, formal close checklist, and accounting/UAT sign-off remain pending. Runtime verification remains blocked by lockfiles and CI.
+- Invoice and payment each retain currency amount, exchange rate, and base amount.
+- Base currency always uses rate 1.
+- Foreign rate may be supplied explicitly or resolved from the latest company rate not later than the transaction date.
+- Payment dates before invoice dates are rejected.
+- AR realized result is `settlement base - carrying base`; AP realized result is `carrying base - settlement base`.
+- Gains/losses use explicit side-specific mappings: `AR_FX_GAIN`, `AR_FX_LOSS`, `AP_FX_GAIN`, `AP_FX_LOSS`.
+
+## MO standard cost
+
+Actual-cost variance uses an immutable MO standard-cost snapshot rather than the newest style cost sheet.
+
+## Still pending
+
+Unrealized period-end FX revaluation, bank-statement reconciliation, formal close checklist, jurisdiction-specific tax returns/e-invoicing, and accounting/UAT sign-off.
