@@ -1,20 +1,20 @@
 # Finance
 
-## Bank reconciliation
+## Formal period closing
 
-- Company bank accounts bind a currency and bank GL account.
-- JSON statement import validates date range, direction, positive amounts, row limit, and opening + credits − debits = closing.
-- Canonical SHA-256 fingerprints reject duplicate bank transactions across imports.
-- AR receipts match CREDIT lines; AP payments match DEBIT lines; bank/payment currencies must match.
-- Partial and many-to-many matching are supported with ceilings on both statement lines and source payments.
-- Unmatched lines may be ignored only with an explicit audited reason.
-- Bank-fee lines post through the explicit `BANK_FEE` account mapping.
-- Reconciliation approval requires every line to be MATCHED or IGNORED and then locks further service-level changes.
+- Closing uses `prepare → approve → close`; the former direct close API route is removed.
+- Deterministic checklist snapshots cover journal balance, unresolved AP, bank reconciliation, current FX revaluation, prior FX reversal, backup verification, and tax review.
+- Snapshot hash is recomputed before approval and close. Changed accounting data makes the checklist stale and requires preparation again.
+- Maker and approver must be different users.
+- Approved checklist inputs are immutable and every lifecycle action is audited.
 
-## FX and tax
+## Bank, FX, tax, and costing
 
-Stages 10C–10E provide immutable MO standard cost, tax/withholding snapshots, realized FX settlement, month-end revaluation, close gate, and next-period reversal.
+- Bank statements support deduplicated import, partial matching, fees, ignored reasons, and approval locking.
+- Foreign invoices support realized settlement FX and period-end revaluation/reversal.
+- Tax and withholding lines are immutable snapshots.
+- MO variance uses an immutable standard-cost snapshot.
 
 ## Still pending
 
-Formal close checklist, country-specific tax filing/e-invoicing, accounting sign-off, and runtime/UAT verification.
+Country-specific tax filing/e-invoicing and runtime, accounting, security, and UAT verification.
