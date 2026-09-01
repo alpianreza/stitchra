@@ -1,25 +1,5 @@
 <?php
 
 namespace Modules\Finance\Http\Controllers;
-
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
-use Modules\Core\Support\CurrentCompany;
-use Modules\Finance\Models\ArInvoice;
-use Modules\Finance\Services\ArApService;
-use Modules\Purchasing\Models\SupplierInvoice;
-use Modules\Shipping\Models\Shipment;
-use RuntimeException;
-
-class ArApController extends Controller
-{
-    public function __construct(private ArApService $service){}
-    public function createArInvoice(Request $request,Shipment $shipment):JsonResponse{$data=$request->validate(['due_date'=>'nullable|date_format:Y-m-d']);return $this->domain(fn()=>response()->json($this->service->createArInvoiceFromShipment($shipment,$request->user(),$data['due_date']??null),201));}
-    public function payAr(Request $request,ArInvoice $arInvoice):JsonResponse{$data=$this->paymentData($request);return $this->domain(fn()=>response()->json($this->service->recordArPayment($arInvoice,$data,$request->user()),201));}
-    public function payAp(Request $request,SupplierInvoice $supplierInvoice):JsonResponse{$data=$this->paymentData($request);return $this->domain(fn()=>response()->json($this->service->recordApPayment($supplierInvoice,$data,$request->user()),201));}
-    public function agingAr(Request $request):JsonResponse{$data=$request->validate(['as_of'=>'nullable|date_format:Y-m-d']);return $this->domain(fn()=>response()->json(['data'=>$this->service->agingAr(CurrentCompany::id(),$data['as_of']??now()->toDateString())]));}
-    public function agingAp(Request $request):JsonResponse{$data=$request->validate(['as_of'=>'nullable|date_format:Y-m-d']);return $this->domain(fn()=>response()->json(['data'=>$this->service->agingAp(CurrentCompany::id(),$data['as_of']??now()->toDateString())]));}
-    private function paymentData(Request $request):array{return $request->validate(['amount'=>'required|numeric|gt:0','payment_date'=>'nullable|date_format:Y-m-d','method'=>'nullable|string|max:32','reference_no'=>'nullable|string|max:64']);}
-    private function domain(callable $callback):JsonResponse{try{return $callback();}catch(RuntimeException $e){return response()->json(['message'=>$e->getMessage()],422);}}
-}
+use Illuminate\Http\JsonResponse;use Illuminate\Http\Request;use Illuminate\Routing\Controller;use Illuminate\Validation\Rule;use Modules\Core\Support\CurrentCompany;use Modules\Finance\Models\ArInvoice;use Modules\Finance\Services\ArApService;use Modules\Purchasing\Models\SupplierInvoice;use Modules\Shipping\Models\Shipment;use RuntimeException;
+class ArApController extends Controller{public function __construct(private ArApService$service){}public function createArInvoice(Request$r,Shipment$s):JsonResponse{$d=$r->validate(['due_date'=>'nullable|date_format:Y-m-d','taxes'=>'nullable|array|max:10','taxes.*.tax_code_id'=>'required|integer','taxes.*.taxable_base'=>'nullable|numeric|min:0']);return$this->domain(fn()=>response()->json($this->service->createArInvoiceFromShipment($s,$r->user(),$d['due_date']??null,$d['taxes']??[]),201));}public function finalizeAp(Request$r,SupplierInvoice$i):JsonResponse{$c=CurrentCompany::id();$d=$r->validate(['currency_id'=>['nullable','integer',Rule::exists('currencies','id')->where('company_id',$c)],'exchange_rate'=>'nullable|numeric|gt:0','taxes'=>'nullable|array|max:10','taxes.*.tax_code_id'=>'required|integer','taxes.*.taxable_base'=>'nullable|numeric|min:0']);return$this->domain(fn()=>response()->json($this->service->finalizeApFinance($i,$d,$r->user())));}public function payAr(Request$r,ArInvoice$i):JsonResponse{$d=$this->paymentData($r);return$this->domain(fn()=>response()->json($this->service->recordArPayment($i,$d,$r->user()),201));}public function payAp(Request$r,SupplierInvoice$i):JsonResponse{$d=$this->paymentData($r);return$this->domain(fn()=>response()->json($this->service->recordApPayment($i,$d,$r->user()),201));}public function agingAr(Request$r):JsonResponse{$d=$r->validate(['as_of'=>'nullable|date_format:Y-m-d']);return$this->domain(fn()=>response()->json(['data'=>$this->service->agingAr(CurrentCompany::id(),$d['as_of']??now()->toDateString())]));}public function agingAp(Request$r):JsonResponse{$d=$r->validate(['as_of'=>'nullable|date_format:Y-m-d']);return$this->domain(fn()=>response()->json(['data'=>$this->service->agingAp(CurrentCompany::id(),$d['as_of']??now()->toDateString())]));}private function paymentData(Request$r):array{return$r->validate(['amount'=>'required|numeric|gt:0','payment_date'=>'nullable|date_format:Y-m-d','exchange_rate'=>'nullable|numeric|gt:0','method'=>'nullable|string|max:32','reference_no'=>'nullable|string|max:64']);}private function domain(callable$c):JsonResponse{try{return$c();}catch(RuntimeException$e){return response()->json(['message'=>$e->getMessage()],422);}}}
