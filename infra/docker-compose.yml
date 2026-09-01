@@ -38,10 +38,10 @@ x-api-env: &api-env
   AWS_BUCKET: stitchra
   AWS_ENDPOINT: http://minio:9000
   AWS_USE_PATH_STYLE_ENDPOINT: "true"
-  SANCTUM_STATEFUL_DOMAINS: "localhost,127.0.0.1,localhost:3000,localhost:8001"
+  SANCTUM_STATEFUL_DOMAINS: "localhost,127.0.0.1,localhost:3000,localhost:8001,localhost:8080"
   SANCTUM_TOKEN_EXPIRATION: "480"
   SANCTUM_TOKEN_PREFIX: stitchra_
-  FRONTEND_URL: http://localhost
+  FRONTEND_URL: http://localhost:8080
   MASTER_IMPORT_MAX_ROWS: "10000"
   TELESCOPE_ENABLED: "false"
 
@@ -174,7 +174,7 @@ services:
     volumes:
       - ./nginx/docker.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "80:80"
+      - "8080:80"   # 80 di host dipakai Apache XAMPP
     depends_on:
       - api
       - web

@@ -27,9 +27,9 @@ Migrasi berjalan otomatis saat container api start (`php artisan migrate --force
 
 | Service | URL / Port host | Catatan |
 |---|---|---|
-| Nginx reverse proxy | http://localhost | `/api/*` -> api, sisanya -> web |
+| Nginx reverse proxy | http://localhost:8080 | `/api/*` -> api, sisanya -> web |
 | API (Laravel) | http://localhost:8001 | akses langsung (8000 di host ini terpakai proses lain) |
-| Web (Next.js) | http://localhost:3000 | juga lewat http://localhost |
+| Web (Next.js) | http://localhost:3000 | juga lewat http://localhost:8080 |
 | MinIO Console | http://localhost:9001 | user `stitchra` / pass `stitchra_secret` |
 | MySQL | localhost:3307 | 3306 dipakai MySQL XAMPP di host ini |
 | Redis | localhost:6379 | |
