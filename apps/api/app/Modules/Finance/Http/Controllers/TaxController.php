@@ -1,0 +1,6 @@
+<?php
+
+namespace Modules\Finance\Http\Controllers;
+
+use Illuminate\Http\JsonResponse;use Illuminate\Http\Request;use Illuminate\Routing\Controller;use Illuminate\Validation\Rule;use Modules\Core\Services\AuditService;use Modules\Core\Support\CurrentCompany;use Modules\Finance\Models\TaxCode;
+class TaxController extends Controller{public function __construct(private AuditService$audit){}public function index():JsonResponse{return response()->json(['data'=>TaxCode::where('company_id',CurrentCompany::id())->orderBy('code')->get()]);}public function store(Request$r):JsonResponse{$d=$r->validate(['code'=>'required|string|max:32','name'=>'required|string|max:255','kind'=>['required',Rule::in(TaxCode::KINDS)],'rate_pct'=>'required|numeric|min:0|max:100']);$tax=TaxCode::create($d+['company_id'=>CurrentCompany::id(),'created_by'=>$r->user()->id]);$this->audit->record('create',$tax,after:$tax->toArray(),request:$r);return response()->json($tax,201);}public function deactivate(Request$r,TaxCode$taxCode):JsonResponse{$taxCode->update(['is_active'=>false,'updated_by'=>$r->user()->id]);$this->audit->record('update',$taxCode,after:['is_active'=>false],request:$r);return response()->json($taxCode);}}
