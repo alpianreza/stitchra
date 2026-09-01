@@ -1,4 +1,4 @@
-# Stage 10C — MO Standard Cost Snapshot
+# Phase 10C — MO Standard Cost Snapshot
 
 ## Implemented
 

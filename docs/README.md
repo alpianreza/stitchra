@@ -1,14 +1,14 @@
 ---
 title: Stitchra Documentation Index
 status: ACTIVE
-version: 1.0
+version: 1.1
 last_updated: 2026-09-01
 authority: GOVERNANCE
 ---
 
 # Stitchra Documentation
 
-Dokumen ini adalah pintu masuk resmi dokumentasi Stitchra. Dokumen bisnis yang sudah dikunci tetap dipertahankan pada path asal agar isi, riwayat, dan tautan historis tidak rusak. Folder bernomor menyediakan hierarchy dan navigation layer tanpa menggandakan business rule.
+Dokumen ini adalah pintu masuk resmi dokumentasi Stitchra. Dokumen bisnis yang sudah dikunci tetap dipertahankan pada path asal agar isi, riwayat, dan tautan historis tidak rusak. Folder bernomor menyediakan hierarchy dan navigation layer tanpa menggandakan business rule. Seluruh implementation record menggunakan istilah resmi **Phase**.
 
 ## Documentation Map
 
@@ -24,9 +24,9 @@ Dokumen ini adalah pintu masuk resmi dokumentasi Stitchra. Dokumen bisnis yang s
 | 3 | Database | [Database Blueprint](./ERP_GARMENT_DATABASE_BLUEPRINT.md) | Struktur data dan constraints | LOCKED v1.0 |
 | 3 | Endpoint authorization | [Permission Map](./PERMISSION_MAP.md) | Mapping endpoint ke permission code | LOCKED |
 | 3 | Blueprint review | [Blueprint Review](./BLUEPRINT_REVIEW.md) | Bukti review konsistensi blueprint | HISTORICAL |
-| 4 | Planning | [Implementation Roadmap](./ERP_GARMENT_IMPLEMENTATION_ROADMAP.md) | Rencana awal Phase 1–9 | LOCKED baseline; sebagian historis |
+| 4 | Planning | [Implementation Roadmap](./ERP_GARMENT_IMPLEMENTATION_ROADMAP.md) | Rencana awal Phase 01–09 | LOCKED baseline; sebagian historis |
 | 5 | Discovery | [Phase 00 Business Discovery](./FASE_0_BUSINESS_DISCOVERY.md) | Discovery dan asal OBD | LOCKED historical baseline |
-| 5 | Implementation history | [Phase records](./phases/) | Catatan implementasi Phase 1–9 dan Stage 10A–10G | HISTORICAL |
+| 5 | Implementation history | [Phase records](./04-phases/README.md) | Catatan Phase 01–09 dan Phase 10A–10G | HISTORICAL |
 | — | Deployment | [Containerization](../CONTAINERIZATION.md) | Operasi Docker dan deployment considerations | ACTIVE |
 
 ## Authority Hierarchy
@@ -56,6 +56,7 @@ Keputusan dengan tanggal lebih baru dapat menggantikan keputusan lama hanya jika
 
 ## Governance Rules
 
+- Istilah resmi lifecycle implementasi adalah **Phase**, termasuk Phase 10A–10G.
 - Business rule baru atau perubahan rule harus melalui keputusan yang dicatat di Decision Log.
 - PROJECT_STATUS hanya berisi current state, configuration, open items, dan ringkasan history.
 - Implementation detail fase disimpan sebagai historical phase record, bukan disalin ke status proyek.

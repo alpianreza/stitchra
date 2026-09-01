@@ -1,4 +1,4 @@
-# Stage 10F — Bank Reconciliation
+# Phase 10F — Bank Reconciliation
 
 ## Implemented
 

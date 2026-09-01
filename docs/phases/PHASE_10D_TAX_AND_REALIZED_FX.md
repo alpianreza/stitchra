@@ -1,4 +1,4 @@
-# Stage 10D — Tax, Withholding, and Realized FX
+# Phase 10D — Tax, Withholding, and Realized FX
 
 ## Implemented
 
@@ -24,4 +24,4 @@ Migration `000018` adds tables, columns, checks, foreign keys, and historical pa
 
 ## Deferred
 
-Unrealized month-end revaluation, reversal in the following period, bank reconciliation, country-specific filing/e-invoicing, and accounting approval remain separate stages.
+Unrealized month-end revaluation, reversal in the following period, bank reconciliation, country-specific filing/e-invoicing, and accounting approval remain separate phases.

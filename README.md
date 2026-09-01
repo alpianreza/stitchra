@@ -2,7 +2,7 @@
 
 Apparel Manufacturing Management System untuk proses garment end-to-end, dibangun sebagai Laravel modular monolith dengan frontend Next.js.
 
-> **Readiness:** implementation and hardening records exist through Stage 10G, but the system is not production-approved. See the canonical [Project Status](./docs/00-governance/PROJECT_STATUS.md).
+> **Readiness:** implementation and hardening records exist through Phase 10G, but the system is not production-approved. See the canonical [Project Status](./docs/00-governance/PROJECT_STATUS.md).
 
 ## Architecture Summary
 

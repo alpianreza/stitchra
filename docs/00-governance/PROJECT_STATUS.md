@@ -1,7 +1,7 @@
 ---
 title: Stitchra ERP Project Status
 status: ACTIVE
-version: 2.0
+version: 2.1
 last_updated: 2026-09-01
 authority: GOVERNANCE
 ---
@@ -12,8 +12,8 @@ This is the canonical current-state document. It describes implementation eviden
 
 ## Current Status
 
-- Phase 1–9 implementation and hardening records exist on `main`.
-- Stage 10A–10G records cover fabric leftover/UOM, offline device security, MO standard-cost snapshots, tax and realized FX, period-end FX revaluation, bank reconciliation, and formal period closing.
+- Phase 01–09 implementation and hardening records exist on `main`.
+- Phase 10A–10G records cover fabric leftover/UOM, offline device security, MO standard-cost snapshots, tax and realized FX, period-end FX revaluation, bank reconciliation, and formal period closing.
 - Web UI covers the documented operational modules and has received shared design-system, application-shell, table, form, dashboard, approval, shipping, reporting, and QC modernization work.
 - The repository is **not production-approved**. Existing phase documents consistently retain deployment, runtime, concurrency, accounting, security, AQL, and UAT caveats.
 
@@ -62,8 +62,8 @@ Before production use, configure and validate:
 
 Detailed implementation history is intentionally separated from current state:
 
-- [Phase 1–9 records](../04-phases/README.md#phase-1-9)
-- [Stage 10A–10G records](../04-phases/README.md#stage-10a-10g)
+- [Phase 01–09 records](../04-phases/README.md#phase-01-09)
+- [Phase 10A–10G records](../04-phases/README.md#phase-10a-10g)
 - [Decision Log](../DECISION_LOG.md)
 
 ## Related Documents

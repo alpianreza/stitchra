@@ -1,7 +1,7 @@
 ---
 title: Stitchra Documentation Audit
 status: HISTORICAL
-version: 1.0
+version: 1.1
 last_updated: 2026-09-01
 authority: GOVERNANCE
 ---
@@ -17,10 +17,11 @@ authority: GOVERNANCE
 | Roles & Permissions vs Permission Map | Complementary overlap | One describes intended role capabilities; the other maps actual endpoints | Both retained with distinct authority documented in index |
 | Roadmap vs phase records | Planning/history overlap | Roadmap still contains pre-coding language while implementation records show later completion | Roadmap retained as locked baseline planning; phase records classified HISTORICAL; current state moved to Project Status |
 | Blueprint Review | Completed review artifact | Contains old “coding not started” context | Retained as HISTORICAL evidence, not current status |
-| Phase 1–5 records | Historical implementation plans | `Current State` sections describe conditions before each phase | Retained unchanged as historical context; not used for current project status |
-| Phase 6–9 and Stage 10A–10G | Historical implementation/hardening records | Include implemented items and explicit unverified deployment caveats | Retained as historical evidence with central index |
+| Phase 01–05 records | Historical implementation plans | `Current State` sections describe conditions before each phase | Retained unchanged as historical context; not used for current project status |
+| Phase 06–09 and Phase 10A–10G | Historical implementation/hardening records | Include implemented items and explicit unverified deployment caveats | Retained as historical evidence with central index |
 | Containerization guide | Operational detail | Overlapped root README and stated dependencies were pinned despite project status saying lockfiles were absent | Corrected to defer dependency state to canonical Project Status; detailed operations remain here |
 | Naming | Mixed `ERP_GARMENT_*`, `FASE_0`, `PHASE_*` | Renaming locked documents would require broad reference churn and obscure history | Stable locked paths retained; normalized navigation names are provided by tier indexes |
+| Phase terminology | Mixed `Phase` and `Stage` | Phase 01–09 used Phase while 10A–10G titles used Stage | Standardized official implementation terminology to Phase 01–09 and Phase 10A–10G |
 
 ## Authority and Lifecycle
 

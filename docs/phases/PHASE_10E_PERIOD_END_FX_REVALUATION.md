@@ -1,4 +1,4 @@
-# Stage 10E — Period-end FX Revaluation
+# Phase 10E — Period-end FX Revaluation
 
 ## Implemented
 
