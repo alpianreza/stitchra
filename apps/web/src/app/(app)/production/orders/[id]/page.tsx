@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui";
 
 interface MoDetail {
   id: number;
@@ -41,6 +42,7 @@ export default function MoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showUnreleaseConfirm, setShowUnreleaseConfirm] = useState(false);
 
   function load() {
     api.get<MoDetail>(`/production/orders/${id}`).then(setMo).catch((e) => setError(e.message));
@@ -83,10 +85,10 @@ export default function MoDetailPage() {
   }
 
   async function unrelease() {
-    if (!window.confirm("Lepaskan semua reservasi MO ini?")) return;
     setBusy(true); setError(null); setMessage(null);
     try {
       await api.post(`/production/orders/${id}/unrelease`, {});
+      setShowUnreleaseConfirm(false);
       setMessage("Reservasi dilepas — MO kembali PLANNED.");
       load();
     } catch (e: any) {
@@ -134,6 +136,9 @@ export default function MoDetailPage() {
 
   const fmt = (v: string | number) => Number(v).toLocaleString("id-ID", { maximumFractionDigits: 4 });
   const canIssue = ["RELEASED", "CUTTING", "SEWING"].includes(mo.status);
+  const allocations = mo.material_allocations ?? [];
+  const reservedMaterialCount = allocations.filter((allocation) => Number(allocation.qty_reserved) > Number(allocation.qty_issued)).length;
+  const totalRemainingReservation = allocations.reduce((total, allocation) => total + Math.max(0, Number(allocation.qty_reserved) - Number(allocation.qty_issued)), 0);
 
   return (
     <div className="space-y-4">
@@ -151,7 +156,7 @@ export default function MoDetailPage() {
       </div>
 
       {error && <pre className="whitespace-pre-wrap rounded bg-red-50 p-3 text-sm text-red-700">{error}</pre>}
-      {message && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
+      {message && <p role="status" aria-live="polite" className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
 
       {/* Aksi release (BR-060) */}
       {(mo.status === "PLANNED" || mo.status === "RELEASED") && (
@@ -170,7 +175,7 @@ export default function MoDetailPage() {
               </button>
             </>
           ) : (
-            <button onClick={unrelease} disabled={busy} className="rounded border border-amber-400 px-4 py-1.5 text-sm font-medium text-amber-700 disabled:opacity-50">
+            <button onClick={() => { setMessage(null); setShowUnreleaseConfirm(true); }} disabled={busy} className="rounded border border-amber-400 px-4 py-1.5 text-sm font-medium text-amber-700 disabled:opacity-50">
               Unrelease (lepas reservasi)
             </button>
           )}
@@ -218,7 +223,7 @@ export default function MoDetailPage() {
       </div>
 
       {/* Alokasi material + issue (BR-060/041) */}
-      <section className="rounded-xl border bg-white p-4">
+      <section className="overflow-x-auto rounded-xl border bg-white p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Alokasi Material</h2>
           {canIssue && (
@@ -233,7 +238,7 @@ export default function MoDetailPage() {
             </div>
           )}
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b text-left text-xs text-slate-500">
             <tr>
               <th className="py-1">Material</th>
@@ -246,7 +251,7 @@ export default function MoDetailPage() {
             </tr>
           </thead>
           <tbody>
-            {(mo.material_allocations ?? []).map((a) => {
+            {allocations.map((a) => {
               const remaining = Number(a.qty_reserved) - Number(a.qty_issued);
               const isRoll = a.material?.tracking_level === "ROLL";
               const inp = issueInputs[a.material_id] ?? { qty: "", roll_id: "" };
@@ -292,7 +297,7 @@ export default function MoDetailPage() {
                 </tr>
               );
             })}
-            {(mo.material_allocations ?? []).length === 0 && (
+            {allocations.length === 0 && (
               <tr><td colSpan={canIssue ? 7 : 6} className="py-4 text-center text-sm text-slate-500">Belum ada alokasi — release MO dulu.</td></tr>
             )}
           </tbody>
@@ -303,6 +308,27 @@ export default function MoDetailPage() {
           </p>
         )}
       </section>
+
+      <ConfirmDialog
+        open={showUnreleaseConfirm}
+        title="Unrelease Manufacturing Order?"
+        description="Seluruh reservasi material yang masih aktif akan dilepas."
+        confirmLabel="Unrelease MO"
+        variant="danger"
+        loading={busy}
+        onConfirm={unrelease}
+        onCancel={() => { if (!busy) setShowUnreleaseConfirm(false); }}
+      >
+        <div className="space-y-3">
+          <dl className="grid grid-cols-2 gap-3 rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3 text-sm">
+            <div><dt className="text-xs text-[var(--color-text-muted)]">Manufacturing order</dt><dd className="mt-0.5 font-mono font-semibold">{mo.doc_no}</dd></div>
+            <div><dt className="text-xs text-[var(--color-text-muted)]">Status saat ini</dt><dd className="mt-0.5 font-semibold">{mo.status}</dd></div>
+            <div><dt className="text-xs text-[var(--color-text-muted)]">Material dengan sisa reservasi</dt><dd className="mt-0.5 font-semibold tabular-nums">{reservedMaterialCount}</dd></div>
+            <div><dt className="text-xs text-[var(--color-text-muted)]">Total sisa reservasi</dt><dd className="mt-0.5 font-semibold tabular-nums">{fmt(totalRemainingReservation)}</dd></div>
+          </dl>
+          <p className="text-sm text-[var(--color-danger)]">MO akan kembali ke status PLANNED dan material yang dilepas dapat tersedia untuk kebutuhan lain.</p>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

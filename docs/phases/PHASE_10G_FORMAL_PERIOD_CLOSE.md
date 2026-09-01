@@ -1,4 +1,4 @@
-# Stage 10G — Formal Period Closing
+# Phase 10G — Formal Period Closing
 
 ## Workflow
 

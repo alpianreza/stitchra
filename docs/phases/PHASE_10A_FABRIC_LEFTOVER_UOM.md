@@ -1,4 +1,4 @@
-# Stage 10A — Fabric Length UOM & Leftover Return
+# Phase 10A — Fabric Length UOM & Leftover Return
 
 ## Decision
 

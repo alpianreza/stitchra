@@ -1,4 +1,4 @@
-# Stage 10B — Offline Scan & Device Security
+# Phase 10B — Offline Scan & Device Security
 
 ## Implemented
 

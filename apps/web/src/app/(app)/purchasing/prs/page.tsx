@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { DataTable, FilterBar, FilterSelect, PageHeader, StatusBadge, type DataTableColumn } from "@/components/ui";
 
 interface Pr {
   id: number;
@@ -20,59 +21,55 @@ export default function PurchaseRequestsPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
     api.get<Page>(`/purchasing/prs${source ? `?source=${source}` : ""}`)
       .then(setPage)
-      .catch((e) => setError(e.message));
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
   }, [source]);
+
+  useEffect(load, [load]);
+
+  const columns: DataTableColumn<Pr>[] = [
+    { key: "document", header: "No. PR", cell: (pr) => <span className="font-mono font-semibold">{pr.doc_no}</span> },
+    { key: "source", header: "Sumber", cell: (pr) => <StatusBadge status={pr.source} /> },
+    { key: "needed", header: "Dibutuhkan", cell: (pr) => pr.needed_by ?? "—" },
+    { key: "lines", header: "Lines", align: "right", cell: (pr) => <span className="tabular-nums">{pr.lines_count}</span> },
+    { key: "status", header: "Status", cell: (pr) => <StatusBadge status={pr.status} /> },
+    { key: "created", header: "Dibuat", cell: (pr) => new Date(pr.created_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Purchase Request</h1>
-        <select value={source} onChange={(e) => setSource(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
+      <PageHeader eyebrow="Purchasing" title="Purchase Request" description="Pantau kebutuhan pembelian manual dan hasil perencanaan MRP." />
+      <FilterBar resultSummary={page ? `${page.total} purchase request` : undefined}>
+        <FilterSelect label="Sumber" value={source} onChange={(event) => setSource(event.target.value)}>
           <option value="">Semua sumber</option>
           <option value="MANUAL">Manual</option>
           <option value="MRP">Dari MRP</option>
-        </select>
-      </div>
-
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">No. PR</th>
-              <th className="px-3 py-2 font-medium">Sumber</th>
-              <th className="px-3 py-2 font-medium">Dibutuhkan</th>
-              <th className="px-3 py-2 font-medium">Lines</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Dibuat</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(page?.data ?? []).map((pr) => (
-              <tr key={pr.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono">{pr.doc_no}</td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${pr.source === "MRP" ? "bg-blue-100 text-blue-700" : "bg-slate-100"}`}>
-                    {pr.source}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{pr.needed_by ?? "—"}</td>
-                <td className="px-3 py-2">{pr.lines_count}</td>
-                <td className="px-3 py-2">{pr.status}</td>
-                <td className="px-3 py-2">{new Date(pr.created_at).toLocaleString("id-ID")}</td>
-              </tr>
-            ))}
-            {page && page.data.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">Belum ada PR.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+        </FilterSelect>
+      </FilterBar>
+      <DataTable
+        caption="Daftar purchase request"
+        columns={columns}
+        rows={page?.data ?? []}
+        getRowKey={(pr) => pr.id}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        emptyTitle="Belum ada purchase request"
+        emptyDescription={source ? "Tidak ada purchase request untuk sumber yang dipilih." : "Purchase request manual dan MRP akan muncul di sini."}
+        minWidth="780px"
+        mobileCard={(pr) => (
+          <article className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3"><div><p className="font-mono font-semibold">{pr.doc_no}</p><p className="text-xs text-[var(--color-text-muted)]">{pr.lines_count} lines · dibutuhkan {pr.needed_by ?? "—"}</p></div><StatusBadge status={pr.status} /></div>
+            <div className="flex items-center justify-between text-xs"><StatusBadge status={pr.source} /><span className="text-[var(--color-text-muted)]">{new Date(pr.created_at).toLocaleDateString("id-ID")}</span></div>
+          </article>
+        )}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui";
 
 interface Role { id: number; code: string; name: string }
 interface FlowStep { step_no: number; role?: Role; min_value?: number | null; max_value?: number | null }
@@ -18,6 +19,7 @@ export default function ApprovalFlowsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [flowToDeactivate, setFlowToDeactivate] = useState<Flow | null>(null);
 
   function load() {
     api.get<{ data: Flow[] }>("/approvals/flows").then((r) => setFlows(r.data)).catch((e) => setError(e.message));
@@ -49,11 +51,13 @@ export default function ApprovalFlowsPage() {
     }
   }
 
-  async function deactivate(id: number) {
-    if (!window.confirm("Nonaktifkan flow ini? Dokumen baru doc_type ini tidak bisa disubmit sampai ada flow aktif.")) return;
-    setBusy(true); setError(null);
+  async function deactivate() {
+    if (!flowToDeactivate) return;
+    setBusy(true); setError(null); setMessage(null);
     try {
-      await api.post(`/approvals/flows/${id}/deactivate`, {});
+      await api.post(`/approvals/flows/${flowToDeactivate.id}/deactivate`, {});
+      setMessage(`Flow ${flowToDeactivate.doc_type} v${flowToDeactivate.version} dinonaktifkan.`);
+      setFlowToDeactivate(null);
       load();
     } catch (e: any) {
       setError(e.message);
@@ -69,7 +73,7 @@ export default function ApprovalFlowsPage() {
       <h1 className="text-xl font-bold">Approval Flow <span className="text-sm font-normal text-slate-500">(per doc type — BR-015)</span></h1>
 
       {error && <pre className="whitespace-pre-wrap rounded bg-red-50 p-3 text-sm text-red-700">{error}</pre>}
-      {message && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
+      {message && <p role="status" aria-live="polite" className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
 
       <form onSubmit={save} className="space-y-3 rounded-xl border bg-white p-4">
         <h2 className="font-semibold">Flow baru (versi baru otomatis menggantikan yang aktif)</h2>
@@ -141,7 +145,7 @@ export default function ApprovalFlowsPage() {
                 </td>
                 <td className="px-3 py-2">
                   {f.is_active && (
-                    <button onClick={() => deactivate(f.id)} disabled={busy} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 disabled:opacity-50">
+                    <button onClick={() => { setMessage(null); setFlowToDeactivate(f); }} disabled={busy} className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 disabled:opacity-50">
                       Nonaktifkan
                     </button>
                   )}
@@ -152,6 +156,30 @@ export default function ApprovalFlowsPage() {
           </tbody>
         </table>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(flowToDeactivate)}
+        title="Nonaktifkan Approval Flow?"
+        description="Tindakan ini memengaruhi dokumen baru dengan tipe yang sama."
+        confirmLabel="Nonaktifkan Flow"
+        variant="danger"
+        loading={busy}
+        onConfirm={deactivate}
+        onCancel={() => { if (!busy) setFlowToDeactivate(null); }}
+      >
+        {flowToDeactivate && (
+          <div className="space-y-3">
+            <div className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Flow yang dipilih</p>
+              <p className="mt-1 font-mono font-bold">{flowToDeactivate.doc_type} · v{flowToDeactivate.version}</p>
+              <p className="mt-1 text-sm text-[var(--color-text-muted)]">{flowToDeactivate.steps.length} approval step · mode {flowToDeactivate.mode}</p>
+            </div>
+            <p className="text-sm text-[var(--color-danger)]">
+              Dokumen baru untuk tipe ini tidak dapat disubmit sampai tersedia approval flow aktif.
+            </p>
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

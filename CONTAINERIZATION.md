@@ -1,4 +1,14 @@
+---
+title: Stitchra Containerization Guide
+status: ACTIVE
+version: 1.1
+last_updated: 2026-09-01
+authority: OPERATIONS
+---
+
 # Stitchra Containerization Guide
+
+For production readiness and dependency-lock status, use the canonical [Project Status](./docs/00-governance/PROJECT_STATUS.md). This guide describes intended Docker operations and does not claim that migrations or tests have passed.
 
 ## Quick Start
 
@@ -52,6 +62,18 @@ Kode dibake ke image (tanpa bind mount source agar vendor/node_modules hasil bui
 ```bash
 docker compose -f infra/docker-compose.yml build api web
 docker compose -f infra/docker-compose.yml up -d
+
+# Inspect status and logs
+docker compose -f infra/docker-compose.yml ps
+docker compose -f infra/docker-compose.yml logs -f api web
+
+# Run documented checks
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pest
+docker compose -f infra/docker-compose.yml exec api ./vendor/bin/pint --test
+docker compose -f infra/docker-compose.yml exec web npm run build
+
+# Stop
+docker compose -f infra/docker-compose.yml down
 ```
 
 ### Logs & akses container
@@ -67,7 +89,7 @@ docker exec -it stitchra-web sh
 docker compose -f infra/docker-compose.yml down -v
 ```
 
-## Production Considerations
+## Production Requirements
 
 - Ganti semua secret dev di `infra/docker-compose.yml` (`APP_KEY`, MySQL, MinIO, Reverb) - pakai secret management (Docker Secrets, env files CI/CD)
 - `APP_DEBUG=false`, `APP_ENV=production`, `TELESCOPE_ENABLED=false`
@@ -76,3 +98,10 @@ docker compose -f infra/docker-compose.yml down -v
 - Tambah resource limits per service di compose
 - `spatie/browsershot` butuh Chromium di runtime bila fitur PDF/ekspor dipakai (belum termasuk di image)
 - Laravel Horizon belum punya service sendiri; bila dibutuhkan jalankan `php artisan horizon` di container terpisah (ext `pcntl`/`posix` sudah terpasang di image api)
+
+## Related Documents
+
+- [Documentation Index](./docs/README.md)
+- [Project Status](./docs/00-governance/PROJECT_STATUS.md)
+- [Database Blueprint](./docs/ERP_GARMENT_DATABASE_BLUEPRINT.md)
+- [Decision Log](./docs/DECISION_LOG.md)
