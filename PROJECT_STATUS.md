@@ -4,37 +4,31 @@
 
 ## Executive status
 
-Phases 1–9 plus Stage 10A and Stage 10B have implementation hardening and regression-test evidence on `main`. **Not production-approved:** full PHP/web tests and clean MySQL migrations have not been executed in this environment.
+Phases 1–9 and Stages 10A–10C have implementation hardening and regression-test evidence on `main`. **Not production-approved:** full PHP/web tests and clean MySQL migrations have not run in this environment.
 
-## Stage 10A
+## Stage 10 additions
 
-Meter/yard fabric UOM, explicit dispatch/consume/return quantities, and BR-042 no-double-count leftover return.
+- 10A: meter/yard fabric UOM and no-double-count leftover return.
+- 10B: scoped device tokens and replay-safe versioned offline scans.
+- 10C: immutable MO standard-cost value snapshot and stable actual-cost variance.
 
-## Stage 10B
+## Remaining finance and functional scope
 
-- Scoped, expiring, company-bound shopfloor device tokens.
-- Enrollment, inventory, audit, and revocation.
-- Device token isolation from administrative/business endpoints.
-- Bundle optimistic concurrency via monotonic scan versions.
-- Idempotent offline events with replay and payload-conflict handling.
-- Timestamp windows and per-event batch sync outcomes.
-
-## Remaining design/functional items
-
-- Client-side encrypted queue, OS keystore integration, remote wipe UX, and real interruption testing.
-- MO snapshot of approved standard cost sheet id.
-- Formal buyer AQL table/config validation and attachment controls.
-- Tax/withholding, FX revaluation, bank reconciliation, and accounting close checklist.
-- Remaining master-data functional backlog.
+- Tax/withholding and jurisdiction configuration.
+- FX rates, realized/unrealized revaluation, and settlement differences.
+- Bank statement import, matching, reconciliation, and approval.
+- Formal period-close checklist and accounting sign-off.
+- Buyer AQL/attachments and remaining master-data endpoints.
+- Real offline client keystore, encrypted queue, conflict UX, and pilot validation.
 
 ## Verification blockers
 
 1. Commit Composer and npm lockfiles.
-2. Run migrations `000015` and `000016` against clean and representative copied data.
-3. Run full PHP tests, static analysis, web checks, and Playwright.
-4. Run real concurrent scan sync/replay tests across processes.
-5. Protect `main` with required CI.
-6. Complete load testing, backup restore drill, security review, UAT, and pilot.
+2. Smoke-test migrations `000015`–`000017` on clean and representative copied data.
+3. Review/backfill historical MO standard cost snapshots.
+4. Run full PHP/static/web/Playwright suites.
+5. Run real multiprocess concurrency and offline replay tests.
+6. Protect `main`; complete load, restore, security, accounting, UAT, and pilot reviews.
 
 ## Production decision
 
