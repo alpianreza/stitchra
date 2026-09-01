@@ -9,29 +9,26 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // BR-013: append-only — sumber kebenaran inventory. Tidak ada updated_at/deleted_at.
         Schema::create('stock_ledger', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained('companies')->restrictOnDelete();
             $table->string('movement_type', 24);
-            $table->string('item_type', 8)->default('MATERIAL');   // MATERIAL/WIP/FG
+            $table->string('item_type', 8)->default('MATERIAL');
             $table->foreignId('material_id')->nullable()->constrained('materials')->restrictOnDelete();
-            // Referensi variant untuk FG (style×colorway×size) — dipakai Phase 6+
             $table->foreignId('style_id')->nullable()->constrained('styles')->restrictOnDelete();
             $table->foreignId('colorway_id')->nullable()->constrained('colorways')->restrictOnDelete();
             $table->foreignId('size_id')->nullable()->constrained('sizes')->restrictOnDelete();
             $table->foreignId('warehouse_id')->constrained('warehouses')->restrictOnDelete();
             $table->foreignId('location_id')->nullable()->constrained('locations')->restrictOnDelete();
             $table->string('lot_no', 64)->nullable();
-            $table->unsignedBigInteger('roll_id')->nullable();     // FK fabric_rolls (batch receiving)
-            $table->string('ownership', 8)->default('COMPANY');    // BR-001: COMPANY/BUYER
+            $table->unsignedBigInteger('roll_id')->nullable();
+            $table->string('ownership', 8)->default('COMPANY');
             $table->decimal('qty_in', 18, 4)->default(0);
             $table->decimal('qty_out', 18, 4)->default(0);
             $table->foreignId('uom_id')->constrained('uoms')->restrictOnDelete();
-            $table->decimal('unit_cost', 19, 6)->nullable();       // BR-005: cost per transaksi
+            $table->decimal('unit_cost', 19, 6)->nullable();
             $table->decimal('total_cost', 19, 4)->nullable();
             $table->decimal('running_balance', 18, 4)->nullable();
-            // Traceability dua arah (BR-120)
             $table->string('source_document_type', 64);
             $table->unsignedBigInteger('source_document_id');
             $table->unsignedBigInteger('source_document_line_id')->nullable();
@@ -46,8 +43,7 @@ return new class extends Migration
         DB::statement("ALTER TABLE stock_ledger ADD CONSTRAINT chk_ledger_movement CHECK (movement_type IN ('OPENING','PURCHASE_RECEIPT','PURCHASE_RETURN','QUALITY_RELEASE','TRANSFER_IN','TRANSFER_OUT','MATERIAL_ISSUE','PRODUCTION_RETURN','PRODUCTION_RECEIPT','ADJUSTMENT','OPNAME_ADJUSTMENT','SUBCON_OUT','SUBCON_IN','SHIPMENT'))");
         DB::statement("ALTER TABLE stock_ledger ADD CONSTRAINT chk_ledger_item_type CHECK (item_type IN ('MATERIAL','WIP','FG'))");
         DB::statement("ALTER TABLE stock_ledger ADD CONSTRAINT chk_ledger_ownership CHECK (ownership IN ('COMPANY','BUYER'))");
-        // qty_in XOR qty_out > 0
-        DB::statement("ALTER TABLE stock_ledger ADD CONSTRAINT chk_ledger_qty CHECK ((qty_in > 0 AND qty_out = 0) OR (qty_out > 0 AND qty_in = 0))");
+        DB::statement("ALTER TABLE stock_ledger ADD CONSTRAINT chk_ledger_qty CHECK ((movement_type = 'QUALITY_RELEASE' AND qty_in = 0 AND qty_out = 0) OR (movement_type <> 'QUALITY_RELEASE' AND ((qty_in > 0 AND qty_out = 0) OR (qty_out > 0 AND qty_in = 0))))");
     }
 
     public function down(): void

@@ -1,8 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  DataTable,
+  FilterBar,
+  FilterSelect,
+  PageHeader,
+  ProgressBar,
+  StatusBadge,
+  type DataTableColumn,
+} from "@/components/ui";
 
 interface Mo {
   id: number;
@@ -17,64 +26,97 @@ interface Mo {
 
 interface Page { data: Mo[]; total: number }
 
+const STATUSES = ["PLANNED", "RELEASED", "CUTTING", "SEWING", "FINISHING", "QC", "PACKED", "CLOSED"];
+const formatQuantity = (value: string) => Number(value).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+
 export default function ProductionOrdersPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     api.get<Page>(`/production/orders${status ? `?status=${status}` : ""}`)
       .then(setPage)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [status]);
+
+  useEffect(load, [load]);
+
+  const columns: DataTableColumn<Mo>[] = [
+    {
+      key: "doc_no",
+      header: "No. MO",
+      cell: (mo) => (
+        <Link href={`/production/orders/${mo.id}`} className="font-mono font-semibold text-[var(--color-primary)] hover:underline">
+          {mo.doc_no}
+        </Link>
+      ),
+    },
+    { key: "so", header: "SO", cell: (mo) => <span className="font-mono">{mo.sales_order?.doc_no ?? "—"}</span> },
+    { key: "style", header: "Style", cell: (mo) => mo.style?.style_no ?? "—" },
+    { key: "line", header: "Line", cell: (mo) => mo.line?.name ?? "—" },
+    { key: "planned", header: "Qty Plan", align: "right", className: "tabular-nums", cell: (mo) => formatQuantity(mo.qty_planned) },
+    { key: "produced", header: "Qty Produced", align: "right", className: "tabular-nums", cell: (mo) => formatQuantity(mo.qty_produced) },
+    {
+      key: "progress",
+      header: "Progress",
+      cell: (mo) => <ProgressBar value={Number(mo.qty_produced)} max={Number(mo.qty_planned)} label={`Progress ${mo.doc_no}`} />,
+    },
+    { key: "status", header: "Status", cell: (mo) => <StatusBadge status={mo.status} /> },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Manufacturing Order</h1>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded border px-2 py-1.5 text-sm">
+      <PageHeader
+        eyebrow="Manufacturing"
+        title="Manufacturing Order"
+        description="Pantau rencana, output, progress, line, dan tahap produksi aktif."
+      />
+
+      <FilterBar summary={page ? `${page.total.toLocaleString("id-ID")} manufacturing order` : undefined}>
+        <FilterSelect label="Filter status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">Semua status</option>
-          {["PLANNED", "RELEASED", "CUTTING", "SEWING", "FINISHING", "QC", "PACKED", "CLOSED"].map((s) => <option key={s}>{s}</option>)}
-        </select>
-      </div>
+          {STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
+        </FilterSelect>
+      </FilterBar>
 
-      {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-slate-50 text-left">
-            <tr>
-              <th className="px-3 py-2 font-medium">No. MO</th>
-              <th className="px-3 py-2 font-medium">SO</th>
-              <th className="px-3 py-2 font-medium">Style</th>
-              <th className="px-3 py-2 font-medium">Line</th>
-              <th className="px-3 py-2 text-right font-medium">Qty Plan</th>
-              <th className="px-3 py-2 text-right font-medium">Qty Produced</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(page?.data ?? []).map((mo) => (
-              <tr key={mo.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-2">
-                  <Link href={`/production/orders/${mo.id}`} className="font-mono text-blue-700 hover:underline">
-                    {mo.doc_no}
-                  </Link>
-                </td>
-                <td className="px-3 py-2 font-mono">{mo.sales_order?.doc_no ?? "—"}</td>
-                <td className="px-3 py-2">{mo.style?.style_no ?? "—"}</td>
-                <td className="px-3 py-2">{mo.line?.name ?? "—"}</td>
-                <td className="px-3 py-2 text-right">{Number(mo.qty_planned).toLocaleString("id-ID")}</td>
-                <td className="px-3 py-2 text-right">{Number(mo.qty_produced).toLocaleString("id-ID")}</td>
-                <td className="px-3 py-2"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{mo.status}</span></td>
-              </tr>
-            ))}
-            {page && page.data.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">Belum ada MO.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        caption="Daftar manufacturing order"
+        columns={columns}
+        rows={page?.data ?? []}
+        getRowKey={(mo) => mo.id}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        emptyTitle="Belum ada manufacturing order"
+        emptyDescription={status ? "Tidak ada MO dengan status yang dipilih." : "Manufacturing order akan tampil setelah dibuat dari workflow produksi."}
+        minWidth="980px"
+        mobileCard={(mo) => {
+          const planned = Number(mo.qty_planned);
+          const produced = Number(mo.qty_produced);
+          const percentage = planned > 0 ? Math.min(100, Math.round((produced / planned) * 100)) : 0;
+          return (
+            <Link href={`/production/orders/${mo.id}`} className="block space-y-3 p-4 hover:bg-[var(--color-surface-subtle)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono font-semibold text-[var(--color-primary)]">{mo.doc_no}</p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{mo.style?.style_no ?? "Tanpa style"} · {mo.line?.name ?? "Belum ada line"}</p>
+                </div>
+                <StatusBadge status={mo.status} />
+              </div>
+              <ProgressBar value={produced} max={planned} label={`Progress ${mo.doc_no}`} />
+              <div className="flex items-center justify-between text-xs tabular-nums text-[var(--color-text-muted)]">
+                <span>{formatQuantity(mo.qty_produced)} / {formatQuantity(mo.qty_planned)} pcs</span>
+                <strong className="text-[var(--color-text)]">{percentage}%</strong>
+              </div>
+            </Link>
+          );
+        }}
+      />
     </div>
   );
 }

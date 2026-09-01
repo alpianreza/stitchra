@@ -1,16 +1,11 @@
 # Modul Subcon (CMT)
 
-Subcontracting: kirim bahan/WIP ke subcontractor, terima hasil, lacak fee jasa.
+- Supplier wajib aktif pada company yang sama dan type SUBCON.
+- MO, operation routing, warehouse, material/UOM, dan bundle divalidasi tenant-safe.
+- Setiap line harus berisi tepat satu material atau bundle dengan qty positif.
+- Send dikunci dan memposting SUBCON_OUT melalui ITS.
+- Receive mengunci order/line, menolak duplicate/over-return, dan memvalidasi warehouse.
+- Setiap partial-return line membuat fee record sendiri; fee id menjadi source id SUBCON_IN sehingga return berikutnya tidak bentrok dengan idempotency ITS.
+- Database check menjaga qty returned tidak negatif atau melebihi qty sent.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/subcon/orders/from-mo/{moId}` | `subcon.order.create` | supplier wajib type SUBCON |
-| POST | `/api/subcon/orders/{id}/receive` | `subcon.order.receive` | per line; over-return ditolak |
-| GET | `/api/subcon/orders/{id}` | `subcon.order.view` | detail + fees |
-
-## Aturan bisnis
-- **BR-090**: bahan keluar memposting `SUBCON_OUT` via ITS (`in_transit_subcon` ↑); return `SUBCON_IN` (↓).
-- **BR-091**: subcon order terikat MO + operation.
-- **BR-080**: fee per return tercatat di `subcon_fees` — masuk actual costing (Phase 8).
-- Status: DRAFT → SENT → PARTIAL_RETURNED → RETURNED → CLOSED.
+Regression tests tersedia, tetapi belum dinyatakan hijau sampai lockfiles dan CI tersedia.

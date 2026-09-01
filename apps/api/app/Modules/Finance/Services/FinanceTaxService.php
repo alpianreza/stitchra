@@ -1,0 +1,10 @@
+<?php
+
+namespace Modules\Finance\Services;
+
+use Modules\Finance\Models\FinanceTaxLine;use Modules\Finance\Models\TaxCode;use RuntimeException;
+class FinanceTaxService
+{
+ public function calculate(int$companyId,string$type,float$subtotal,array$inputs):array{if($subtotal<=0)throw new RuntimeException('Subtotal invoice wajib lebih besar dari nol.');$allowed=$type==='AR_INVOICE'?['OUTPUT_TAX','WITHHOLDING_RECEIVABLE']:['INPUT_TAX','WITHHOLDING_PAYABLE'];$ids=array_map('intval',array_column($inputs,'tax_code_id'));if(count($ids)!==count(array_unique($ids)))throw new RuntimeException('Tax code invoice tidak boleh duplikat.');$codes=TaxCode::withoutGlobalScopes()->where('company_id',$companyId)->where('is_active',true)->whereIn('id',$ids)->get()->keyBy('id');if($codes->count()!==count($ids))throw new RuntimeException('Tax code tidak aktif atau bukan milik company aktif.');$lines=[];$tax=0.0;$withholding=0.0;foreach($inputs as$input){$code=$codes[(int)$input['tax_code_id']];if(!in_array($code->kind,$allowed,true))throw new RuntimeException("Tax kind {$code->kind} tidak valid untuk {$type}.");$base=isset($input['taxable_base'])?(float)$input['taxable_base']:$subtotal;if($base<0||$base>$subtotal+0.0001)throw new RuntimeException('Taxable base harus antara nol dan subtotal.');$amount=round($base*(float)$code->rate_pct/100,4);$lines[]=['company_id'=>$companyId,'tax_code_id'=>$code->id,'tax_code'=>$code->code,'kind'=>$code->kind,'taxable_base'=>$base,'rate_pct'=>(float)$code->rate_pct,'amount'=>$amount];if(str_starts_with($code->kind,'WITHHOLDING_'))$withholding+=$amount;else$tax+=$amount;}$total=round($subtotal+$tax-$withholding,4);if($total<=0)throw new RuntimeException('Total invoice setelah tax/withholding wajib lebih besar dari nol.');return['subtotal'=>round($subtotal,4),'tax'=>round($tax,4),'withholding'=>round($withholding,4),'total'=>$total,'lines'=>$lines];}
+ public function store(string$type,int$documentId,array$lines,int$userId):void{foreach($lines as$line)FinanceTaxLine::create($line+['document_type'=>$type,'document_id'=>$documentId,'created_by'=>$userId]);}
+}

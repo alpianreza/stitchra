@@ -5,51 +5,42 @@ namespace Modules\ShopFloor\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Core\Support\CurrentCompany;
 use Modules\ShopFloor\Services\ScanService;
+use RuntimeException;
 
 class ScanController extends Controller
 {
     public function __construct(private ScanService $service) {}
 
-    /** BR-062: scan bundle (keyboard-wedge scanner / manual) — IN/OUT per operasi */
     public function scan(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.output.create'), 403);
-
+        $companyId = CurrentCompany::id();
         $data = $request->validate([
             'bundle_no' => 'required|string|max:40',
-            'operation_id' => 'required|integer|exists:operations,id',
-            'direction' => 'required|in:IN,OUT',
-            'stage' => 'required|in:SEWING,FINISHING',
-            'line_id' => 'nullable|integer|exists:lines,id',
-            'employee_id' => 'nullable|integer|exists:employees,id',
+            'operation_id' => ['required','integer',Rule::exists('operations','id')->where('company_id',$companyId)],
+            'direction' => 'required|in:IN,OUT', 'stage' => 'required|in:SEWING,FINISHING',
+            'line_id' => ['nullable','integer',Rule::exists('lines','id')->where('company_id',$companyId)],
+            'employee_id' => ['nullable','integer',Rule::exists('employees','id')->where('company_id',$companyId)],
         ]);
-
-        try {
-            $scan = $this->service->scan(CurrentCompany::id(), $data['bundle_no'], $data, $request->user());
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        return response()->json($scan, 201);
+        return $this->domainResponse(fn () => response()->json($this->service->scan($companyId, $data['bundle_no'], $data, $request->user()), 201));
     }
 
-    /** BR-063: WIP per MO per stage */
     public function wip(Request $request, int $productionOrder): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.output.view'), 403);
-
-        return response()->json(['data' => $this->service->wipByStage($productionOrder)]);
+        return $this->domainResponse(fn () => response()->json(['data' => $this->service->wipByStage(CurrentCompany::id(), $productionOrder)]));
     }
 
-    /** Daily output per line (agregasi scan OUT) */
     public function dailyOutput(Request $request, int $line): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('production.output.view'), 403);
+        $data = $request->validate(['date' => 'nullable|date_format:Y-m-d']);
+        return $this->domainResponse(fn () => response()->json(['data' => $this->service->dailyOutput(CurrentCompany::id(), $line, $data['date'] ?? now()->toDateString())]));
+    }
 
-        $date = $request->query('date', now()->toDateString());
-
-        return response()->json(['data' => $this->service->dailyOutput($line, $date)]);
+    private function domainResponse(callable $callback): JsonResponse
+    {
+        try { return $callback(); }
+        catch (RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 }

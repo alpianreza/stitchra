@@ -3,9 +3,9 @@
 namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use LogicException;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 
-/** BR-013/BR-016: append-only. Tidak ada updated_at; koreksi hanya via entri balik. */
 class StockLedger extends Model
 {
     use BelongsToCompany;
@@ -23,12 +23,21 @@ class StockLedger extends Model
 
     protected $fillable = [
         'company_id', 'movement_type', 'item_type', 'material_id',
-        'style_id', 'colorway_id', 'size_id',
-        'warehouse_id', 'location_id', 'lot_no', 'roll_id', 'ownership',
-        'qty_in', 'qty_out', 'uom_id', 'unit_cost', 'total_cost', 'running_balance',
-        'source_document_type', 'source_document_id', 'source_document_line_id',
-        'created_at', 'created_by',
+        'style_id', 'colorway_id', 'size_id', 'warehouse_id', 'location_id',
+        'lot_no', 'roll_id', 'ownership', 'qty_in', 'qty_out', 'uom_id',
+        'unit_cost', 'total_cost', 'running_balance', 'source_document_type',
+        'source_document_id', 'source_document_line_id', 'created_at', 'created_by',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(static function (): never {
+            throw new LogicException('Stock ledger bersifat append-only dan tidak dapat diubah.');
+        });
+        static::deleting(static function (): never {
+            throw new LogicException('Stock ledger bersifat append-only dan tidak dapat dihapus.');
+        });
+    }
 
     protected function casts(): array
     {

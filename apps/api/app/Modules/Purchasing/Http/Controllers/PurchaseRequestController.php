@@ -5,10 +5,12 @@ namespace Modules\Purchasing\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\Rule;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
 use Modules\Purchasing\Models\PurchaseRequest;
 use Modules\Purchasing\Services\PurchasingService;
+use RuntimeException;
 
 class PurchaseRequestController extends Controller
 {
@@ -16,46 +18,46 @@ class PurchaseRequestController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('purchasing.pr.view'), 403);
-
+        $filters = $request->validate([
+            'status' => ['nullable', Rule::in(PurchaseRequest::STATUSES)],
+            'source' => ['nullable', Rule::in(PurchaseRequest::SOURCES)],
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
         $query = PurchaseRequest::withCount('lines');
-        if ($status = $request->query('status')) {
-            $query->where('status', $status);
-        }
-        if ($source = $request->query('source')) {
-            $query->where('source', $source);
-        }
-
-        return response()->json($query->orderByDesc('id')->paginate(min((int) $request->query('per_page', 25), 100)));
+        if (! empty($filters['status'])) $query->where('status', $filters['status']);
+        if (! empty($filters['source'])) $query->where('source', $filters['source']);
+        return response()->json($query->orderByDesc('id')->paginate($filters['per_page'] ?? 25));
     }
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('purchasing.pr.create'), 403);
-
+        $companyId = CurrentCompany::id();
         $data = $request->validate([
-            'needed_by' => 'nullable|date',
-            'notes' => 'nullable|string',
+            'needed_by' => 'nullable|date', 'notes' => 'nullable|string',
             'lines' => 'required|array|min:1',
-            'lines.*.material_id' => 'required|integer|exists:materials,id',
+            'lines.*.material_id' => ['required', 'integer', Rule::exists('materials', 'id')->where('company_id', $companyId)],
             'lines.*.qty' => 'required|numeric|min:0.0001',
-            'lines.*.uom_id' => 'required|integer|exists:uoms,id',
+            'lines.*.uom_id' => ['required', 'integer', Rule::exists('uoms', 'id')->where('company_id', $companyId)],
             'lines.*.need_date' => 'nullable|date',
         ]);
 
-        $pr = $this->service->createPr(CurrentCompany::id(), $data, $data['lines'], 'MANUAL', $request->user());
-        $this->audit->record('create', $pr, after: $pr->toArray(), request: $request);
-
-        return response()->json($pr, 201);
+        try {
+            $pr = $this->service->createPr($companyId, $data, $data['lines'], 'MANUAL', $request->user());
+            $this->audit->record('create', $pr, after: $pr->toArray(), request: $request);
+            return response()->json($pr, 201);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function submit(Request $request, PurchaseRequest $purchaseRequest): JsonResponse
     {
-        abort_unless($request->user()->hasPermission('purchasing.pr.submit'), 403);
-
-        $this->service->submitPr($purchaseRequest, $request->user());
-        $this->audit->record('submit', $purchaseRequest, request: $request);
-
-        return response()->json($purchaseRequest->fresh());
+        try {
+            $this->service->submitPr($purchaseRequest, $request->user());
+            $this->audit->record('submit', $purchaseRequest, request: $request);
+            return response()->json($purchaseRequest->fresh());
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

@@ -9,16 +9,11 @@ use Modules\Core\Services\AuditService;
 use Modules\Core\Services\NumberingService;
 use Modules\Inventory\Models\StockAdjustment;
 use Modules\Inventory\Models\StockBalance;
-use Modules\Inventory\Models\StockMovement;
+use Modules\Inventory\Models\StockLedger;
 use Modules\Inventory\Models\StockOpname;
 use Modules\Inventory\Models\StockTransfer;
 use RuntimeException;
 
-/**
- * Operasi inventory: transfer antar gudang, adjustment (BR-017: approval-gated),
- * opname (freeze → count → variance → approval → OPNAME_ADJUSTMENT).
- * Semua efek stok via ITS (BR-013) — service ini tidak menyentuh saldo langsung.
- */
 class InventoryOpsService
 {
     public function __construct(
@@ -28,15 +23,29 @@ class InventoryOpsService
         private AuditService $audit,
     ) {}
 
-    // ─── TRANSFER ────────────────────────────────────────────────────────────
-
     public function createTransfer(int $companyId, array $header, array $lines, User $user): StockTransfer
     {
-        if ($header['from_warehouse_id'] === $header['to_warehouse_id']) {
+        if ((int) $header['from_warehouse_id'] === (int) $header['to_warehouse_id']) {
             throw new RuntimeException('Gudang asal dan tujuan tidak boleh sama.');
         }
-        if (empty($lines)) {
+        if ($lines === []) {
             throw new RuntimeException('Transfer wajib punya minimal 1 line.');
+        }
+        $this->assertUserCompany($user, $companyId);
+        $this->assertCompanyReference('warehouses', (int) $header['from_warehouse_id'], $companyId, 'Gudang asal');
+        $this->assertCompanyReference('warehouses', (int) $header['to_warehouse_id'], $companyId, 'Gudang tujuan');
+
+        $seen = [];
+        foreach ($lines as $line) {
+            $this->assertInventoryLine($companyId, $line);
+            if ((float) ($line['qty'] ?? 0) <= 0) {
+                throw new RuntimeException('Qty transfer wajib lebih besar dari nol.');
+            }
+            $key = implode(':', [(int) $line['material_id'], $line['lot_no'] ?? '', $line['roll_id'] ?? '', (int) $line['uom_id']]);
+            if (isset($seen[$key])) {
+                throw new RuntimeException('Line transfer duplikat.');
+            }
+            $seen[$key] = true;
         }
 
         return DB::transaction(function () use ($companyId, $header, $lines, $user): StockTransfer {
@@ -49,82 +58,111 @@ class InventoryOpsService
                 'status' => 'DRAFT',
                 'created_by' => $user->id,
             ]);
-
             foreach ($lines as $line) {
                 $transfer->lines()->create($line);
             }
-
             return $transfer->load('lines');
         });
     }
 
-    /** Posting keluar dari gudang asal (IN_TRANSIT) */
     public function postTransfer(StockTransfer $transfer, User $user): StockTransfer
     {
-        if ($transfer->status !== 'DRAFT') {
-            throw new RuntimeException('Hanya transfer DRAFT yang bisa di-post.');
-        }
-
         return DB::transaction(function () use ($transfer, $user): StockTransfer {
+            $locked = StockTransfer::withoutGlobalScopes()->with('lines')->whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'DRAFT') {
+                throw new RuntimeException('Hanya transfer DRAFT yang bisa di-post.');
+            }
+
+            $lines = $locked->lines->map(function ($line) use ($locked): array {
+                $balance = StockBalance::withoutGlobalScopes()
+                    ->where('company_id', $locked->company_id)
+                    ->where('material_id', $line->material_id)
+                    ->where('warehouse_id', $locked->from_warehouse_id)
+                    ->where('lot_no', $line->lot_no)
+                    ->where('roll_id', $line->roll_id)
+                    ->where('ownership', 'COMPANY')
+                    ->first();
+
+                return [
+                    'material_id' => $line->material_id,
+                    'warehouse_id' => $locked->from_warehouse_id,
+                    'lot_no' => $line->lot_no,
+                    'roll_id' => $line->roll_id,
+                    'qty' => (float) $line->qty,
+                    'uom_id' => $line->uom_id,
+                    'unit_cost' => $balance?->avg_cost,
+                    'source_document_line_id' => $line->id,
+                ];
+            })->all();
+
             $this->its->post('TRANSFER_OUT', [
-                'company_id' => $transfer->company_id,
+                'company_id' => $locked->company_id,
                 'source_document_type' => 'stock_transfers',
-                'source_document_id' => $transfer->id,
-            ], $transfer->lines->map(fn ($l) => [
-                'material_id' => $l->material_id,
-                'warehouse_id' => $transfer->from_warehouse_id,
-                'lot_no' => $l->lot_no, 'roll_id' => $l->roll_id,
-                'qty' => (float) $l->qty, 'uom_id' => $l->uom_id,
-                'source_document_line_id' => $l->id,
-            ])->all(), $user);
+                'source_document_id' => $locked->id,
+            ], $lines, $user);
 
-            $transfer->update(['status' => 'IN_TRANSIT', 'updated_by' => $user->id]);
-            $this->audit->record('update', $transfer, after: ['status' => 'IN_TRANSIT']);
-
-            return $transfer->fresh();
+            $locked->update(['status' => 'IN_TRANSIT', 'updated_by' => $user->id]);
+            $this->audit->record('update', $locked, after: ['status' => 'IN_TRANSIT']);
+            return $locked->fresh();
         });
     }
 
-    /** Terima di gudang tujuan (RECEIVED) */
     public function receiveTransfer(StockTransfer $transfer, User $user): StockTransfer
     {
-        if ($transfer->status !== 'IN_TRANSIT') {
-            throw new RuntimeException('Hanya transfer IN_TRANSIT yang bisa diterima.');
-        }
-
         return DB::transaction(function () use ($transfer, $user): StockTransfer {
+            $locked = StockTransfer::withoutGlobalScopes()->with('lines')->whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'IN_TRANSIT') {
+                throw new RuntimeException('Hanya transfer IN_TRANSIT yang bisa diterima.');
+            }
+
+            $lines = $locked->lines->map(function ($line) use ($locked): array {
+                $outbound = StockLedger::withoutGlobalScopes()
+                    ->where('company_id', $locked->company_id)
+                    ->where('movement_type', 'TRANSFER_OUT')
+                    ->where('source_document_type', 'stock_transfers')
+                    ->where('source_document_id', $locked->id)
+                    ->where('source_document_line_id', $line->id)
+                    ->firstOrFail();
+
+                return [
+                    'material_id' => $line->material_id,
+                    'warehouse_id' => $locked->to_warehouse_id,
+                    'lot_no' => $line->lot_no,
+                    'roll_id' => $line->roll_id,
+                    'qty' => (float) $line->qty,
+                    'uom_id' => $line->uom_id,
+                    'unit_cost' => $outbound->unit_cost,
+                    'source_document_line_id' => $line->id,
+                ];
+            })->all();
+
             $this->its->post('TRANSFER_IN', [
-                'company_id' => $transfer->company_id,
+                'company_id' => $locked->company_id,
                 'source_document_type' => 'stock_transfers',
-                'source_document_id' => $transfer->id,
-            ], $transfer->lines->map(fn ($l) => [
-                'material_id' => $l->material_id,
-                'warehouse_id' => $transfer->to_warehouse_id,
-                'lot_no' => $l->lot_no, 'roll_id' => $l->roll_id,
-                'qty' => (float) $l->qty, 'uom_id' => $l->uom_id,
-                'source_document_line_id' => $l->id,
-            ])->all(), $user);
+                'source_document_id' => $locked->id,
+            ], $lines, $user);
 
-            $transfer->update(['status' => 'RECEIVED', 'updated_by' => $user->id]);
-            $this->audit->record('update', $transfer, after: ['status' => 'RECEIVED']);
-
-            return $transfer->fresh();
+            $locked->update(['status' => 'RECEIVED', 'updated_by' => $user->id]);
+            $this->audit->record('update', $locked, after: ['status' => 'RECEIVED']);
+            return $locked->fresh();
         });
     }
-
-    // ─── ADJUSTMENT (BR-017: approval-gated) ─────────────────────────────────
 
     public function createAdjustment(int $companyId, string $reason, array $lines, User $user): StockAdjustment
     {
-        if (empty($lines)) {
+        if ($lines === []) {
             throw new RuntimeException('Adjustment wajib punya minimal 1 line.');
         }
+        $this->assertUserCompany($user, $companyId);
         foreach ($lines as $line) {
-            if ((float) $line['qty_delta'] === 0.0) {
+            $this->assertInventoryLine($companyId, $line);
+            if ((float) ($line['qty_delta'] ?? 0) === 0.0) {
                 throw new RuntimeException('qty_delta tidak boleh 0.');
             }
             if ((float) $line['qty_delta'] > 0 && ! isset($line['unit_cost'])) {
-                throw new RuntimeException('Penambahan stok wajib menyertakan unit_cost (masuk moving average).');
+                throw new RuntimeException('Penambahan stok wajib menyertakan unit_cost.');
             }
         }
 
@@ -136,62 +174,58 @@ class InventoryOpsService
                 'status' => 'DRAFT',
                 'created_by' => $user->id,
             ]);
-
-            foreach ($lines as $line) {
-                $adj->lines()->create($line);
-            }
-
+            foreach ($lines as $line) $adj->lines()->create($line);
             return $adj->load('lines');
         });
     }
 
     public function submitAdjustment(StockAdjustment $adj, User $user): void
     {
-        if ($adj->status !== 'DRAFT') {
-            throw new RuntimeException('Hanya adjustment DRAFT yang bisa disubmit.');
-        }
-
-        $adj->update(['status' => 'SUBMITTED']);
-        $this->approval->submit($adj, 'ADJ', $user);   // flow doc_type ADJ
-    }
-
-    /** Dipanggil listener saat approval ADJ → APPROVED: efekkan ke stok via ITS (idempotent). */
-    public function applyAdjustmentOnApproval(int $adjustmentId): void
-    {
-        $adj = StockAdjustment::withoutGlobalScopes()->with('lines')->findOrFail($adjustmentId);
-
-        // Idempotent: sudah pernah di-apply → skip
-        $alreadyApplied = StockMovement::withoutGlobalScopes()
-            ->where('source_document_type', 'stock_adjustments')
-            ->where('source_document_id', $adj->id)
-            ->exists();
-        if ($alreadyApplied) {
-            return;
-        }
-
-        $user = User::withoutGlobalScopes()->findOrFail($adj->created_by);
-
         DB::transaction(function () use ($adj, $user): void {
-            foreach ($adj->lines as $line) {
-                $this->its->adjust($adj->company_id, [
-                    'material_id' => $line->material_id,
-                    'warehouse_id' => $line->warehouse_id,
-                    'location_id' => $line->location_id,
-                    'lot_no' => $line->lot_no,
-                    'roll_id' => $line->roll_id,
-                    'uom_id' => $line->uom_id,
-                    'unit_cost' => $line->unit_cost,
-                    'source_document_line_id' => $line->id,
-                ], (float) $line->qty_delta, 'stock_adjustments', $adj->id, $user);
+            $locked = StockAdjustment::withoutGlobalScopes()->whereKey($adj->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'DRAFT') {
+                throw new RuntimeException('Hanya adjustment DRAFT yang bisa disubmit.');
             }
+            $locked->update(['status' => 'SUBMITTED', 'updated_by' => $user->id]);
+            $this->approval->submit($locked, 'ADJ', $user);
         });
     }
 
-    // ─── OPNAME (PF-12) ──────────────────────────────────────────────────────
+    public function applyAdjustmentOnApproval(int $adjustmentId): void
+    {
+        DB::transaction(function () use ($adjustmentId): void {
+            $adj = StockAdjustment::withoutGlobalScopes()->with('lines')->whereKey($adjustmentId)->lockForUpdate()->firstOrFail();
+            $alreadyApplied = StockLedger::withoutGlobalScopes()
+                ->where('source_document_type', 'stock_adjustments')
+                ->where('source_document_id', $adj->id)
+                ->exists();
+            if ($alreadyApplied) {
+                if ($adj->status !== 'APPROVED') $adj->update(['status' => 'APPROVED']);
+                return;
+            }
+            if ($adj->status !== 'SUBMITTED') {
+                throw new RuntimeException('Adjustment harus SUBMITTED sebelum diterapkan.');
+            }
 
-    /** Buat opname: freeze saldo sistem per material di gudang (system_qty snapshot). */
+            $user = User::withoutGlobalScopes()->findOrFail($adj->created_by);
+            foreach ($adj->lines as $line) {
+                $this->its->adjust($adj->company_id, [
+                    'material_id' => $line->material_id, 'warehouse_id' => $line->warehouse_id,
+                    'location_id' => $line->location_id, 'lot_no' => $line->lot_no,
+                    'roll_id' => $line->roll_id, 'uom_id' => $line->uom_id,
+                    'unit_cost' => $line->unit_cost, 'source_document_line_id' => $line->id,
+                ], (float) $line->qty_delta, 'stock_adjustments', $adj->id, $user);
+            }
+            $adj->update(['status' => 'APPROVED']);
+        });
+    }
+
     public function createOpname(int $companyId, int $warehouseId, User $user): StockOpname
     {
+        $this->assertUserCompany($user, $companyId);
+        $this->assertCompanyReference('warehouses', $warehouseId, $companyId, 'Warehouse');
+
         return DB::transaction(function () use ($companyId, $warehouseId, $user): StockOpname {
             $opname = StockOpname::create([
                 'company_id' => $companyId,
@@ -201,85 +235,127 @@ class InventoryOpsService
                 'status' => 'COUNTING',
                 'created_by' => $user->id,
             ]);
-
-            // Freeze saldo per material (agregat lot/roll diringkas per material+location null-safe)
             $balances = StockBalance::withoutGlobalScopes()
-                ->where('company_id', $companyId)
-                ->where('warehouse_id', $warehouseId)
-                ->where('on_hand', '>', 0)
-                ->get();
-
-            foreach ($balances as $b) {
+                ->where('company_id', $companyId)->where('warehouse_id', $warehouseId)
+                ->where('on_hand', '>', 0)->lockForUpdate()->get();
+            foreach ($balances as $balance) {
                 $opname->lines()->create([
-                    'material_id' => $b->material_id,
-                    'location_id' => $b->location_id,
-                    'lot_no' => $b->lot_no,
-                    'roll_id' => $b->roll_id,
-                    'system_qty' => $b->on_hand,
+                    'material_id' => $balance->material_id, 'location_id' => $balance->location_id,
+                    'lot_no' => $balance->lot_no, 'roll_id' => $balance->roll_id,
+                    'system_qty' => $balance->on_hand,
                 ]);
             }
-
             $this->audit->record('create', $opname, after: ['doc_no' => $opname->doc_no, 'lines' => $balances->count()]);
-
             return $opname->load('lines');
         });
     }
 
-    /** Input hasil hitung fisik → variance; lalu submit untuk approval (doc_type OPN). */
     public function recordCountsAndSubmit(StockOpname $opname, array $counts, User $user): StockOpname
     {
-        if ($opname->status !== 'COUNTING') {
-            throw new RuntimeException('Opname hanya bisa dihitung saat status COUNTING.');
-        }
-
         return DB::transaction(function () use ($opname, $counts, $user): StockOpname {
-            foreach ($counts as $c) {
-                $line = $opname->lines()->findOrFail($c['line_id']);
+            $locked = StockOpname::withoutGlobalScopes()->with('lines')->whereKey($opname->id)->lockForUpdate()->firstOrFail();
+            $this->assertUserCompany($user, (int) $locked->company_id);
+            if ($locked->status !== 'COUNTING') {
+                throw new RuntimeException('Opname hanya bisa dihitung saat status COUNTING.');
+            }
+
+            $byId = collect($counts)->keyBy('line_id');
+            if ($byId->count() !== count($counts) || $byId->count() !== $locked->lines->count()) {
+                throw new RuntimeException('Seluruh line opname wajib dihitung tepat satu kali.');
+            }
+            foreach ($locked->lines as $line) {
+                $count = $byId->get($line->id);
+                if ($count === null || (float) $count['counted_qty'] < 0) {
+                    throw new RuntimeException('Count opname tidak valid.');
+                }
                 $line->update([
-                    'counted_qty' => (float) $c['counted_qty'],
-                    'variance_qty' => (float) $c['counted_qty'] - (float) $line->system_qty,
+                    'counted_qty' => (float) $count['counted_qty'],
+                    'variance_qty' => (float) $count['counted_qty'] - (float) $line->system_qty,
                 ]);
             }
 
-            $opname->update(['status' => 'SUBMITTED', 'updated_by' => $user->id]);
-            $this->approval->submit($opname, 'OPN', $user);
-
-            return $opname->fresh('lines');
+            $locked->update(['status' => 'SUBMITTED', 'updated_by' => $user->id]);
+            $this->approval->submit($locked, 'OPN', $user);
+            return $locked->fresh('lines');
         });
     }
 
-    /** Listener OPN APPROVED: variance ≠ 0 → ITS adjust (OPNAME_ADJUSTMENT), idempotent. */
     public function applyOpnameOnApproval(int $opnameId): void
     {
-        $opname = StockOpname::withoutGlobalScopes()->with('lines')->findOrFail($opnameId);
+        DB::transaction(function () use ($opnameId): void {
+            $opname = StockOpname::withoutGlobalScopes()->with('lines')->whereKey($opnameId)->lockForUpdate()->firstOrFail();
+            $alreadyApplied = StockLedger::withoutGlobalScopes()
+                ->where('source_document_type', 'stock_opnames')
+                ->where('source_document_id', $opname->id)
+                ->exists();
+            if ($alreadyApplied) {
+                if ($opname->status !== 'APPROVED') $opname->update(['status' => 'APPROVED']);
+                return;
+            }
+            if ($opname->status !== 'SUBMITTED') {
+                throw new RuntimeException('Opname harus SUBMITTED sebelum diterapkan.');
+            }
 
-        $alreadyApplied = StockMovement::withoutGlobalScopes()
-            ->where('source_document_type', 'stock_opnames')
-            ->where('source_document_id', $opname->id)
-            ->exists();
-        if ($alreadyApplied) {
-            return;
-        }
-
-        $user = User::withoutGlobalScopes()->findOrFail($opname->created_by);
-
-        DB::transaction(function () use ($opname, $user): void {
+            $user = User::withoutGlobalScopes()->findOrFail($opname->created_by);
             foreach ($opname->lines as $line) {
                 $variance = (float) $line->variance_qty;
-                if ($line->counted_qty === null || abs($variance) < 0.0001) {
-                    continue;
+                if ($line->counted_qty === null || abs($variance) < 0.0001) continue;
+
+                $ledger = StockLedger::withoutGlobalScopes()
+                    ->where('company_id', $opname->company_id)
+                    ->where('material_id', $line->material_id)
+                    ->where('warehouse_id', $opname->warehouse_id)
+                    ->where('location_id', $line->location_id)
+                    ->where('lot_no', $line->lot_no)
+                    ->where('roll_id', $line->roll_id)
+                    ->latest('id')->first();
+                if ($ledger === null) {
+                    throw new RuntimeException('UOM opname tidak dapat diturunkan dari ledger.');
                 }
 
+                $balance = StockBalance::withoutGlobalScopes()
+                    ->where('company_id', $opname->company_id)
+                    ->where('material_id', $line->material_id)
+                    ->where('warehouse_id', $opname->warehouse_id)
+                    ->where('location_id', $line->location_id)
+                    ->where('lot_no', $line->lot_no)
+                    ->where('roll_id', $line->roll_id)->first();
+
                 $this->its->adjust($opname->company_id, [
-                    'material_id' => $line->material_id,
-                    'warehouse_id' => $opname->warehouse_id,
-                    'location_id' => $line->location_id,
-                    'lot_no' => $line->lot_no,
-                    'roll_id' => $line->roll_id,
-                    'uom_id' => $line->material?->use_uom_id ?? 1,
+                    'material_id' => $line->material_id, 'warehouse_id' => $opname->warehouse_id,
+                    'location_id' => $line->location_id, 'lot_no' => $line->lot_no,
+                    'roll_id' => $line->roll_id, 'uom_id' => $ledger->uom_id,
+                    'unit_cost' => $variance > 0 ? $balance?->avg_cost : null,
                     'source_document_line_id' => $line->id,
                 ], $variance, 'stock_opnames', $opname->id, $user);
             }
+            $opname->update(['status' => 'APPROVED']);
         });
+    }
+
+    private function assertInventoryLine(int $companyId, array $line): void
+    {
+        $this->assertCompanyReference('materials', (int) ($line['material_id'] ?? 0), $companyId, 'Material');
+        $this->assertCompanyReference('uoms', (int) ($line['uom_id'] ?? 0), $companyId, 'UOM');
+        if (! empty($line['warehouse_id'])) {
+            $this->assertCompanyReference('warehouses', (int) $line['warehouse_id'], $companyId, 'Warehouse');
+        }
+        if (! empty($line['roll_id']) && ! DB::table('fabric_rolls')->where('id', $line['roll_id'])->where('company_id', $companyId)->exists()) {
+            throw new RuntimeException('Roll tidak ditemukan pada company aktif.');
+        }
+    }
+
+    private function assertCompanyReference(string $table, int $id, int $companyId, string $label): void
+    {
+        if ($id <= 0 || ! DB::table($table)->where('id', $id)->where('company_id', $companyId)->exists()) {
+            throw new RuntimeException("{$label} tidak ditemukan pada company aktif.");
+        }
+    }
+
+    private function assertUserCompany(User $user, int $companyId): void
+    {
+        if ((int) $user->company_id !== $companyId && ! $user->companies()->whereKey($companyId)->exists()) {
+            throw new RuntimeException('User tidak memiliki akses ke company dokumen.');
+        }
     }
 }

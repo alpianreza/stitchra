@@ -7,164 +7,40 @@ use Modules\Core\Models\User;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Services\NumberingService;
 use Modules\Inventory\Services\InventoryTransactionService;
+use Modules\MasterData\Models\Uom;
 use Modules\Packing\Models\PackingList;
+use Modules\Sales\Models\SalesOrder;
 use Modules\Shipping\Models\Shipment;
 use RuntimeException;
 
-/**
- * PF-10/BR-021: shipment dari packing list APPROVED; cek toleransi vs SO;
- * di luar toleransi → status flag + butuh approval eksplisit.
- * FG keluar via ITS SHIPMENT (BR-013).
- */
 class ShipmentService
 {
-    public function __construct(
-        private NumberingService $numbering,
-        private InventoryTransactionService $its,
-        private AuditService $audit,
-    ) {}
-
-    /** Buat shipment (SI) dari packing list APPROVED — lines = agregat karton. */
-    public function create(PackingList $pl, array $header, User $user): Shipment
+    public function __construct(private NumberingService $numbering,private InventoryTransactionService $its,private AuditService $audit){}
+    public function create(PackingList $pl,array $header,User $user):Shipment
     {
-        if ($pl->status !== 'APPROVED') {
-            throw new RuntimeException('Shipment hanya dari packing list APPROVED (finalize dulu).');
-        }
-
-        return DB::transaction(function () use ($pl, $header, $user): Shipment {
-            $shipment = Shipment::create(array_merge($header, [
-                'company_id' => $pl->company_id,
-                'doc_no' => $this->numbering->next($pl->company_id, 'SHP'),
-                'sales_order_id' => $pl->sales_order_id,
-                'packing_list_id' => $pl->id,
-                'status' => 'DRAFT',
-                'tolerance_check' => 'PENDING',
-                'created_by' => $user->id,
-            ]));
-
-            $agg = DB::table('carton_lines')
-                ->join('cartons', 'cartons.id', '=', 'carton_lines.carton_id')
-                ->where('cartons.packing_list_id', $pl->id)
-                ->selectRaw('style_id, colorway_id, size_id, SUM(qty) as qty')
-                ->groupBy('style_id', 'colorway_id', 'size_id')
-                ->get();
-
-            foreach ($agg as $row) {
-                $shipment->lines()->create([
-                    'style_id' => $row->style_id,
-                    'colorway_id' => $row->colorway_id,
-                    'size_id' => $row->size_id,
-                    'qty_shipped' => (float) $row->qty,
-                ]);
-            }
-
-            $this->checkTolerance($shipment);   // BR-021
-
-            return $shipment->fresh('lines');
+        return DB::transaction(function()use($pl,$header,$user){
+            $locked=PackingList::withoutGlobalScopes()->whereKey($pl->id)->lockForUpdate()->firstOrFail();$this->assertAccess($user,(int)$locked->company_id);
+            if($locked->status!=='APPROVED')throw new RuntimeException('Shipment hanya dari packing list APPROVED.');
+            if(Shipment::withoutGlobalScopes()->where('packing_list_id',$locked->id)->exists())throw new RuntimeException('Packing list sudah memiliki shipment.');
+            if(empty($header['ship_date']))throw new RuntimeException('Ship date wajib diisi.');
+            $shipment=Shipment::create(['company_id'=>$locked->company_id,'doc_no'=>$this->numbering->next($locked->company_id,'SHP'),'sales_order_id'=>$locked->sales_order_id,'packing_list_id'=>$locked->id,'ship_date'=>$header['ship_date'],'forwarder'=>$header['forwarder']??null,'booking_no'=>$header['booking_no']??null,'container_no'=>$header['container_no']??null,'vessel_flight'=>$header['vessel_flight']??null,'port_of_loading'=>$header['port_of_loading']??null,'port_of_discharge'=>$header['port_of_discharge']??null,'status'=>'DRAFT','tolerance_check'=>'PENDING','created_by'=>$user->id]);
+            $rows=DB::table('carton_lines')->join('cartons','cartons.id','=','carton_lines.carton_id')->where('cartons.packing_list_id',$locked->id)->selectRaw('style_id,colorway_id,size_id,SUM(qty) qty')->groupBy('style_id','colorway_id','size_id')->get();
+            if($rows->isEmpty())throw new RuntimeException('Packing list tidak memiliki carton line.');
+            foreach($rows as $row)$shipment->lines()->create(['style_id'=>$row->style_id,'colorway_id'=>$row->colorway_id,'size_id'=>$row->size_id,'qty_shipped'=>(float)$row->qty]);
+            $this->checkToleranceLocked($shipment->fresh('lines'));$this->audit->record('create',$shipment,after:['packing_list'=>$locked->doc_no]);return $shipment->fresh('lines');
         });
     }
-
-    /** BR-021: bandingkan qty shipped vs SO per matrix terhadap toleransi buyer. */
-    public function checkTolerance(Shipment $shipment): void
+    public function checkTolerance(Shipment $shipment):void{DB::transaction(function()use($shipment){$locked=Shipment::withoutGlobalScopes()->whereKey($shipment->id)->lockForUpdate()->firstOrFail();$this->checkToleranceLocked($locked->load('lines'));});}
+    private function checkToleranceLocked(Shipment $shipment):void
     {
-        $so = $shipment->salesOrder;
-        $tolerance = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
-
-        $result = 'OK';
-        foreach ($shipment->lines as $line) {
-            $soLine = $so->lines()
-                ->where('style_id', $line->style_id)
-                ->where('colorway_id', $line->colorway_id)
-                ->where('size_id', $line->size_id)
-                ->first();
-
-            if ($soLine === null) {
-                $result = 'OVER';
-                continue;
-            }
-
-            $ordered = (float) $soLine->qty;
-            $shipped = (float) $line->qty_shipped;
-            $diff = $ordered > 0 ? ($shipped - $ordered) / $ordered * 100 : 100;
-
-            if ($diff > $tolerance) {
-                $result = 'OVER';
-            } elseif ($diff < -$tolerance) {
-                $result = $result === 'OVER' ? 'OVER' : 'UNDER';
-            }
-        }
-
-        $shipment->update(['tolerance_check' => $result]);
+        $so=SalesOrder::withoutGlobalScopes()->with('lines','customer')->where('company_id',$shipment->company_id)->whereKey($shipment->sales_order_id)->lockForUpdate()->firstOrFail();$tol=(float)($so->tolerance_pct??$so->customer?->shipment_tolerance_pct??0);$result='OK';
+        foreach($so->lines as $line){$current=(float)$shipment->lines->first(fn($x)=>(int)$x->style_id===(int)$line->style_id&&(int)$x->colorway_id===(int)$line->colorway_id&&(int)$x->size_id===(int)$line->size_id)?->qty_shipped;$prior=(float)DB::table('shipment_lines')->join('shipments','shipments.id','=','shipment_lines.shipment_id')->where('shipments.sales_order_id',$so->id)->where('shipments.status','SHIPPED')->where('shipment_lines.style_id',$line->style_id)->where('shipment_lines.colorway_id',$line->colorway_id)->where('shipment_lines.size_id',$line->size_id)->sum('shipment_lines.qty_shipped');$ordered=(float)$line->qty;$projected=$prior+$current;if($projected>$ordered*(1+$tol/100)+0.0001)$result='OVER';elseif($projected<$ordered*(1-$tol/100)-0.0001&&$result!=='OVER')$result='UNDER';}
+        $shipment->update(['tolerance_check'=>$result]);
     }
-
-    /** Approve shipment yang di luar toleransi (flag eksplisit, tercatat audit). */
-    public function approveOverTolerance(Shipment $shipment, User $user): Shipment
+    public function approveOverTolerance(Shipment $shipment,User $user):Shipment{return DB::transaction(function()use($shipment,$user){$locked=Shipment::withoutGlobalScopes()->whereKey($shipment->id)->lockForUpdate()->firstOrFail();$this->assertAccess($user,(int)$locked->company_id);if(!in_array($locked->status,['DRAFT','READY'],true))throw new RuntimeException('Hanya shipment belum dikirim yang dapat di-approve.');if($locked->tolerance_check==='OK')throw new RuntimeException('Shipment dalam toleransi tidak butuh override.');$locked->update(['over_tolerance_approved'=>true,'updated_by'=>$user->id]);$this->audit->record('update',$locked,after:['over_tolerance_approved'=>true,'tolerance_check'=>$locked->tolerance_check]);return $locked->fresh();});}
+    public function ship(Shipment $shipment,int $warehouseId,User $user):Shipment
     {
-        if ($shipment->tolerance_check === 'OK') {
-            throw new RuntimeException('Shipment ini dalam toleransi — tidak butuh approval khusus.');
-        }
-
-        $shipment->update(['over_tolerance_approved' => true]);
-        $this->audit->record('update', $shipment, after: ['over_tolerance_approved' => true, 'tolerance_check' => $shipment->tolerance_check]);
-
-        return $shipment->fresh();
+        return DB::transaction(function()use($shipment,$warehouseId,$user){$locked=Shipment::withoutGlobalScopes()->with('lines')->whereKey($shipment->id)->lockForUpdate()->firstOrFail();$this->assertAccess($user,(int)$locked->company_id);if(!in_array($locked->status,['DRAFT','READY'],true))throw new RuntimeException("Shipment {$locked->status} tidak bisa dikirim.");if($locked->tolerance_check!=='OK'&&!$locked->over_tolerance_approved)throw new RuntimeException('BR-021: shipment di luar toleransi buyer — approval wajib.');if(!DB::table('warehouses')->where('company_id',$locked->company_id)->where('type','FG')->where('id',$warehouseId)->exists())throw new RuntimeException('Warehouse shipment wajib FG pada company yang sama.');$pcs=Uom::withoutGlobalScopes()->where('company_id',$locked->company_id)->where('code','PCS')->first();if($pcs===null)throw new RuntimeException('PCS UOM belum dikonfigurasi.');$pl=PackingList::withoutGlobalScopes()->where('company_id',$locked->company_id)->whereKey($locked->packing_list_id)->lockForUpdate()->firstOrFail();if($pl->status!=='APPROVED')throw new RuntimeException('Packing list shipment tidak lagi APPROVED.');$lines=$locked->lines->map(fn($l)=>['item_type'=>'FG','style_id'=>$l->style_id,'colorway_id'=>$l->colorway_id,'size_id'=>$l->size_id,'warehouse_id'=>$warehouseId,'qty'=>(float)$l->qty_shipped,'uom_id'=>$pcs->id,'source_document_line_id'=>$l->id])->all();$this->its->post('SHIPMENT',['company_id'=>$locked->company_id,'source_document_type'=>'shipments','source_document_id'=>$locked->id],$lines,$user);$locked->update(['status'=>'SHIPPED','updated_by'=>$user->id]);$pl->update(['status'=>'SHIPPED','updated_by'=>$user->id]);$so=SalesOrder::withoutGlobalScopes()->with('lines','customer')->where('company_id',$locked->company_id)->whereKey($locked->sales_order_id)->lockForUpdate()->firstOrFail();$tol=(float)($so->tolerance_pct??$so->customer?->shipment_tolerance_pct??0);$complete=$so->lines->every(function($line)use($so,$tol){$qty=(float)DB::table('shipment_lines')->join('shipments','shipments.id','=','shipment_lines.shipment_id')->where('shipments.sales_order_id',$so->id)->where('shipments.status','SHIPPED')->where('shipment_lines.style_id',$line->style_id)->where('shipment_lines.colorway_id',$line->colorway_id)->where('shipment_lines.size_id',$line->size_id)->sum('shipment_lines.qty_shipped');return $qty+0.0001>=(float)$line->qty*(1-$tol/100);});$so->update(['status'=>$complete?'CLOSED':'IN_PROGRESS','updated_by'=>$user->id]);$this->audit->record('update',$locked,after:['status'=>'SHIPPED','so'=>$so->doc_no]);return $locked->fresh();});
     }
-
-    /**
-     * Kirim: wajib toleransi OK atau sudah di-approve (BR-021).
-     * FG keluar via ITS SHIPMENT (BR-013/006).
-     */
-    public function ship(Shipment $shipment, int $fgWarehouseId, User $user): Shipment
-    {
-        if ($shipment->status !== 'DRAFT' && $shipment->status !== 'READY') {
-            throw new RuntimeException("Shipment berstatus {$shipment->status} tidak bisa dikirim.");
-        }
-        if ($shipment->tolerance_check !== 'OK' && ! $shipment->over_tolerance_approved) {
-            throw new RuntimeException('BR-021: shipment di luar toleransi buyer — butuh approveOverTolerance dulu.');
-        }
-
-        return DB::transaction(function () use ($shipment, $fgWarehouseId, $user): Shipment {
-            $pcsUom = \Modules\MasterData\Models\Uom::where('code', 'like', 'PCS%')->value('id') ?? 1;
-
-            $itsLines = $shipment->lines->map(fn ($l) => [
-                'item_type' => 'FG',
-                'style_id' => $l->style_id,
-                'colorway_id' => $l->colorway_id,
-                'size_id' => $l->size_id,
-                'warehouse_id' => $fgWarehouseId,
-                'qty' => (float) $l->qty_shipped,
-                'uom_id' => $pcsUom,
-                'source_document_line_id' => $l->id,
-            ])->all();
-
-            $this->its->post('SHIPMENT', [
-                'company_id' => $shipment->company_id,
-                'source_document_type' => 'shipments',
-                'source_document_id' => $shipment->id,
-            ], $itsLines, $user);
-
-            $shipment->update(['status' => 'SHIPPED', 'updated_by' => $user->id]);
-            $shipment->packingList?->update(['status' => 'SHIPPED']);
-
-            // SO → CLOSED bila seluruh qty terkirim (dalam toleransi)
-            $so = $shipment->salesOrder;
-            $totalShipped = (float) DB::table('shipment_lines')
-                ->join('shipments', 'shipments.id', '=', 'shipment_lines.shipment_id')
-                ->where('shipments.sales_order_id', $so->id)
-                ->where('shipments.status', 'SHIPPED')
-                ->sum('shipment_lines.qty_shipped');
-            $totalOrdered = (float) $so->lines()->sum('qty');
-            $tolerance = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
-
-            if ($totalShipped >= $totalOrdered * (1 - $tolerance / 100)) {
-                $so->update(['status' => 'CLOSED']);
-            } elseif ($so->status === 'CONFIRMED') {
-                $so->update(['status' => 'IN_PROGRESS']);
-            }
-
-            $this->audit->record('update', $shipment, after: ['status' => 'SHIPPED', 'so' => $so->doc_no]);
-
-            return $shipment->fresh();
-        });
-    }
+    private function assertAccess(User $user,int $companyId):void{if((int)$user->company_id!==$companyId&&!$user->companies()->whereKey($companyId)->exists())throw new RuntimeException('User tidak memiliki akses ke company shipment.');}
 }

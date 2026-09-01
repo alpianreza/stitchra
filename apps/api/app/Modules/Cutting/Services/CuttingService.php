@@ -7,146 +7,18 @@ use Modules\Core\Models\User;
 use Modules\Core\Services\AuditService;
 use Modules\Core\Services\NumberingService;
 use Modules\Cutting\Models\CutOrder;
+use Modules\Cutting\Models\CutOrderLine;
+use Modules\MasterData\Services\UomConversionService;
 use Modules\Production\Models\ProductionOrder;
 use Modules\Receiving\Models\FabricRoll;
 use RuntimeException;
 
-/**
- * Cutting (PF-05): cut order → marker log (konsumsi aktual per roll, BR-031/041)
- * → bundles (BR-061). MO berpindah RELEASED → CUTTING saat cut order pertama.
- */
 class CuttingService
 {
-    public function __construct(
-        private NumberingService $numbering,
-        private AuditService $audit,
-    ) {}
-
-    /** Buat cut order dari MO; lines: colorway_id, size_id, qty_cut. */
-    public function create(ProductionOrder $mo, array $lines, User $user): CutOrder
-    {
-        if (! in_array($mo->status, ['RELEASED', 'CUTTING'], true)) {
-            throw new RuntimeException("Cut order hanya untuk MO RELEASED/CUTTING (status: {$mo->status}).");
-        }
-        if (empty($lines)) {
-            throw new RuntimeException('Cut order wajib punya minimal 1 line.');
-        }
-
-        return DB::transaction(function () use ($mo, $lines, $user): CutOrder {
-            $cutOrder = CutOrder::create([
-                'company_id' => $mo->company_id,
-                'doc_no' => $this->numbering->next($mo->company_id, 'CUT'),
-                'production_order_id' => $mo->id,
-                'cut_date' => now()->toDateString(),
-                'status' => 'IN_PROGRESS',
-                'created_by' => $user->id,
-            ]);
-
-            foreach ($lines as $line) {
-                $cutOrder->lines()->create($line);
-            }
-
-            // Transisi MO: RELEASED → CUTTING (BR-012)
-            if ($mo->status === 'RELEASED') {
-                $mo->update(['status' => 'CUTTING', 'actual_start' => now()->toDateString()]);
-            }
-
-            $this->audit->record('create', $cutOrder, after: ['doc_no' => $cutOrder->doc_no, 'mo' => $mo->doc_no]);
-
-            return $cutOrder->load('lines');
-        });
-    }
-
-    /**
-     * Marker log — konsumsi kain AKTUAL per roll (BR-031/041).
-     * qty_fabric_used_m mengurangi qty_remaining_meter roll.
-     */
-    public function recordMarker(CutOrder $cutOrder, array $markers, User $user): CutOrder
-    {
-        return DB::transaction(function () use ($cutOrder, $markers, $user): CutOrder {
-            foreach ($markers as $marker) {
-                $roll = FabricRoll::lockForUpdate()->findOrFail($marker['roll_id']);
-
-                if ($roll->status !== 'RELEASED') {
-                    throw new RuntimeException("Roll {$roll->roll_no} berstatus {$roll->status} — harus RELEASED (lulus inward QC).");
-                }
-                if ((float) $roll->qty_remaining_meter < (float) $marker['qty_fabric_used_m']) {
-                    throw new RuntimeException("Roll {$roll->roll_no}: pemakaian {$marker['qty_fabric_used_m']}m melebihi sisa {$roll->qty_remaining_meter}m.");
-                }
-
-                $cutOrder->markerLogs()->create(array_merge($marker, ['created_by' => $user->id]));
-                $roll->consume((float) $marker['qty_fabric_used_m']);   // BR-042: sisa = leftover
-            }
-
-            $this->audit->record('update', $cutOrder, after: ['markers' => count($markers)]);
-
-            return $cutOrder->load('markerLogs');
-        });
-    }
-
-    /**
-     * Generate bundles dari cut order line (BR-061).
-     * $bundleSize = pcs per bundle; bundle_no = {doc_no}-{line_seq}-{bundle_seq}.
-     */
-    public function generateBundles(CutOrder $cutOrder, int $cutOrderLineId, int $bundleSize, User $user): array
-    {
-        return DB::transaction(function () use ($cutOrder, $cutOrderLineId, $bundleSize, $user): array {
-            $line = $cutOrder->lines()->findOrFail($cutOrderLineId);
-
-            if ($bundleSize <= 0) {
-                throw new RuntimeException('Bundle size harus > 0.');
-            }
-            if ($line->bundles()->exists()) {
-                throw new RuntimeException('Bundles untuk line ini sudah digenerate.');
-            }
-
-            $remaining = (float) $line->qty_cut;
-            $seq = 0;
-            $bundles = [];
-
-            while ($remaining > 0) {
-                $seq++;
-                $qty = min($bundleSize, $remaining);
-                $bundles[] = $line->bundles()->create([
-                    'company_id' => $cutOrder->company_id,
-                    'bundle_no' => $cutOrder->doc_no.'-L'.$line->id.'-B'.str_pad((string) $seq, 3, '0', STR_PAD_LEFT),
-                    'production_order_id' => $cutOrder->production_order_id,
-                    'qty' => $qty,
-                    'current_stage' => 'CUTTING',
-                    'status' => 'ACTIVE',
-                ]);
-                $remaining -= $qty;
-            }
-
-            return $bundles;
-        });
-    }
-
-    /** Selesaikan cut order; update consumption_actual di BOM (BR-031). */
-    public function complete(CutOrder $cutOrder, User $user): CutOrder
-    {
-        return DB::transaction(function () use ($cutOrder, $user): CutOrder {
-            $mo = $cutOrder->productionOrder;
-
-            // BR-031: consumption aktual = total meter dipakai / qty cut
-            $totalUsed = (float) $cutOrder->markerLogs()->sum('qty_fabric_used_m');
-            $totalCut = (float) $cutOrder->lines()->sum('qty_cut');
-            $actualPerPcs = null;
-
-            if ($totalUsed > 0 && $totalCut > 0) {
-                $actualPerPcs = round($totalUsed / $totalCut, 6);
-
-                // Update BOM line fabric di versi snapshot MO
-                $mo->bomVersion->lines()
-                    ->whereHas('material', fn ($q) => $q->where('type', 'FABRIC'))
-                    ->update(['consumption_actual' => $actualPerPcs]);
-            }
-
-            $cutOrder->update(['status' => 'COMPLETED', 'updated_by' => $user->id]);
-
-            $this->audit->record('update', $cutOrder, after: ['status' => 'COMPLETED', 'consumption_actual' => $actualPerPcs]);
-
-            return $cutOrder->fresh(['lines', 'markerLogs']);
-        });
-    }
+    public function __construct(private NumberingService $numbering,private AuditService $audit,private UomConversionService $uoms){}
+    public function create(ProductionOrder $mo,array $lines,User $user):CutOrder{return DB::transaction(function()use($mo,$lines,$user){if($lines===[])throw new RuntimeException('Cut order wajib punya minimal 1 line.');$locked=ProductionOrder::withoutGlobalScopes()->whereKey($mo->id)->lockForUpdate()->firstOrFail();$this->access($user,(int)$locked->company_id);if(!in_array($locked->status,['RELEASED','CUTTING'],true))throw new RuntimeException('Status MO tidak mengizinkan cut order.');$seen=[];foreach($lines as$l){$qty=(float)($l['qty_cut']??0);if($qty<=0)throw new RuntimeException('Qty cut wajib lebih besar dari nol.');$key=(int)$l['colorway_id'].':'.(int)$l['size_id'];if(isset($seen[$key]))throw new RuntimeException('Matrix cut order tidak boleh duplikat.');$seen[$key]=1;$ordered=(float)DB::table('sales_order_lines')->where('sales_order_id',$locked->sales_order_id)->where('style_id',$locked->style_id)->where('colorway_id',$l['colorway_id'])->where('size_id',$l['size_id'])->sum('qty');$cut=(float)DB::table('cut_order_lines')->join('cut_orders','cut_orders.id','=','cut_order_lines.cut_order_id')->where('cut_orders.production_order_id',$locked->id)->where('cut_orders.status','<>','CANCELLED')->where('cut_order_lines.colorway_id',$l['colorway_id'])->where('cut_order_lines.size_id',$l['size_id'])->sum('cut_order_lines.qty_cut');if($ordered<=0||$cut+$qty-$ordered>0.0001)throw new RuntimeException('Qty cut melebihi matrix SO/MO.');}$co=CutOrder::create(['company_id'=>$locked->company_id,'doc_no'=>$this->numbering->next($locked->company_id,'CUT'),'production_order_id'=>$locked->id,'cut_date'=>now()->toDateString(),'status'=>'IN_PROGRESS','created_by'=>$user->id]);foreach($lines as$l)$co->lines()->create($l);if($locked->status==='RELEASED')$locked->update(['status'=>'CUTTING','actual_start'=>now()->toDateString(),'updated_by'=>$user->id]);$this->audit->record('create',$co,after:['doc_no'=>$co->doc_no,'mo'=>$locked->doc_no]);return$co->load('lines');});}
+    public function recordMarker(CutOrder $cutOrder,array $markers,User $user):CutOrder{return DB::transaction(function()use($cutOrder,$markers,$user){if($markers===[])throw new RuntimeException('Marker wajib punya minimal 1 line.');$locked=CutOrder::withoutGlobalScopes()->whereKey($cutOrder->id)->lockForUpdate()->firstOrFail();$this->access($user,(int)$locked->company_id);if($locked->status!=='IN_PROGRESS')throw new RuntimeException('Marker hanya untuk cut order IN_PROGRESS.');$mo=ProductionOrder::withoutGlobalScopes()->with('bomVersion.lines.material')->whereKey($locked->production_order_id)->lockForUpdate()->firstOrFail();foreach($markers as$m){$roll=FabricRoll::withoutGlobalScopes()->with('material')->where('company_id',$locked->company_id)->whereKey((int)$m['roll_id'])->lockForUpdate()->first();if(!$roll||$roll->status!=='RELEASED')throw new RuntimeException('Roll marker tidak valid atau belum RELEASED.');if(!$mo->bomVersion->lines->contains(fn($l)=>(int)$l->material_id===(int)$roll->material_id&&$l->material?->type==='FABRIC'))throw new RuntimeException('Roll marker bukan fabric BOM snapshot MO.');$useUom=(int)($roll->use_uom_id?:$roll->material->use_uom_id);if(isset($m['qty_fabric_used'])){$inputUom=(int)($m['uom_id']??$useUom);$used=$this->uoms->convert((int)$locked->company_id,(int)$roll->material_id,(float)$m['qty_fabric_used'],$inputUom,$useUom);$usedM=$this->uoms->toMeters((int)$locked->company_id,$inputUom,(float)$m['qty_fabric_used']);$length=$this->uoms->convert((int)$locked->company_id,(int)$roll->material_id,(float)$m['marker_length'],$inputUom,$useUom);$lengthM=$this->uoms->toMeters((int)$locked->company_id,$inputUom,(float)$m['marker_length']);}else{$usedM=(float)($m['qty_fabric_used_m']??0);$lengthM=(float)($m['marker_length_m']??0);$used=$this->uoms->fromMeters((int)$locked->company_id,$useUom,$usedM);$length=$this->uoms->fromMeters((int)$locked->company_id,$useUom,$lengthM);}if($used<=0||$length<=0||(int)($m['plies']??0)<=0)throw new RuntimeException('Marker length, plies, dan fabric used wajib lebih besar dari nol.');$dispatch=DB::table('fabric_dispatch_balances')->where('company_id',$locked->company_id)->where('production_order_id',$mo->id)->where('roll_id',$roll->id)->lockForUpdate()->first();if(!$dispatch)throw new RuntimeException('Roll belum di-issue/dispatched ke MO.');$available=round((float)$dispatch->qty_dispatched-(float)$dispatch->qty_consumed-(float)$dispatch->qty_returned,4);if($used-$available>0.0001)throw new RuntimeException('Pemakaian marker melebihi saldo dispatched roll.');if($used-$roll->remainingUse()>0.0001)throw new RuntimeException('Pemakaian marker melebihi sisa fisik roll.');$locked->markerLogs()->create(['roll_id'=>$roll->id,'uom_id'=>$useUom,'marker_length_m'=>$lengthM,'marker_length_use'=>$length,'plies'=>$m['plies'],'qty_fabric_used_m'=>$usedM,'qty_fabric_used_use'=>$used,'efficiency_pct'=>$m['efficiency_pct']??null,'created_by'=>$user->id]);DB::table('fabric_dispatch_balances')->where('id',$dispatch->id)->update(['qty_consumed'=>(float)$dispatch->qty_consumed+$used,'updated_at'=>now()]);$roll->consumeUse($used,$usedM);}$this->audit->record('update',$locked,after:['markers'=>count($markers)]);return$locked->load('markerLogs');});}
+    public function generateBundles(CutOrder $co,int $lineId,int $size,User $user):array{return DB::transaction(function()use($co,$lineId,$size,$user){if($size<=0)throw new RuntimeException('Bundle size harus > 0.');$locked=CutOrder::withoutGlobalScopes()->whereKey($co->id)->lockForUpdate()->firstOrFail();$this->access($user,(int)$locked->company_id);if($locked->status!=='IN_PROGRESS')throw new RuntimeException('Bundles hanya untuk cut order IN_PROGRESS.');$line=CutOrderLine::query()->where('cut_order_id',$locked->id)->whereKey($lineId)->lockForUpdate()->firstOrFail();if($line->bundles()->exists())throw new RuntimeException('Bundles untuk line ini sudah digenerate.');$remaining=(float)$line->qty_cut;$seq=0;$out=[];while($remaining>0.0001){$seq++;$qty=min((float)$size,$remaining);$out[]=$line->bundles()->create(['company_id'=>$locked->company_id,'bundle_no'=>$locked->doc_no.'-L'.$line->id.'-B'.str_pad((string)$seq,3,'0',STR_PAD_LEFT),'production_order_id'=>$locked->production_order_id,'qty'=>$qty,'current_stage'=>'CUTTING','status'=>'ACTIVE']);$remaining=round($remaining-$qty,4);}return$out;});}
+    public function complete(CutOrder $co,User $user):CutOrder{return DB::transaction(function()use($co,$user){$locked=CutOrder::withoutGlobalScopes()->with('lines.bundles')->whereKey($co->id)->lockForUpdate()->firstOrFail();$this->access($user,(int)$locked->company_id);if($locked->status!=='IN_PROGRESS')throw new RuntimeException('Hanya cut order IN_PROGRESS yang dapat diselesaikan.');foreach($locked->lines as$l)if($l->bundles->isEmpty()||abs((float)$l->bundles->sum('qty')-(float)$l->qty_cut)>0.0001)throw new RuntimeException('Seluruh cut line wajib memiliki bundle dengan total tepat.');$mo=ProductionOrder::withoutGlobalScopes()->whereKey($locked->production_order_id)->lockForUpdate()->firstOrFail();$usage=DB::table('marker_logs')->join('fabric_rolls','fabric_rolls.id','=','marker_logs.roll_id')->where('marker_logs.cut_order_id',$locked->id)->selectRaw('fabric_rolls.material_id,SUM(COALESCE(marker_logs.qty_fabric_used_use,marker_logs.qty_fabric_used_m)) used')->groupBy('fabric_rolls.material_id')->get();$total=(float)$locked->lines->sum('qty_cut');foreach($usage as$u){$a=$mo->materialAllocations()->where('material_id',$u->material_id)->lockForUpdate()->firstOrFail();$a->qty_consumed=(float)$a->qty_consumed+(float)$u->used;$a->actual_consumption_per_pcs=$total>0?round((float)$u->used/$total,6):null;$a->save();}$locked->update(['status'=>'COMPLETED','updated_by'=>$user->id]);$this->audit->record('update',$locked,after:['status'=>'COMPLETED']);return$locked->fresh(['lines','markerLogs']);});}
+    private function access(User $u,int $company):void{if((int)$u->company_id!==$company&&!$u->companies()->whereKey($company)->exists())throw new RuntimeException('User tidak memiliki akses ke company cutting document.');}
 }

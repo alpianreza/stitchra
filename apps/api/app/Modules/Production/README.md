@@ -1,20 +1,18 @@
-# Modul Production (Manufacturing Order)
+# Modul Production
 
-MO per style dari SO CONFIRMED; release = hard reservation; lifecycle shop floor.
+MO menyimpan snapshot BOM/routing dan release menghasilkan hard reservation.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/production/orders/from-so/{soId}` | `production.order.create` | satu MO per style; snapshot BOM/Routing APPROVED (BR-030) |
-| POST | `/api/production/orders/{id}/release` | `production.order.release` | **hard reservation** (BR-060); shortage → 422 + daftar kurang (BR-040) |
-| POST | `/api/production/orders/{id}/unrelease` | `production.order.release` | lepas reservasi → PLANNED |
-| GET | `/api/production/orders` | `production.order.view` | filter `?status=` |
-| GET | `/api/production/orders/{id}` | `production.order.view` | detail + alokasi material |
+## Material issue dan BR-042
 
-## Aturan bisnis
-- **BR-060**: release membuat `stock_reservations` + menaikkan `stock_balances.reserved` — atomic (shortage di satu material ⇒ seluruh release batal).
-- **BR-040**: shortage tidak auto-adjust; error berisi daftar kurang per material untuk planner.
-- **BR-041**: `is_backflush` dari BOM line tersimpan di alokasi (dipakai Phase 6 saat issue).
-- **BR-030**: `bom_version_id`/`routing_version_id` snapshot — revisi BOM baru tidak mengubah MO berjalan.
-- Lifecycle: PLANNED → RELEASED → CUTTING → SEWING → FINISHING → QC → PACKED → CLOSED (BR-012).
-- Issue material & return leftover diimplementasikan Phase 6 (BR-041/042).
+- Fabric issue wajib menunjuk reservation dan roll yang sama dalam UOM pemakaian material.
+- Setiap issue roll menambah `fabric_dispatch_balances.qty_dispatched` untuk MO×roll.
+- Marker menambah `qty_consumed`; leftover return menambah `qty_returned`.
+- Constraint database menjaga `consumed + returned <= dispatched`.
+- Return hanya boleh sekali per MO×roll, wajib kembali ke warehouse asal, dan harus menutup seluruh `dispatched − consumed − returned`.
+- Sisa fisik roll tidak langsung dianggap leftover MO; bagian yang belum di-issue tetap sudah berada di stok warehouse sehingga tidak boleh ditambahkan lagi.
+- Roll yang sudah ditutup dengan return tidak dapat di-issue ulang ke MO yang sama.
+- Backflush tetap delta/idempotent dan memperbarui reservation serta MO allocation.
+
+## Verification
+
+Regression evidence tersedia untuk issue, backflush, dispatch/consume/return, double-return rejection, dan no-double-count stock. Runtime belum dinyatakan hijau sampai lockfile dan CI tersedia.

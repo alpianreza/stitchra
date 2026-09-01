@@ -1,0 +1,2 @@
+<?php
+namespace Modules\Finance\Models;use Illuminate\Database\Eloquent\Model;use LogicException;class BankReconciliationMatch extends Model{protected $fillable=['bank_statement_line_id','source_type','source_id','amount','created_by'];protected function casts():array{return['amount'=>'decimal:4'];}protected static function booted():void{static::updating(fn()=>throw new LogicException('Bank match bersifat immutable.'));static::deleting(fn()=>throw new LogicException('Bank match tidak dapat dihapus; gunakan koreksi sebelum approval.'));}}

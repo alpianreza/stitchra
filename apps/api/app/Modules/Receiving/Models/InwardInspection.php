@@ -14,8 +14,13 @@ class InwardInspection extends Model
 
     protected $fillable = [
         'company_id', 'doc_no', 'goods_receipt_id', 'inspector_id',
-        'result', 'notes', 'created_by', 'updated_by',
+        'result', 'finalized_at', 'notes', 'created_by', 'updated_by',
     ];
+
+    protected function casts(): array
+    {
+        return ['finalized_at' => 'datetime'];
+    }
 
     public function lines(): HasMany
     {

@@ -1,0 +1,5 @@
+<?php
+
+namespace Modules\Finance\Models;
+use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\HasMany;use LogicException;use Modules\Core\Models\Concerns\BelongsToCompany;
+class FxRevaluationRun extends Model{use BelongsToCompany;protected $fillable=['company_id','period','as_of_date','status','input_hash','totals','posted_at','posted_by','reversed_at','reversed_by'];protected function casts():array{return['as_of_date'=>'date','totals'=>'array','posted_at'=>'datetime','reversed_at'=>'datetime'];}public function lines():HasMany{return$this->hasMany(FxRevaluationLine::class);}public function journals():HasMany{return$this->hasMany(FxRevaluationJournal::class);}protected static function booted():void{static::updating(function(self$r){if($r->isDirty(['company_id','period','as_of_date','input_hash','totals','posted_at','posted_by']))throw new LogicException('FX revaluation snapshot bersifat immutable.');});static::deleting(fn()=>throw new LogicException('FX revaluation run bersifat append-only.'));}}

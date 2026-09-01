@@ -1,17 +1,19 @@
 # Modul Planning (MRP)
 
-MRP run dari SO CONFIRMED: BOM explode → gross → netting → shortage → saran PR.
+MRP run dari SO `CONFIRMED`: BOM explode → gross → netting → shortage → saran PR.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/planning/mrp-runs` | `planning.mrp.run` | jalankan MRP (BR-043) |
-| GET | `/api/planning/mrp-runs/{id}` | `planning.mrp.view` | hasil netting per material |
-| POST | `/api/planning/mrp-runs/{id}/convert-to-pr` | `purchasing.pr.create` | konversi shortage → PR `source=MRP` (BR-045/120) |
+## Invariants
 
-## Aturan bisnis
-- **BR-043**: `net = gross + safety_stock − available − on_order` (available = on_hand − reserved − quality_hold; on-order dari PO APPROVED/PARTIAL_RECEIVED).
-- **BR-045**: MRP READ-ONLY — tidak auto-PO/PR; planner memilih requirement lalu konversi eksplisit.
-- **BR-031/032**: gross memakai `grossPerPcs()` (qty + wastage + shrinkage) dari BOM APPROVED saja (BR-023/030).
-- **BR-120**: PR line menyimpan `mrp_requirement_id` (trace balik ke run).
-- Setiap run tersimpan berversi (`run_no`) untuk pembandingan.
+- Seluruh SO pilihan wajib berasal dari company aktif dan berstatus `CONFIRMED`; selection parsial ditolak atomic.
+- Run number diserialisasi dengan company row lock dan dilindungi unique constraint.
+- Gross memakai BOM `APPROVED` dan `grossPerPcs()`; UOM material harus konsisten.
+- Need date agregat memakai tanggal kebutuhan paling awal.
+- `available = on_hand - reserved - quality_hold`; on-order hanya sisa PO `APPROVED/PARTIAL_RECEIVED`.
+- Query on-order tidak merujuk kolom soft-delete yang tidak ada pada `purchase_orders`.
+- Requirement unik per run×material.
+- MRP tetap read-only: tidak membuat PR/PO otomatis.
+- Konversi requirement→PR menggunakan lock, wajib berasal dari run yang sama, net > 0, belum dikonversi, dan berada dalam transaksi yang sama dengan pembuatan PR.
+
+## Verification status
+
+Regression tests tersedia untuk exact netting, BOM wastage, no-auto-PR, BR-120 trace, selection atomicity, dan duplicate conversion. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan.

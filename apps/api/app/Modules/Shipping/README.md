@@ -1,16 +1,11 @@
 # Modul Shipping
 
-Shipping instruction → shipment dengan cek toleransi buyer; FG keluar via ITS.
+- Satu packing list APPROVED hanya dapat membuat satu shipment.
+- Shipment header tidak dapat mengoverride company, SO, PL, status, atau audit fields.
+- Tolerance dihitung terhadap projected cumulative shipped per matrix SO.
+- Override luar toleransi hanya untuk shipment belum dikirim dan tercatat audit.
+- Ship mengunci shipment, packing list, dan SO; warehouse wajib FG pada company yang sama.
+- ITS mengeluarkan FG sekali dengan shipment sebagai source id.
+- SO CLOSED hanya jika setiap matrix mencapai batas bawah toleransi; total agregat tidak dapat menutupi shortage matrix lain.
 
-## Endpoint
-| Method | Path | Permission | Rule |
-|---|---|---|---|
-| POST | `/api/shipping/shipments/from-pl/{plId}` | `shipping.shipment.create` | dari packing list APPROVED |
-| POST | `/api/shipping/shipments/{id}/approve-over-tolerance` | `shipping.shipment.approve` | BR-021 |
-| POST | `/api/shipping/shipments/{id}/ship` | `shipping.shipment.ship` | ITS `SHIPMENT` (FG ↓) |
-| GET | `/api/shipping/shipments/{id}` | `shipping.shipment.view` | |
-
-## Aturan bisnis
-- **BR-021**: `tolerance_check` (OK/OVER/UNDER) dihitung saat create; ship di luar toleransi wajib `approveOverTolerance` (audit trail).
-- **BR-013/006**: ship memposting `SHIPMENT` via ITS — FG tidak pernah negatif.
-- SO otomatis CLOSED bila total terkirim ≥ order − toleransi; sebaliknya IN_PROGRESS.
+Regression tests tersedia, tetapi belum dinyatakan hijau sampai lockfiles dan CI tersedia.
