@@ -14,7 +14,7 @@ interface DataTableProps<T> {
   caption: string;
   columns: DataTableColumn<T>[];
   rows: T[];
-  getRowKey: (row: T) => string | number;
+  getRowKey: (row: T, index: number) => string | number;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -65,7 +65,7 @@ export function DataTable<T>({
         <>
           {mobileCard && (
             <div className="divide-y divide-[var(--color-border-subtle)] md:hidden">
-              {rows.map((row) => <div key={getRowKey(row)}>{mobileCard(row)}</div>)}
+              {rows.map((row, index) => <div key={getRowKey(row, index)}>{mobileCard(row)}</div>)}
             </div>
           )}
           <div className={`overflow-x-auto ${mobileCard ? "hidden md:block" : ""}`}>
@@ -74,19 +74,15 @@ export function DataTable<T>({
               <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)]">
                 <tr>
                   {columns.map((column) => (
-                    <th
-                      key={column.key}
-                      scope="col"
-                      className={`h-9 whitespace-nowrap px-3 font-semibold text-[var(--color-text-muted)] ${alignClasses[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
-                    >
+                    <th key={column.key} scope="col" className={`h-9 whitespace-nowrap px-3 font-semibold text-[var(--color-text-muted)] ${alignClasses[column.align ?? "left"]} ${column.headerClassName ?? ""}`}>
                       {column.header}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-subtle)]">
-                {rows.map((row) => (
-                  <tr key={getRowKey(row)} className="h-10 transition-colors hover:bg-[var(--color-surface-subtle)]/70">
+                {rows.map((row, index) => (
+                  <tr key={getRowKey(row, index)} className="h-10 transition-colors hover:bg-[var(--color-surface-subtle)]/70">
                     {columns.map((column) => (
                       <td key={column.key} className={`whitespace-nowrap px-3 py-2 text-[var(--color-text)] ${alignClasses[column.align ?? "left"]} ${column.className ?? ""}`}>
                         {column.cell(row)}

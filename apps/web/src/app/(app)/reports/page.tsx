@@ -61,7 +61,7 @@ export default function ReportsPage() {
           {!catalogLoading && reports.length === 0 && <Button onClick={loadCatalog}>Muat ulang</Button>}
         </div>
       </section>
-      {!active && !catalogLoading ? <section className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-white"><EmptyState title="Pilih laporan untuk memulai" description="Hasil laporan akan ditampilkan sebagai tabel dan dapat diekspor ke CSV." /></section> : active ? <DataTable caption={`Hasil laporan ${active}`} columns={columns} rows={result?.rows ?? []} getRowKey={(_, index?: number) => index ?? 0} loading={loading} error={!result && error ? error : null} onRetry={() => run(active)} emptyTitle="Tidak ada data" emptyDescription="Laporan ini tidak menghasilkan baris untuk kondisi saat ini." minWidth={`${Math.max(720, columns.length * 150)}px`} /> : null}
+      {!active && !catalogLoading ? <section className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-white"><EmptyState title="Pilih laporan untuk memulai" description="Hasil laporan akan ditampilkan sebagai tabel dan dapat diekspor ke CSV." /></section> : active ? <DataTable caption={`Hasil laporan ${active}`} columns={columns} rows={result?.rows ?? []} getRowKey={(_, index) => index} loading={loading} error={!result && error ? error : null} onRetry={() => run(active)} emptyTitle="Tidak ada data" emptyDescription="Laporan ini tidak menghasilkan baris untuk kondisi saat ini." minWidth={`${Math.max(720, columns.length * 150)}px`} /> : null}
     </div>
   );
 }
