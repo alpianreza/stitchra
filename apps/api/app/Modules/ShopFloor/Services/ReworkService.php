@@ -8,6 +8,7 @@ use Modules\Core\Services\AuditService;
 use Modules\Cutting\Models\Bundle;
 use Modules\MasterData\Models\DefectLibrary;
 use Modules\Production\Models\ProductionOrder;
+use Modules\Qc\Models\ReworkOrder;
 use Modules\ShopFloor\Models\ReworkRecord;
 use RuntimeException;
 
@@ -25,6 +26,24 @@ class ReworkService
             $qty = (float) ($data['qty'] ?? 0);
             if ($qty <= 0 || $qty - (float) $bundle->qty > 0.0001) throw new RuntimeException('Qty rework harus > 0 dan tidak melebihi qty bundle.');
 
+            $order = null;
+            if (! empty($data['rework_order_id'])) {
+                $order = ReworkOrder::withoutGlobalScopes()->where('company_id', $companyId)->where('status', 'OPEN')
+                    ->whereKey((int) $data['rework_order_id'])->lockForUpdate()->first();
+                if ($order === null) throw new RuntimeException('Rework order NCR tidak ditemukan atau tidak OPEN.');
+                if ((int) $order->ncr->production_order_id !== (int) $bundle->production_order_id) {
+                    throw new RuntimeException('Bundle bukan milik MO pada NCR rework order.');
+                }
+                if ($order->bundle_id !== null && (int) $order->bundle_id !== (int) $bundle->id) {
+                    throw new RuntimeException('Rework order sudah ditautkan ke bundle lain.');
+                }
+                $recorded = (float) ReworkRecord::withoutGlobalScopes()->where('rework_order_id', $order->id)->sum('qty');
+                if (($recorded + $qty) - (float) $order->qty > 0.0001) {
+                    throw new RuntimeException('Total rework record melebihi qty rework order.');
+                }
+                if ($order->bundle_id === null) $order->update(['bundle_id' => $bundle->id, 'updated_by' => $user->id]);
+            }
+
             $defect = DefectLibrary::withoutGlobalScopes()->where('company_id', $companyId)
                 ->where('is_active', true)->whereKey((int) ($data['defect_id'] ?? 0))->first();
             if ($defect === null) throw new RuntimeException('Defect aktif tidak ditemukan pada company ini.');
@@ -37,12 +56,12 @@ class ReworkService
             }
 
             $record = ReworkRecord::create([
-                'company_id'=>$companyId,'bundle_id'=>$bundle->id,'operation_id'=>$operationId,
+                'company_id'=>$companyId,'rework_order_id'=>$order?->id,'bundle_id'=>$bundle->id,'operation_id'=>$operationId,
                 'defect_id'=>$defect->id,'qty'=>$qty,'notes'=>$data['notes'] ?? null,'created_by'=>$user->id,
             ]);
             $bundle->update(['status'=>'REWORK']);
-            $this->audit->record('create', $record, after: ['bundle'=>$bundleNo,'defect'=>$defect->code,'qty'=>$qty]);
-            return $record->load('defect','operation');
+            $this->audit->record('create', $record, after: ['bundle'=>$bundleNo,'rework_order_id'=>$order?->id,'defect'=>$defect->code,'qty'=>$qty]);
+            return $record->load('reworkOrder','defect','operation');
         });
     }
 
@@ -58,7 +77,7 @@ class ReworkService
                 $bundle->update(['status'=>'ACTIVE']);
             }
             $this->audit->record('update', $locked, after: ['resolved_at'=>$locked->resolved_at]);
-            return $locked->fresh(['defect','operation']);
+            return $locked->fresh(['reworkOrder','defect','operation']);
         });
     }
 

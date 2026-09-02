@@ -15,7 +15,12 @@ use RuntimeException;
 
 class QcService
 {
-    public function __construct(private NumberingService $numbering, private AqlSamplingService $aql, private AuditService $audit) {}
+    public function __construct(
+        private NumberingService $numbering,
+        private AqlSamplingService $aql,
+        private AuditService $audit,
+        private NcrService $ncr,
+    ) {}
 
     public function create(ProductionOrder $mo, string $stage, float $lotQty, User $user): QcInspection
     {
@@ -52,6 +57,7 @@ class QcService
                 $payload += ['sample_size'=>$sample['sample_size'],'accept_major'=>$ac,'reject_major'=>$re];
             }
             $inspection = QcInspection::create($payload);
+            if ($previous !== null) $this->ncr->linkReinspection($previous, $inspection, $user);
             $this->audit->record('create', $inspection, after: ['stage'=>$stage,'cycle'=>$inspection->cycle]);
             return $inspection;
         });
@@ -114,9 +120,11 @@ class QcService
             }
             $final = $verdict === 'FAIL' ? 'REWORK' : $verdict;
             $locked->update(['verdict'=>$final,'updated_by'=>$user->id]);
+            if ($final === 'REWORK') $this->ncr->createFromInspection($locked->fresh(), $user);
+            if ($final === 'PASS') $this->ncr->completeReinspection($locked->fresh(), $user);
             if ($final === 'PASS' && $locked->stage === 'FINAL' && $mo->status === 'FINISHING') $mo->update(['status'=>'QC','updated_by'=>$user->id]);
             $this->audit->record('update',$locked,after:['verdict'=>$final,'cycle'=>$locked->cycle]);
-            return $locked->fresh();
+            return $locked->fresh(['ncr']);
         });
     }
 

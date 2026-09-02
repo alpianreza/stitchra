@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Packing\Http\Controllers\PackingListController;
+use Modules\Qc\Http\Controllers\NcrController;
 use Modules\Qc\Http\Controllers\QcInspectionController;
 use Modules\Shipping\Http\Controllers\ShipmentController;
 use Modules\Subcon\Http\Controllers\SubconOrderController;
@@ -11,6 +12,11 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::post('qc/mo/{productionOrder}/inspections', [QcInspectionController::class, 'store'])->middleware('permission:quality.inspection.create');
     Route::post('qc/inspections/{qcInspection}/defects', [QcInspectionController::class, 'recordDefects'])->middleware('permission:quality.defect.create');
     Route::post('qc/inspections/{qcInspection}/finalize', [QcInspectionController::class, 'finalize'])->middleware('permission:quality.inspection.submit');
+    Route::post('qc/inspections/{qcInspection}/ncr', [NcrController::class, 'create'])->middleware('permission:quality.ncr.create');
+    Route::get('qc/ncrs', [NcrController::class, 'index'])->middleware('permission:quality.ncr.view');
+    Route::get('qc/ncrs/{ncr}', [NcrController::class, 'show'])->middleware('permission:quality.ncr.view');
+    Route::post('qc/ncrs/{ncr}/dispositions', [NcrController::class, 'addDisposition'])->middleware('permission:quality.disposition.execute');
+    Route::post('qc/ncrs/{ncr}/submit', [NcrController::class, 'submit'])->middleware('permission:quality.ncr.submit');
 
     Route::get('packing/lists', [PackingListController::class, 'index'])->middleware('permission:packing.packinglist.view');
     Route::post('packing/lists/from-so/{salesOrder}', [PackingListController::class, 'store'])->middleware('permission:packing.packinglist.create');

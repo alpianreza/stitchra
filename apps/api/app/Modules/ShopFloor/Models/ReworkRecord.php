@@ -8,13 +8,15 @@ use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\Cutting\Models\Bundle;
 use Modules\MasterData\Models\DefectLibrary;
 use Modules\MasterData\Models\Operation;
+use Modules\Qc\Models\ReworkOrder;
 
 class ReworkRecord extends Model
 {
     use BelongsToCompany;
 
-    protected $fillable = ['company_id','bundle_id','operation_id','defect_id','qty','notes','created_by','resolved_at','resolved_by'];
+    protected $fillable = ['company_id','rework_order_id','bundle_id','operation_id','defect_id','qty','notes','created_by','resolved_at','resolved_by'];
     protected function casts(): array { return ['qty'=>'decimal:4','resolved_at'=>'datetime']; }
+    public function reworkOrder(): BelongsTo { return $this->belongsTo(ReworkOrder::class); }
     public function bundle(): BelongsTo { return $this->belongsTo(Bundle::class); }
     public function operation(): BelongsTo { return $this->belongsTo(Operation::class); }
     public function defect(): BelongsTo { return $this->belongsTo(DefectLibrary::class, 'defect_id'); }

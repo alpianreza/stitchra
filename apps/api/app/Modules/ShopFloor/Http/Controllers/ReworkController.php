@@ -20,6 +20,7 @@ class ReworkController extends Controller
         $companyId = CurrentCompany::id();
         $data = $request->validate([
             'bundle_no'=>'required|string|max:40',
+            'rework_order_id'=>['nullable','integer',Rule::exists('rework_orders','id')->where(fn ($q) => $q->where('company_id',$companyId)->where('status','OPEN'))],
             'operation_id'=>['nullable','integer',Rule::exists('operations','id')->where('company_id',$companyId)],
             'defect_id'=>['required','integer',Rule::exists('defect_library','id')->where(fn ($q) => $q->where('company_id',$companyId)->where('is_active',true))],
             'qty'=>'required|numeric|gt:0','notes'=>'nullable|string|max:2000',

@@ -11,13 +11,10 @@ use Modules\ProductDev\Services\BomService;
 use Modules\ProductDev\Services\CostingService;
 use Modules\ProductDev\Services\RoutingService;
 use Modules\Purchasing\Services\PurchasingService;
+use Modules\Qc\Services\NcrService;
 use Modules\Sales\Models\SalesOrder;
 use Modules\Sales\Services\SalesOrderService;
 
-/**
- * Satu pintu: approval APPROVED → tindakan domain per doc_type (BR-015).
- * Modul baru cukup mendaftarkan doc_type di sini.
- */
 class HandleDocumentApproved
 {
     public function handle(DocumentApproved $event): void
@@ -25,18 +22,14 @@ class HandleDocumentApproved
         $request = $event->request;
 
         match ($request->doc_type) {
-            'SO' => app(SalesOrderService::class)->markApproved(
-                SalesOrder::withoutGlobalScopes()->findOrFail($request->doc_id)),
-            'BOM' => app(BomService::class)->markApproved(
-                BomVersion::findOrFail($request->doc_id)),
-            'ROUTING' => app(RoutingService::class)->markApproved(
-                RoutingVersion::findOrFail($request->doc_id)),
-            'COST' => app(CostingService::class)->markApproved(
-                CostSheet::withoutGlobalScopes()->findOrFail($request->doc_id)),
+            'SO' => app(SalesOrderService::class)->markApproved(SalesOrder::withoutGlobalScopes()->findOrFail($request->doc_id)),
+            'BOM' => app(BomService::class)->markApproved(BomVersion::findOrFail($request->doc_id)),
+            'ROUTING' => app(RoutingService::class)->markApproved(RoutingVersion::findOrFail($request->doc_id)),
+            'COST' => app(CostingService::class)->markApproved(CostSheet::withoutGlobalScopes()->findOrFail($request->doc_id)),
             'PR', 'PO' => app(PurchasingService::class)->markApproved($request->doc_type, $request->doc_id),
-            // BR-017: adjustment/opname hanya berefek ke stok SETELAH approved
             'ADJ' => app(InventoryOpsService::class)->applyAdjustmentOnApproval($request->doc_id),
             'OPN' => app(InventoryOpsService::class)->applyOpnameOnApproval($request->doc_id),
+            'NCR' => app(NcrService::class)->markApproved($request->doc_id, (int) $event->request->steps()->where('decision', 'APPROVED')->latest('id')->value('approver_id')),
             default => null,
         };
     }

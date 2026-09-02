@@ -5,6 +5,7 @@ namespace Modules\Qc\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\Production\Models\ProductionOrder;
 
@@ -35,13 +36,8 @@ class QcInspection extends Model
         ];
     }
 
-    public function lines(): HasMany
-    {
-        return $this->hasMany(QcInspectionLine::class);
-    }
-
-    public function productionOrder(): BelongsTo
-    {
-        return $this->belongsTo(ProductionOrder::class);
-    }
+    public function lines(): HasMany { return $this->hasMany(QcInspectionLine::class); }
+    public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
+    public function ncr(): HasOne { return $this->hasOne(Ncr::class); }
+    public function sourceReworkOrders(): HasMany { return $this->hasMany(ReworkOrder::class, 'reinspection_id'); }
 }
