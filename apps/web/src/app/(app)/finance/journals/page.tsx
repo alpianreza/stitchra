@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import ValuationBoundaryPanel from "./valuation-boundary-panel";
 
 interface Coa { id: number; code: string; name: string; type: string }
 interface JLine { coa_id: string; debit: string; credit: string; memo: string }
 interface AuthorityRow { operational_event: string; accounting_event: string | null; existing_authority: string; journal_defined: string; mapping_configured: boolean; period_rule: string; reversal_defined: string; status: string; implementation: string }
 interface Authority { company: { code: string; base_currency: string }; rows: AuthorityRow[]; late_transaction_treatment: string; approval: string }
 
-/** Manual journal plus explicit, authority-aware operational posting boundary. */
 export default function JournalsPage() {
   const [coas, setCoas] = useState<Coa[]>([]);
   const [authority, setAuthority] = useState<Authority | null>(null);
@@ -100,6 +100,8 @@ export default function JournalsPage() {
         </tbody></table></div>
         <p className="mt-2 text-xs text-amber-700">{authority.late_transaction_treatment}</p>
       </section>}
+
+      <ValuationBoundaryPanel />
 
       <form onSubmit={save} className="space-y-4">
         <h2 className="font-semibold">Jurnal Manual</h2>
