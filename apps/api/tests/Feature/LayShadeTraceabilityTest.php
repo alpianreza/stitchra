@@ -9,6 +9,7 @@ use Modules\Core\Models\User;
 use Modules\Cutting\Models\CustomerShadeRule;
 use Modules\Cutting\Services\CuttingService;
 use Modules\Cutting\Services\LayExecutionService;
+use Modules\Inventory\Models\StockReservation;
 use Modules\MasterData\Models\ShadeGroup;
 use Modules\Production\Services\MaterialIssueService;
 use Modules\Receiving\Models\FabricRoll;
@@ -21,26 +22,33 @@ function layFixture(): array
     $sg2 = ShadeGroup::create(['company_id'=>1,'code'=>'SG2-'.uniqid(),'name'=>'SG2']);
     $rolls[0]->update(['shade_group_id'=>$sg1->id]);
     $rolls[1]->update(['shade_group_id'=>$sg2->id]);
+    StockReservation::withoutGlobalScopes()->firstOrCreate(
+        ['company_id'=>1,'mo_id'=>$mo->id,'material_id'=>$fabric->id,'warehouse_id'=>$warehouse->id,'roll_id'=>$rolls[1]->id],
+        ['ownership'=>'COMPANY','qty_reserved'=>100,'qty_issued'=>0,'status'=>'ACTIVE','created_by'=>$user->id],
+    );
     app(MaterialIssueService::class)->issue($mo,$warehouse->id,[
-        ['material_id'=>$fabric->id,'qty'=>200,'roll_id'=>$rolls[0]->id],
+        ['material_id'=>$fabric->id,'qty'=>100,'roll_id'=>$rolls[0]->id],
         ['material_id'=>$fabric->id,'qty'=>100,'roll_id'=>$rolls[1]->id],
     ],$user);
     $cut = app(CuttingService::class)->create($mo->fresh(),[['colorway_id'=>$colorway->id,'size_id'=>$size->id,'qty_cut'=>100]],$user);
     return [$user,$cut,$rolls,$mo,$sg1,$sg2];
 }
 
-it('defaults enabled and blocks NULL or different shade without ledger movement', function () {
+it('defaults enabled, rejects NULL/different shade, accepts exact shade, and creates no ledger movement', function () {
     [$user,$cut,$rolls,,$sg1,$sg2] = layFixture();
     $service = app(LayExecutionService::class);
     $lay = $service->createLay($cut,20,$user);
     expect($lay->shade_validation_enabled)->toBeTrue();
     $before = DB::table('stock_ledger')->count();
-    $service->addRoll($lay,$rolls[0],80,$user);
+    $service->addRoll($lay,$rolls[0],50,$user);
     $rolls[1]->update(['shade_group_id'=>null]);
     expect(fn () => $service->addRoll($lay->fresh(),$rolls[1]->fresh(),20,$user))->toThrow(RuntimeException::class,'BR-053 BLOCK');
     $rolls[1]->update(['shade_group_id'=>$sg2->id]);
     expect(fn () => $service->addRoll($lay->fresh(),$rolls[1]->fresh(),20,$user))->toThrow(RuntimeException::class,'BR-053 BLOCK');
-    expect(DB::table('stock_ledger')->count())->toBe($before);
+    $rolls[1]->update(['shade_group_id'=>$sg1->id]);
+    $accepted = $service->addRoll($lay->fresh(),$rolls[1]->fresh(),20,$user);
+    expect((float) $accepted->qty_used)->toBe(20.0)
+        ->and(DB::table('stock_ledger')->count())->toBe($before);
 });
 
 it('buyer can disable shade blocking while output and bundle preserve lineage', function () {
