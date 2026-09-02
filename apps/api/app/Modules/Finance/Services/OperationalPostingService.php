@@ -74,9 +74,7 @@ class OperationalPostingService
             $locked = GoodsReceipt::withoutGlobalScopes()->whereKey($receipt->id)->lockForUpdate()->firstOrFail();
             $company = $this->activeCompany((int) $locked->company_id);
             $this->assertAccess($user, (int) $locked->company_id);
-            if ($locked->status !== 'POSTED') {
-                throw new RuntimeException('GR harus POSTED sebelum accounting event GR_RECEIPT.');
-            }
+            if ($locked->status !== 'POSTED') throw new RuntimeException('GR harus POSTED sebelum accounting event GR_RECEIPT.');
 
             $po = DB::table('purchase_orders as po')
                 ->leftJoin('currencies as currency', function ($join): void {
@@ -94,9 +92,7 @@ class OperationalPostingService
                 ->where('company_id', $locked->company_id)->where('movement_type', 'PURCHASE_RECEIPT')
                 ->where('source_document_type', 'goods_receipts')->where('source_document_id', $locked->id)
                 ->lockForUpdate()->get();
-            if ($movements->count() !== 1) {
-                throw new RuntimeException('GR_RECEIPT memerlukan tepat satu ITS PURCHASE_RECEIPT yang traceable.');
-            }
+            if ($movements->count() !== 1) throw new RuntimeException('GR_RECEIPT memerlukan tepat satu ITS PURCHASE_RECEIPT yang traceable.');
 
             $ledger = DB::table('stock_ledger')
                 ->where('company_id', $locked->company_id)->where('movement_type', 'PURCHASE_RECEIPT')
@@ -106,9 +102,7 @@ class OperationalPostingService
                     'ownership', 'qty_in', 'uom_id', 'unit_cost', 'total_cost', 'created_at',
                 ]);
             if ($ledger->isEmpty()) throw new RuntimeException('ITS PURCHASE_RECEIPT tidak memiliki ledger line.');
-            if ($ledger->contains(fn ($line) => $line->ownership !== 'COMPANY')) {
-                throw new RuntimeException('BR-001: buyer-owned receipt tidak boleh masuk inventory valuation journal.');
-            }
+            if ($ledger->contains(fn ($line) => $line->ownership !== 'COMPANY')) throw new RuntimeException('BR-001: buyer-owned receipt tidak boleh masuk inventory valuation journal.');
             if ($ledger->contains(fn ($line) => $line->unit_cost === null || $line->total_cost === null)) {
                 throw new RuntimeException('GR_RECEIPT tidak dapat diposting karena source ITS belum memiliki valuation lengkap.');
             }
@@ -118,15 +112,8 @@ class OperationalPostingService
             $journalDate = $locked->received_date->toDateString();
             $period = $locked->received_date->format('Y-m');
             $posted = $this->gl->postEvent(
-                (int) $locked->company_id,
-                'GR_RECEIPT',
-                'goods_receipts',
-                (int) $locked->id,
-                $amount,
-                $period,
-                $user,
-                "GR receipt {$locked->doc_no} / PO {$po->doc_no}",
-                $journalDate,
+                (int) $locked->company_id, 'GR_RECEIPT', 'goods_receipts', (int) $locked->id,
+                $amount, $period, $user, "GR receipt {$locked->doc_no} / PO {$po->doc_no}", $journalDate,
             );
 
             return [
@@ -155,8 +142,7 @@ class OperationalPostingService
         $this->activeCompany((int) $loaded->company_id);
         $this->assertAccess($user, (int) $loaded->company_id);
         $period = DB::table('gl_periods')->where('company_id', $loaded->company_id)->where('period', $loaded->period)->first();
-        $reversal = Journal::withoutGlobalScopes()->where('company_id', $loaded->company_id)
-            ->where('reverses_journal_id', $loaded->id)->first();
+        $reversal = Journal::withoutGlobalScopes()->where('company_id', $loaded->company_id)->where('reverses_journal_id', $loaded->id)->first();
         $original = $loaded->reverses_journal_id
             ? Journal::withoutGlobalScopes()->where('company_id', $loaded->company_id)->whereKey($loaded->reverses_journal_id)->first()
             : null;
@@ -185,23 +171,30 @@ class OperationalPostingService
     private function sourceDetails(Journal $journal): array
     {
         if ($journal->source_document_type === 'goods_receipts') {
-            $source = DB::table('goods_receipts')->where('company_id', $journal->company_id)
-                ->where('id', $journal->source_document_id)->first();
+            $source = DB::table('goods_receipts')->where('company_id', $journal->company_id)->where('id', $journal->source_document_id)->first();
             $movement = DB::table('stock_movements')->where('company_id', $journal->company_id)
                 ->where('movement_type', 'PURCHASE_RECEIPT')->where('source_document_type', 'goods_receipts')
                 ->where('source_document_id', $journal->source_document_id)->first();
             return [
-                'available' => $source !== null,
-                'module' => 'Receiving', 'document_type' => 'goods_receipts',
-                'id' => $journal->source_document_id, 'doc_no' => $source?->doc_no,
-                'source_date' => $source?->received_date,
+                'available' => $source !== null, 'module' => 'Receiving', 'document_type' => 'goods_receipts',
+                'id' => $journal->source_document_id, 'doc_no' => $source?->doc_no, 'source_date' => $source?->received_date,
                 'its_movement' => $movement ? ['id' => $movement->id, 'doc_no' => $movement->doc_no, 'movement_type' => $movement->movement_type] : null,
             ];
         }
         if ($journal->source_document_type === 'journals') {
-            $source = Journal::withoutGlobalScopes()->where('company_id', $journal->company_id)
-                ->whereKey($journal->source_document_id)->first();
+            $source = Journal::withoutGlobalScopes()->where('company_id', $journal->company_id)->whereKey($journal->source_document_id)->first();
             return ['available' => $source !== null, 'module' => 'Finance', 'document_type' => 'journals', 'id' => $journal->source_document_id, 'doc_no' => $source?->doc_no];
+        }
+        if ($journal->source_document_type === 'bank_statement_lines') {
+            $source = DB::table('bank_statement_lines as line')
+                ->join('bank_statement_imports as statement', 'statement.id', '=', 'line.bank_statement_import_id')
+                ->where('statement.company_id', $journal->company_id)->where('line.id', $journal->source_document_id)
+                ->select(['line.id', 'line.transaction_date', 'line.amount', 'statement.id as statement_id', 'statement.statement_no'])->first();
+            return [
+                'available' => $source !== null, 'module' => 'Finance/Bank', 'document_type' => 'bank_statement_lines',
+                'id' => $journal->source_document_id, 'doc_no' => $source?->statement_no, 'source_date' => $source?->transaction_date,
+                'statement_id' => $source?->statement_id,
+            ];
         }
 
         $safeSources = [
@@ -209,18 +202,15 @@ class OperationalPostingService
             'ar_payments' => ['Finance/AR', 'payment_date'],
             'supplier_invoices' => ['Finance/AP', 'invoice_date'],
             'ap_payments' => ['Finance/AP', 'payment_date'],
-            'bank_statement_lines' => ['Finance/Bank', 'transaction_date'],
         ];
         $adapter = $safeSources[$journal->source_document_type] ?? null;
         if ($adapter === null) {
             return ['available' => false, 'document_type' => $journal->source_document_type, 'id' => $journal->source_document_id, 'authority' => 'UNAVAILABLE_NO_SAFE_SOURCE_ADAPTER'];
         }
-        $source = DB::table($journal->source_document_type)->where('company_id', $journal->company_id)
-            ->where('id', $journal->source_document_id)->first();
+        $source = DB::table($journal->source_document_type)->where('company_id', $journal->company_id)->where('id', $journal->source_document_id)->first();
         return [
-            'available' => $source !== null, 'module' => $adapter[0],
-            'document_type' => $journal->source_document_type, 'id' => $journal->source_document_id,
-            'doc_no' => $source?->doc_no, 'source_date' => $source?->{$adapter[1]},
+            'available' => $source !== null, 'module' => $adapter[0], 'document_type' => $journal->source_document_type,
+            'id' => $journal->source_document_id, 'doc_no' => $source?->doc_no, 'source_date' => $source?->{$adapter[1]},
         ];
     }
 
