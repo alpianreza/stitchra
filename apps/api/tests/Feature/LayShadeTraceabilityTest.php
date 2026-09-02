@@ -94,3 +94,27 @@ it('approved mismatch override adds an audited Lay Roll', function () {
     $line = $service->applyOverride($override->fresh(),$user);
     expect($line->shade_override)->toBeTrue()->and($line->fabric_roll_id)->toBe($rolls[1]->id);
 });
+
+it('enforces active Lay lifecycle and the cumulative Cut Order Line ceiling', function () {
+    [$user,$cut,$rolls] = layFixture();
+    $service = app(LayExecutionService::class);
+    $lay = $service->createLay($cut,10,$user);
+
+    expect(fn () => $service->createOutput($lay,$cut->lines->first()->id,1,$user))
+        ->toThrow(RuntimeException::class,'Lay dan Cut Order IN_PROGRESS');
+
+    $service->addRoll($lay,$rolls[0],100,$user);
+    expect(fn () => $service->createOutput($lay->fresh(),$cut->lines->first()->id,101,$user))
+        ->toThrow(RuntimeException::class,'melebihi qty Cut Order Line');
+
+    $output = $service->createOutput($lay->fresh(),$cut->lines->first()->id,100,$user);
+    $service->generateBundles($output,20,$user);
+    $service->completeLay($lay->fresh(),$user);
+
+    expect(fn () => $service->createOutput($lay->fresh(),$cut->lines->first()->id,1,$user))
+        ->toThrow(RuntimeException::class,'Lay dan Cut Order IN_PROGRESS')
+        ->and(fn () => $service->generateBundles($output->fresh(),20,$user))
+        ->toThrow(RuntimeException::class,'Lay dan Cut Order IN_PROGRESS')
+        ->and(fn () => $service->completeLay($lay->fresh(),$user))
+        ->toThrow(RuntimeException::class,'Lay dan Cut Order IN_PROGRESS');
+});
