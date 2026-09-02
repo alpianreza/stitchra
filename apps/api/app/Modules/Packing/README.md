@@ -1,11 +1,26 @@
 # Modul Packing
 
-- Packing list terikat SO dan optional MO yang sama company/SO.
-- Carton sequence dibuat di bawah lock; matrix line unik per carton.
-- Setiap style×colorway×size wajib berasal dari matrix SO.
-- Finalize mengunci PL, SO, dan MO; warehouse wajib type FG dan PCS UOM wajib milik company.
-- Cumulative approved packing tidak boleh melebihi SO+toleransi atau qty produced MO.
-- FG receipt diposting sekali melalui ITS menggunakan packing list sebagai source id.
-- MO menjadi PACKED hanya saat cumulative packed mencapai qty produced.
+## Iteration 7 invariants
 
-Regression tests tersedia, tetapi belum dinyatakan hijau sampai lockfiles dan CI tersedia.
+- Packing list tetap menjadi document header dan Carton menjadi container detail; tidak dibuat entity Packing baru.
+- Packing Input wajib memiliki source transaction `qc_inspections` dengan `stage=FINAL` dan `verdict=PASS` (BR-080/PF-07).
+- Source QC disimpan pada `packing_lists.qc_inspection_id`; kolom nullable menjaga historical rows tanpa backfill.
+- Carton hanya dapat ditambah ke Packing List `DRAFT`; Packing List final tidak dimutasi langsung.
+- Cumulative carton quantity untuk MO tidak boleh melebihi `QcInspection.lot_qty` dari source FINAL PASS.
+- Cumulative matrix style×colorway×size tidak boleh melebihi SO+toleransi (BR-021).
+- MO, SO, QC source, Packing List, FG warehouse, dan user wajib berada dalam company scope yang sama.
+- MO lock menyerialkan quantity allocation lintas Packing List; sequence Carton tetap dibuat di bawah Packing List lock.
+- Carton line quantity positif dan matrix unik tetap dijaga DB constraint.
+- Finalize memvalidasi ulang QC source lalu memakai existing ITS `PRODUCTION_RECEIPT` sesuai PF-09/BR-013; source id Packing List menjaga idempotency stock movement.
+- Shipment tetap hanya dapat dibuat dari Packing List `APPROVED`, satu shipment per Packing List, dan tidak dibuat otomatis.
+- Endpoint `GET packing/eligible-inputs` menampilkan QC source, eligible, packed, dan remaining quantity.
+- Endpoint `GET packing/lists/{packingList}/lineage` menampilkan QC→Packing List→Carton→FG receipt→Shipment boundary.
+
+## Undefined authority
+
+- ⚪ NOT DEFINED — direct Bundle atau Finishing Output → Carton allocation.
+- ⚪ NOT DEFINED — carton capacity hard limit.
+- ⚪ NOT DEFINED — mandatory solid/ratio/mixed instruction schema yang dapat divalidasi penuh.
+- ⚪ NOT DEFINED — formal Finishing completion operation dan writer `qty_produced`.
+
+Regression tests dipersiapkan, tetapi runtime tetap **DEFERRED — FINAL VERIFICATION PHASE**.

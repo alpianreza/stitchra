@@ -18,10 +18,12 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::post('qc/ncrs/{ncr}/dispositions', [NcrController::class, 'addDisposition'])->middleware('permission:quality.disposition.execute');
     Route::post('qc/ncrs/{ncr}/submit', [NcrController::class, 'submit'])->middleware('permission:quality.ncr.submit');
 
+    Route::get('packing/eligible-inputs', [PackingListController::class, 'eligible'])->middleware('permission:packing.packinglist.view');
     Route::get('packing/lists', [PackingListController::class, 'index'])->middleware('permission:packing.packinglist.view');
     Route::post('packing/lists/from-so/{salesOrder}', [PackingListController::class, 'store'])->middleware('permission:packing.packinglist.create');
     Route::post('packing/lists/{packingList}/cartons', [PackingListController::class, 'addCarton'])->middleware('permission:packing.carton.create');
     Route::post('packing/lists/{packingList}/finalize', [PackingListController::class, 'finalize'])->middleware('permission:packing.packinglist.submit');
+    Route::get('packing/lists/{packingList}/lineage', [PackingListController::class, 'lineage'])->middleware('permission:packing.packinglist.view');
     Route::get('packing/lists/{packingList}', [PackingListController::class, 'show'])->middleware('permission:packing.packinglist.view');
 
     Route::get('shipping/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipping.shipment.view');
