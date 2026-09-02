@@ -26,19 +26,13 @@ class ShipmentService
     {
         $this->assertAccess($user, $companyId);
         $packingLists = PackingList::withoutGlobalScopes()
-            ->with(['salesOrder.customer', 'productionOrder', 'qcInspection', 'cartons.lines'])
-            ->where('company_id', $companyId)
-            ->where('status', 'APPROVED')
-            ->whereDoesntHave('shipment')
-            ->orderByDesc('id')->get();
-
+            ->with(['salesOrder.customer', 'productionOrder', 'qcInspection'])
+            ->where('company_id', $companyId)->where('status', 'APPROVED')
+            ->whereDoesntHave('shipment')->orderByDesc('id')->get();
         $eligible = [];
         foreach ($packingLists as $packingList) {
-            try {
-                $receipt = $this->assertEligibleSource($packingList);
-            } catch (RuntimeException) {
-                continue;
-            }
+            try { $receipt = $this->assertEligibleSource($packingList); }
+            catch (RuntimeException) { continue; }
             $eligible[] = [
                 'packing_list_id' => $packingList->id,
                 'packing_list_no' => $packingList->doc_no,
@@ -70,7 +64,6 @@ class ShipmentService
             if (Shipment::withoutGlobalScopes()->where('packing_list_id', $locked->id)->exists()) throw new RuntimeException('Packing list sudah memiliki shipment.');
             if (empty($header['ship_date'])) throw new RuntimeException('Ship date wajib diisi.');
             $receipt = $this->assertEligibleSource($locked);
-
             $shipment = Shipment::create([
                 'company_id' => $locked->company_id,
                 'doc_no' => $this->numbering->next($locked->company_id, 'SHP'),
@@ -83,17 +76,12 @@ class ShipmentService
                 'vessel_flight' => $header['vessel_flight'] ?? null,
                 'port_of_loading' => $header['port_of_loading'] ?? null,
                 'port_of_discharge' => $header['port_of_discharge'] ?? null,
-                'status' => 'DRAFT',
-                'tolerance_check' => 'PENDING',
-                'created_by' => $user->id,
+                'status' => 'DRAFT', 'tolerance_check' => 'PENDING', 'created_by' => $user->id,
             ]);
-
             foreach ($this->cartonMatrix((int) $locked->id) as $row) {
                 $shipment->lines()->create([
-                    'style_id' => $row->style_id,
-                    'colorway_id' => $row->colorway_id,
-                    'size_id' => $row->size_id,
-                    'qty_shipped' => (float) $row->qty,
+                    'style_id' => $row->style_id, 'colorway_id' => $row->colorway_id,
+                    'size_id' => $row->size_id, 'qty_shipped' => (float) $row->qty,
                 ]);
             }
             $this->checkToleranceLocked($shipment->fresh('lines'));
@@ -119,23 +107,23 @@ class ShipmentService
         $so = SalesOrder::withoutGlobalScopes()->with('lines', 'customer')
             ->where('company_id', $shipment->company_id)->whereKey($shipment->sales_order_id)
             ->lockForUpdate()->firstOrFail();
-        $tol = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
+        $tolerance = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
         $result = 'OK';
         foreach ($so->lines as $line) {
-            $current = (float) $shipment->lines->first(fn ($x) =>
-                (int) $x->style_id === (int) $line->style_id &&
-                (int) $x->colorway_id === (int) $line->colorway_id &&
-                (int) $x->size_id === (int) $line->size_id
+            $current = (float) $shipment->lines->first(fn ($candidate) =>
+                (int) $candidate->style_id === (int) $line->style_id &&
+                (int) $candidate->colorway_id === (int) $line->colorway_id &&
+                (int) $candidate->size_id === (int) $line->size_id
             )?->qty_shipped;
             $prior = (float) DB::table('shipment_lines')->join('shipments', 'shipments.id', '=', 'shipment_lines.shipment_id')
                 ->where('shipments.sales_order_id', $so->id)->where('shipments.status', 'SHIPPED')
                 ->where('shipment_lines.style_id', $line->style_id)
                 ->where('shipment_lines.colorway_id', $line->colorway_id)
                 ->where('shipment_lines.size_id', $line->size_id)->sum('shipment_lines.qty_shipped');
-            $ordered = (float) $line->qty;
             $projected = $prior + $current;
-            if ($projected > $ordered * (1 + $tol / 100) + 0.0001) $result = 'OVER';
-            elseif ($projected < $ordered * (1 - $tol / 100) - 0.0001 && $result !== 'OVER') $result = 'UNDER';
+            $ordered = (float) $line->qty;
+            if ($projected > $ordered * (1 + $tolerance / 100) + 0.0001) $result = 'OVER';
+            elseif ($projected < $ordered * (1 - $tolerance / 100) - 0.0001 && $result !== 'OVER') $result = 'UNDER';
         }
         $shipment->update(['tolerance_check' => $result]);
     }
@@ -160,7 +148,6 @@ class ShipmentService
             $this->assertAccess($user, (int) $locked->company_id);
             if (!in_array($locked->status, ['DRAFT', 'READY'], true)) throw new RuntimeException("Shipment {$locked->status} tidak bisa dikirim.");
             if ($locked->tolerance_check !== 'OK' && !$locked->over_tolerance_approved) throw new RuntimeException('BR-021: shipment di luar toleransi buyer — approval wajib.');
-
             $pl = PackingList::withoutGlobalScopes()->where('company_id', $locked->company_id)
                 ->whereKey($locked->packing_list_id)->lockForUpdate()->firstOrFail();
             if ($pl->status !== 'APPROVED') throw new RuntimeException('Packing list shipment tidak lagi APPROVED.');
@@ -168,18 +155,16 @@ class ShipmentService
             if ((int) $receipt['warehouse']['id'] !== $warehouseId) throw new RuntimeException('Shipment wajib memakai warehouse FG sumber PRODUCTION_RECEIPT Packing List.');
             if (!DB::table('warehouses')->where('company_id', $locked->company_id)->where('type', 'FG')
                 ->where('is_active', true)->where('id', $warehouseId)->exists()) throw new RuntimeException('Warehouse shipment wajib FG aktif pada company yang sama.');
-
-            $shipmentMatrix = $locked->lines->map(fn ($line) => (object) [
+            $shipmentRows = $locked->lines->map(fn ($line) => (object) [
                 'style_id' => $line->style_id, 'colorway_id' => $line->colorway_id,
                 'size_id' => $line->size_id, 'qty' => $line->qty_shipped,
             ]);
-            $this->assertSameMatrix($this->receiptMatrix($receipt['lines']), $this->matrix($shipmentMatrix), 'Shipment quantity harus sama dengan eligible FG receipt Packing List.');
+            $this->assertSameMatrix($this->receiptMatrix($receipt['lines']), $this->matrix($shipmentRows), 'Shipment quantity harus sama dengan eligible FG receipt Packing List.');
             foreach ($locked->lines as $line) {
                 if ($this->availableQty((int) $locked->company_id, $warehouseId, (int) $line->style_id, (int) $line->colorway_id, (int) $line->size_id) + 0.0001 < (float) $line->qty_shipped) {
                     throw new RuntimeException('FG stock tidak cukup untuk shipment matrix.');
                 }
             }
-
             $pcs = Uom::withoutGlobalScopes()->where('company_id', $locked->company_id)->where('code', 'PCS')->first();
             if ($pcs === null) throw new RuntimeException('PCS UOM belum dikonfigurasi.');
             $lines = $locked->lines->map(fn ($line) => [
@@ -190,23 +175,21 @@ class ShipmentService
             ])->all();
             $movement = $this->its->post('SHIPMENT', [
                 'company_id' => $locked->company_id,
-                'source_document_type' => 'shipments',
-                'source_document_id' => $locked->id,
+                'source_document_type' => 'shipments', 'source_document_id' => $locked->id,
             ], $lines, $user);
-
             $locked->update(['status' => 'SHIPPED', 'updated_by' => $user->id]);
             $pl->update(['status' => 'SHIPPED', 'updated_by' => $user->id]);
             $so = SalesOrder::withoutGlobalScopes()->with('lines', 'customer')
                 ->where('company_id', $locked->company_id)->whereKey($locked->sales_order_id)
                 ->lockForUpdate()->firstOrFail();
-            $tol = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
-            $complete = $so->lines->every(function ($line) use ($so, $tol) {
+            $tolerance = (float) ($so->tolerance_pct ?? $so->customer?->shipment_tolerance_pct ?? 0);
+            $complete = $so->lines->every(function ($line) use ($so, $tolerance) {
                 $qty = (float) DB::table('shipment_lines')->join('shipments', 'shipments.id', '=', 'shipment_lines.shipment_id')
                     ->where('shipments.sales_order_id', $so->id)->where('shipments.status', 'SHIPPED')
                     ->where('shipment_lines.style_id', $line->style_id)
                     ->where('shipment_lines.colorway_id', $line->colorway_id)
                     ->where('shipment_lines.size_id', $line->size_id)->sum('shipment_lines.qty_shipped');
-                return $qty + 0.0001 >= (float) $line->qty * (1 - $tol / 100);
+                return $qty + 0.0001 >= (float) $line->qty * (1 - $tolerance / 100);
             });
             $so->update(['status' => $complete ? 'CLOSED' : 'IN_PROGRESS', 'updated_by' => $user->id]);
             $this->audit->record('update', $locked, after: [
@@ -230,7 +213,6 @@ class ShipmentService
         $shipmentMovement = DB::table('stock_movements')->where('company_id', $loaded->company_id)
             ->where('movement_type', 'SHIPMENT')->where('source_document_type', 'shipments')
             ->where('source_document_id', $loaded->id)->first();
-
         return [
             'shipment' => ['id' => $loaded->id, 'doc_no' => $loaded->doc_no, 'status' => $loaded->status],
             'sales_order' => ['id' => $loaded->salesOrder?->id, 'doc_no' => $loaded->salesOrder?->doc_no, 'buyer' => $loaded->salesOrder?->customer?->name],
@@ -241,8 +223,7 @@ class ShipmentService
             'production_receipt' => ['id' => $receipt['movement']->id, 'doc_no' => $receipt['movement']->doc_no, 'warehouse' => $receipt['warehouse'], 'received_qty' => $receipt['received_qty']],
             'fg_stock' => ['available_qty' => $receipt['available_qty'], 'lines' => $receipt['lines']],
             'shipment_movement' => $shipmentMovement ? ['id' => $shipmentMovement->id, 'doc_no' => $shipmentMovement->doc_no, 'movement_type' => 'SHIPMENT'] : ['status' => 'NOT_POSTED'],
-            'source_authority' => 'PACKING_LIST_CARTONS_VIA_PF_09',
-            'automatic_creation' => false,
+            'source_authority' => 'PACKING_LIST_CARTONS_VIA_PF_09', 'automatic_creation' => false,
         ];
     }
 
@@ -250,50 +231,48 @@ class ShipmentService
     {
         $loaded = PackingList::withoutGlobalScopes()->with(['qcInspection', 'productionOrder'])
             ->where('company_id', $pl->company_id)->whereKey($pl->id)->firstOrFail();
-        if ($loaded->status !== 'APPROVED' && $loaded->status !== 'SHIPPED') throw new RuntimeException('Packing List belum eligible sebagai sumber FG/Shipment.');
+        if (!in_array($loaded->status, ['APPROVED', 'SHIPPED'], true)) throw new RuntimeException('Packing List belum eligible sebagai sumber FG/Shipment.');
         if ($loaded->qcInspection === null || $loaded->qcInspection->stage !== 'FINAL' || $loaded->qcInspection->verdict !== 'PASS'
             || (int) $loaded->qcInspection->company_id !== (int) $loaded->company_id
             || (int) $loaded->qcInspection->production_order_id !== (int) $loaded->production_order_id) {
             throw new RuntimeException('BR-080: source QC FINAL PASS Packing List tidak valid.');
         }
-
         $movement = DB::table('stock_movements')->where('company_id', $loaded->company_id)
             ->where('movement_type', 'PRODUCTION_RECEIPT')->where('source_document_type', 'packing_lists')
             ->where('source_document_id', $loaded->id)->first();
         if ($movement === null) throw new RuntimeException('Packing List belum memiliki PRODUCTION_RECEIPT yang traceable.');
-
-        $lines = DB::table('stock_ledger')->where('company_id', $loaded->company_id)
+        $ledgerLines = DB::table('stock_ledger')->where('company_id', $loaded->company_id)
             ->where('movement_type', 'PRODUCTION_RECEIPT')->where('source_document_type', 'packing_lists')
             ->where('source_document_id', $loaded->id)
             ->selectRaw('warehouse_id, style_id, colorway_id, size_id, uom_id, SUM(qty_in) received_qty')
             ->groupBy('warehouse_id', 'style_id', 'colorway_id', 'size_id', 'uom_id')->get();
-        if ($lines->isEmpty()) throw new RuntimeException('PRODUCTION_RECEIPT Packing List tidak memiliki FG ledger lines.');
-        $warehouseIds = $lines->pluck('warehouse_id')->unique()->values();
+        if ($ledgerLines->isEmpty()) throw new RuntimeException('PRODUCTION_RECEIPT Packing List tidak memiliki FG ledger lines.');
+        $warehouseIds = $ledgerLines->pluck('warehouse_id')->unique()->values();
         if ($warehouseIds->count() !== 1) throw new RuntimeException('PRODUCTION_RECEIPT Packing List harus menuju satu warehouse FG.');
         $warehouse = DB::table('warehouses')->where('company_id', $loaded->company_id)
             ->where('type', 'FG')->where('is_active', true)->where('id', $warehouseIds->first())->first();
         if ($warehouse === null) throw new RuntimeException('Warehouse sumber PRODUCTION_RECEIPT bukan FG aktif pada company Packing List.');
-
-        $carton = $this->matrix($this->cartonMatrix((int) $loaded->id));
-        $receipt = $this->receiptMatrix($lines);
-        $this->assertSameMatrix($carton, $receipt, 'FG receipt quantity harus sama dengan Carton/Packing quantity.');
-        $lineData = $lines->map(function ($line) use ($loaded) {
-            $available = $this->availableQty((int) $loaded->company_id, (int) $line->warehouse_id, (int) $line->style_id, (int) $line->colorway_id, (int) $line->size_id);
+        $this->assertSameMatrix(
+            $this->matrix($this->cartonMatrix((int) $loaded->id)),
+            $this->receiptMatrix($ledgerLines),
+            'FG receipt quantity harus sama dengan Carton/Packing quantity.',
+        );
+        $lines = $ledgerLines->map(function ($line) use ($loaded) {
             return [
                 'style_id' => (int) $line->style_id,
                 'colorway_id' => (int) $line->colorway_id,
                 'size_id' => (int) $line->size_id,
                 'uom_id' => (int) $line->uom_id,
                 'received_qty' => (float) $line->received_qty,
-                'available_qty' => $available,
+                'available_qty' => $this->availableQty((int) $loaded->company_id, (int) $line->warehouse_id, (int) $line->style_id, (int) $line->colorway_id, (int) $line->size_id),
             ];
         })->values()->all();
         return [
             'movement' => $movement,
             'warehouse' => ['id' => (int) $warehouse->id, 'code' => $warehouse->code, 'name' => $warehouse->name],
-            'lines' => $lineData,
-            'received_qty' => array_sum(array_column($lineData, 'received_qty')),
-            'available_qty' => array_sum(array_column($lineData, 'available_qty')),
+            'lines' => $lines,
+            'received_qty' => array_sum(array_column($lines, 'received_qty')),
+            'available_qty' => array_sum(array_column($lines, 'available_qty')),
         ];
     }
 
@@ -315,10 +294,16 @@ class ShipmentService
         return $matrix;
     }
 
-    private function receiptMatrix(array $lines): array
+    private function receiptMatrix(iterable $lines): array
     {
         $matrix = [];
-        foreach ($lines as $line) $matrix[$this->matrixKey((int) $line['style_id'], (int) $line['colorway_id'], (int) $line['size_id'])] = (float) $line['received_qty'];
+        foreach ($lines as $line) {
+            $style = (int) (is_array($line) ? $line['style_id'] : $line->style_id);
+            $colorway = (int) (is_array($line) ? $line['colorway_id'] : $line->colorway_id);
+            $size = (int) (is_array($line) ? $line['size_id'] : $line->size_id);
+            $qty = (float) (is_array($line) ? $line['received_qty'] : $line->received_qty);
+            $matrix[$this->matrixKey($style, $colorway, $size)] = $qty;
+        }
         ksort($matrix);
         return $matrix;
     }

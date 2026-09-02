@@ -6,7 +6,7 @@ import { Button, ConfirmDialog, DataTable, Field, Input, PageHeader, Select, Sta
 
 interface EligibleFg { packing_list_id: number; packing_list_no: string; sales_order_no: string; buyer: string; production_order_no: string; qc_doc_no: string; warehouse_id: number; warehouse_code: string; production_receipt_no: string; received_qty: number; available_qty: number }
 interface Shipment { id: number; doc_no: string; status: string; ship_date: string; tolerance_check: string; over_tolerance_approved: boolean; forwarder: string | null; container_no: string | null; sales_order?: { doc_no: string; customer?: { name: string } }; packing_list?: { doc_no: string } }
-interface Lineage { production_receipt: { doc_no: string; warehouse: { code: string }; received_qty: number }; fg_stock: { available_qty: number }; shipment_movement: { doc_no?: string; status?: string } }
+interface Lineage { production_receipt: { doc_no: string; warehouse: { id: number; code: string; name: string }; received_qty: number }; fg_stock: { available_qty: number }; shipment_movement: { doc_no?: string; status?: string } }
 
 export default function ShipmentsPage() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -24,16 +24,12 @@ export default function ShipmentsPage() {
 
   const selectedFg = useMemo(() => eligibleFg.find((item) => String(item.packing_list_id) === plId), [eligibleFg, plId]);
   const fmt = (value: number) => Number(value).toLocaleString("id-ID", { maximumFractionDigits: 4 });
-
   const load = useCallback(() => {
     setLoading(true); setError(null);
-    Promise.all([
-      api.get<{ data: Shipment[] }>("/shipping/shipments?per_page=100"),
-      api.get<{ data: EligibleFg[] }>("/shipping/eligible-fg"),
-    ]).then(([shipmentResponse, fgResponse]) => { setShipments(shipmentResponse.data); setEligibleFg(fgResponse.data); })
+    Promise.all([api.get<{ data: Shipment[] }>("/shipping/shipments?per_page=100"), api.get<{ data: EligibleFg[] }>("/shipping/eligible-fg")])
+      .then(([shipmentResponse, fgResponse]) => { setShipments(shipmentResponse.data); setEligibleFg(fgResponse.data); })
       .catch((requestError) => setError(requestError.message)).finally(() => setLoading(false));
   }, []);
-
   useEffect(load, [load]);
 
   async function createShipment() {
@@ -56,11 +52,13 @@ export default function ShipmentsPage() {
   }
 
   async function ship(shipment: Shipment) {
-    const source = eligibleFg.find((item) => item.packing_list_no === shipment.packing_list?.doc_no);
-    if (!source) { setError("Eligible FG source tidak tersedia atau Packing List sudah tidak eligible."); return; }
     setBusy(true); setError(null); setMessage(null);
-    try { const result = await api.post<Shipment>(`/shipping/shipments/${shipment.id}/ship`, { fg_warehouse_id: source.warehouse_id }); setMessage(`Shipment ${result.doc_no} SHIPPED — FG keluar dari warehouse sumber ${source.warehouse_code}.`); load(); }
-    catch (requestError: any) { setError(requestError.message); }
+    try {
+      const source = await api.get<Lineage>(`/shipping/shipments/${shipment.id}/lineage`);
+      const result = await api.post<Shipment>(`/shipping/shipments/${shipment.id}/ship`, { fg_warehouse_id: source.production_receipt.warehouse.id });
+      setMessage(`Shipment ${result.doc_no} SHIPPED — FG keluar dari warehouse sumber ${source.production_receipt.warehouse.code}.`);
+      load();
+    } catch (requestError: any) { setError(requestError.message); }
     finally { setBusy(false); }
   }
 
@@ -91,11 +89,7 @@ export default function ShipmentsPage() {
       <div className="grid gap-3 lg:grid-cols-3">{eligibleFg.map((item) => <button type="button" key={item.packing_list_id} onClick={() => setPlId(String(item.packing_list_id))} className={`rounded-lg border p-3 text-left ${plId === String(item.packing_list_id) ? "border-blue-500 bg-blue-50" : "border-[var(--color-border-subtle)]"}`}><div className="flex justify-between gap-2"><span className="font-mono font-semibold">{item.packing_list_no}</span><StatusBadge status="APPROVED" /></div><p className="mt-1 text-sm">SO {item.sales_order_no} · {item.buyer}</p><p className="text-xs text-[var(--color-text-muted)]">MO {item.production_order_no} · QC {item.qc_doc_no}</p><dl className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><dt>Receipt</dt><dd className="font-semibold">{fmt(item.received_qty)}</dd></div><div><dt>Available</dt><dd className="font-semibold">{fmt(item.available_qty)}</dd></div><div><dt>Warehouse</dt><dd className="font-mono">{item.warehouse_code}</dd></div></dl><p className="mt-2 font-mono text-xs">{item.production_receipt_no}</p></button>)}</div>
       {!loading && eligibleFg.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">Tidak ada Packing List APPROVED dengan PRODUCTION_RECEIPT valid yang belum memiliki Shipment.</p>}
     </section>
-    <section className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-white p-4 shadow-[var(--shadow-raised)]">
-      <h2 className="mb-4 font-semibold">Buat Shipment</h2>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><Field htmlFor="packing-list" label="Eligible FG" required><Select id="packing-list" value={plId} onChange={(event) => setPlId(event.target.value)}><option value="">Pilih source</option>{eligibleFg.map((item) => <option key={item.packing_list_id} value={item.packing_list_id}>{item.packing_list_no} · {item.production_receipt_no}</option>)}</Select></Field><Field htmlFor="ship-date" label="Tanggal Kirim" required><Input id="ship-date" type="date" value={shipDate} onChange={(event) => setShipDate(event.target.value)} /></Field><Field htmlFor="forwarder" label="Forwarder"><Input id="forwarder" value={forwarder} onChange={(event) => setForwarder(event.target.value)} /></Field><Field htmlFor="container" label="No. Kontainer"><Input id="container" value={containerNo} onChange={(event) => setContainerNo(event.target.value)} /></Field><div className="flex items-end"><Button className="w-full" variant="primary" onClick={createShipment} disabled={!plId} loading={busy}>Buat Shipment</Button></div></div>
-      {selectedFg && <p className="mt-3 text-xs text-[var(--color-text-muted)]">Stock OUT dikunci ke warehouse receipt <b>{selectedFg.warehouse_code}</b>. Warehouse tidak dipilih bebas oleh frontend.</p>}
-    </section>
+    <section className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-white p-4 shadow-[var(--shadow-raised)]"><h2 className="mb-4 font-semibold">Buat Shipment</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><Field htmlFor="packing-list" label="Eligible FG" required><Select id="packing-list" value={plId} onChange={(event) => setPlId(event.target.value)}><option value="">Pilih source</option>{eligibleFg.map((item) => <option key={item.packing_list_id} value={item.packing_list_id}>{item.packing_list_no} · {item.production_receipt_no}</option>)}</Select></Field><Field htmlFor="ship-date" label="Tanggal Kirim" required><Input id="ship-date" type="date" value={shipDate} onChange={(event) => setShipDate(event.target.value)} /></Field><Field htmlFor="forwarder" label="Forwarder"><Input id="forwarder" value={forwarder} onChange={(event) => setForwarder(event.target.value)} /></Field><Field htmlFor="container" label="No. Kontainer"><Input id="container" value={containerNo} onChange={(event) => setContainerNo(event.target.value)} /></Field><div className="flex items-end"><Button className="w-full" variant="primary" onClick={createShipment} disabled={!plId} loading={busy}>Buat Shipment</Button></div></div>{selectedFg && <p className="mt-3 text-xs text-[var(--color-text-muted)]">Stock OUT dikunci ke warehouse receipt <b>{selectedFg.warehouse_code}</b>. Warehouse tidak dipilih bebas oleh frontend.</p>}</section>
     {lineage && <section className="rounded-[var(--radius-surface)] border border-blue-200 bg-blue-50 p-4"><div className="flex justify-between"><h2 className="font-semibold">Lineage {lineage.shipment.doc_no}</h2><Button size="sm" onClick={() => setLineage(null)}>Tutup</Button></div><p className="mt-2 font-mono text-sm">Packing List → {lineage.data.production_receipt.doc_no} → {lineage.data.production_receipt.warehouse.code} → FG → {lineage.data.shipment_movement.doc_no ?? lineage.data.shipment_movement.status}</p><p className="mt-1 text-sm">Received {fmt(lineage.data.production_receipt.received_qty)} · Available saat dibaca {fmt(lineage.data.fg_stock.available_qty)}</p></section>}
     <section className="rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-white p-4 shadow-[var(--shadow-raised)]"><DataTable caption="Daftar shipment" columns={columns} rows={shipments} getRowKey={(shipment) => shipment.id} loading={loading} error={!shipments.length ? error : null} onRetry={load} emptyTitle="Belum ada shipment" emptyDescription="Shipment dibuat secara eksplisit dari eligible FG." minWidth="1040px" /></section>
     <ConfirmDialog open={Boolean(shipmentToApprove)} title="Approve Toleransi Buyer?" description="Shipment berada di luar toleransi buyer dan memerlukan persetujuan eksplisit." confirmLabel="Approve Toleransi" variant="danger" loading={busy} onConfirm={approveTolerance} onCancel={() => { if (!busy) setShipmentToApprove(null); }} />
