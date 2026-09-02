@@ -1,11 +1,19 @@
 # Modul Shipping
 
-- Satu packing list APPROVED hanya dapat membuat satu shipment.
-- Shipment header tidak dapat mengoverride company, SO, PL, status, atau audit fields.
-- Tolerance dihitung terhadap projected cumulative shipped per matrix SO.
-- Override luar toleransi hanya untuk shipment belum dikirim dan tercatat audit.
-- Ship mengunci shipment, packing list, dan SO; warehouse wajib FG pada company yang sama.
-- ITS mengeluarkan FG sekali dengan shipment sebagai source id.
-- SO CLOSED hanya jika setiap matrix mencapai batas bawah toleransi; total agregat tidak dapat menutupi shortage matrix lain.
+## Iteration 8 — FG / Warehouse / Shipment
 
-Regression tests tersedia, tetapi belum dinyatakan hijau sampai lockfiles dan CI tersedia.
+- PF-09 menjadi authority: Packing List APPROVED dengan QC FINAL PASS dan ITS `PRODUCTION_RECEIPT` yang traceable adalah source Shipment.
+- `GET shipping/eligible-fg` hanya mengekspos Packing List APPROVED yang belum memiliki Shipment dan memiliki receipt valid.
+- Receipt divalidasi ulang terhadap Carton matrix: style × colorway × size dan quantity harus sama.
+- Receipt harus berada pada satu warehouse FG aktif milik company yang sama.
+- Satu Packing List hanya dapat membuat satu Shipment; unique constraint existing tetap menjadi final DB guard.
+- Shipment lines diturunkan dari Carton matrix dan tidak menerima quantity arbitrary dari request.
+- Saat ship, warehouse dikunci ke warehouse sumber `PRODUCTION_RECEIPT`; cross-warehouse consumption ditolak.
+- Stock availability divalidasi per FG matrix; ITS tetap menjadi authority final dengan balance lock dan non-negative guard.
+- `SHIPMENT` hanya diposting melalui ITS dengan Shipment sebagai source document, sehingga duplicate stock OUT idempotent.
+- `GET shipping/shipments/{shipment}/lineage` menelusuri Shipment → Packing List/Carton → PRODUCTION_RECEIPT → FG → QC FINAL → MO → SO dan movement SHIPMENT.
+- Shipment tetap dibuat secara eksplisit; tidak ada automatic Shipment, movement type baru, parallel FG ledger, reversal otomatis, atau historical backfill.
+- `production_orders.qty_produced` tidak diberi writer baru: authority masih **NOT DEFINED**.
+- Cancellation/reversal receipt dan Shipment masih **NOT DEFINED** dan tidak diasumsikan.
+
+Regression tests disiapkan di `FgWarehouseShipmentTraceabilityTest.php`. Runtime verification tetap **DEFERRED — FINAL VERIFICATION PHASE**.

@@ -26,10 +26,12 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::get('packing/lists/{packingList}/lineage', [PackingListController::class, 'lineage'])->middleware('permission:packing.packinglist.view');
     Route::get('packing/lists/{packingList}', [PackingListController::class, 'show'])->middleware('permission:packing.packinglist.view');
 
+    Route::get('shipping/eligible-fg', [ShipmentController::class, 'eligibleFg'])->middleware('permission:shipping.shipment.view');
     Route::get('shipping/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipping.shipment.view');
     Route::post('shipping/shipments/from-pl/{packingList}', [ShipmentController::class, 'store'])->middleware('permission:shipping.shipment.create');
     Route::post('shipping/shipments/{shipment}/approve-over-tolerance', [ShipmentController::class, 'approveOverTolerance'])->middleware('permission:shipping.shipment.submit');
     Route::post('shipping/shipments/{shipment}/ship', [ShipmentController::class, 'ship'])->middleware('permission:shipping.shipment.submit');
+    Route::get('shipping/shipments/{shipment}/lineage', [ShipmentController::class, 'lineage'])->middleware('permission:shipping.shipment.view');
     Route::get('shipping/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipping.shipment.view');
 
     Route::get('subcon/orders', [SubconOrderController::class, 'index'])->middleware('permission:subcon.jwo.view');
