@@ -7,8 +7,12 @@ interface Opt { id: number; code: string; name: string }
 interface EligibleBundle {
   bundle_no: string;
   qty: number;
+  available_qty?: number;
   production_order_id: number;
-  cut_output_id: number | null;
+  cut_output_id?: number | null;
+  source_wip_transfer_id?: number;
+  last_finishing_operation_id?: number | null;
+  last_finishing_direction?: string | null;
   lineage_complete: boolean;
 }
 interface Lineage {
@@ -16,6 +20,16 @@ interface Lineage {
   sewing_inputs: unknown[];
   sewing_outputs: unknown[];
   wip_transfers: unknown[];
+  finishing_inputs: unknown[];
+  finishing_outputs: unknown[];
+  finishing_source: { id: number; qty: number } | null;
+  packing_boundary: {
+    finishing_output_available: boolean;
+    qc_final_pass_required: boolean;
+    qc_final_pass: boolean;
+    direct_bundle_to_carton_defined: boolean;
+    status: string;
+  };
 }
 
 export default function ScanStationPage() {
@@ -32,16 +46,23 @@ export default function ScanStationPage() {
   const [lineage, setLineage] = useState<Lineage | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const refreshEligible = () => api.get<{ data: EligibleBundle[] }>("/shopfloor/bundles/eligible")
-    .then((response) => setEligible(response.data))
-    .catch(() => {});
+  const refreshEligible = (selectedStage = stage) => {
+    const endpoint = selectedStage === "FINISHING" ? "/shopfloor/finishing/eligible" : "/shopfloor/bundles/eligible";
+    return api.get<{ data: EligibleBundle[] }>(endpoint).then((response) => setEligible(response.data)).catch(() => {});
+  };
 
   useEffect(() => {
     api.get<{ data: Opt[] }>("/master/operations?per_page=100").then((r) => setOperations(r.data)).catch(() => {});
     api.get<{ data: Opt[] }>("/master/lines?per_page=100").then((r) => setLines(r.data)).catch(() => {});
-    refreshEligible();
+    refreshEligible("SEWING");
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setBundleNo("");
+    setLineage(null);
+    refreshEligible(stage);
+  }, [stage]);
 
   async function inspect(no: string) {
     setBundleNo(no);
@@ -66,10 +87,10 @@ export default function ScanStationPage() {
         stage,
         line_id: lineId ? Number(lineId) : undefined,
       });
-      setFeedback({ ok: true, message: `✔ ${scannedBundle} — ${direction} tercatat` });
-      setRecent((items) => [`${scannedBundle} ${direction}`, ...items].slice(0, 10));
+      setFeedback({ ok: true, message: `✔ ${scannedBundle} — ${stage} ${direction} tercatat` });
+      setRecent((items) => [`${scannedBundle} ${stage} ${direction}`, ...items].slice(0, 10));
       await inspect(scannedBundle);
-      refreshEligible();
+      refreshEligible(stage);
     } catch (error: any) {
       setFeedback({ ok: false, message: `✘ ${error.message}` });
     }
@@ -81,20 +102,20 @@ export default function ScanStationPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-xl font-bold">Sewing / Shop Floor / WIP</h1>
+      <h1 className="text-xl font-bold">Sewing / Shop Floor / WIP / Finishing</h1>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-white p-4">
-          <h2 className="mb-3 font-semibold">Bundle eligible untuk Sewing</h2>
+          <h2 className="mb-3 font-semibold">Bundle eligible untuk {stage === "FINISHING" ? "Finishing" : "Sewing"}</h2>
           <div className="max-h-64 overflow-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left"><th>Bundle</th><th>Qty</th><th>Lineage</th></tr></thead>
+              <thead><tr className="text-left"><th>Bundle</th><th>Qty</th><th>Source</th></tr></thead>
               <tbody>
                 {eligible.map((bundle) => (
                   <tr key={bundle.bundle_no} className="border-t">
                     <td><button type="button" className="py-2 font-mono text-blue-700" onClick={() => inspect(bundle.bundle_no)}>{bundle.bundle_no}</button></td>
-                    <td>{bundle.qty}</td>
-                    <td>{bundle.lineage_complete ? "Cut Output" : "Legacy"}</td>
+                    <td>{bundle.available_qty ?? bundle.qty}</td>
+                    <td>{stage === "FINISHING" ? `WIP #${bundle.source_wip_transfer_id}` : (bundle.lineage_complete ? "Cut Output" : "Legacy")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -128,7 +149,7 @@ export default function ScanStationPage() {
 
           <form onSubmit={submit} className="mt-4">
             <input ref={inputRef} value={bundleNo} onChange={(e) => setBundleNo(e.target.value)} className="w-full rounded border-2 p-3 font-mono" placeholder="Scan / pilih Bundle No" autoComplete="off" />
-            <div className="mt-2 text-sm">Available qty: <b>{selected?.qty ?? "—"}</b></div>
+            <div className="mt-2 text-sm">Available qty: <b>{selected?.available_qty ?? selected?.qty ?? "—"}</b></div>
             <button className="mt-3 w-full rounded bg-blue-600 py-2 font-semibold text-white">Catat transaksi</button>
           </form>
 
@@ -139,8 +160,11 @@ export default function ScanStationPage() {
       {lineage && (
         <section className="rounded-xl border bg-white p-4">
           <h2 className="font-semibold">Lineage & WIP result</h2>
-          <p className="mt-2 text-sm">Bundle → Sewing Input ({lineage.sewing_inputs.length}) → Sewing Output ({lineage.sewing_outputs.length}) → WIP Transfer ({lineage.wip_transfers.length})</p>
-          <p className="mt-1 text-sm">Cut Output: {lineage.bundle.cut_output_id ?? "Legacy / NULL"} · Current stage: {lineage.bundle.current_stage}</p>
+          <p className="mt-2 text-sm">Bundle → Sewing IN ({lineage.sewing_inputs.length}) → Sewing OUT ({lineage.sewing_outputs.length}) → WIP Transfer ({lineage.wip_transfers.length}) → Finishing IN ({lineage.finishing_inputs.length}) → Finishing OUT ({lineage.finishing_outputs.length})</p>
+          <p className="mt-1 text-sm">Cut Output: {lineage.bundle.cut_output_id ?? "Legacy / NULL"} · Current stage: {lineage.bundle.current_stage} · Source Finishing WIP: {lineage.finishing_source ? `#${lineage.finishing_source.id}` : "—"}</p>
+          <div className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-800">
+            Packing boundary: Finishing output {lineage.packing_boundary.finishing_output_available ? "tersedia" : "belum tersedia"}; QC FINAL PASS {lineage.packing_boundary.qc_final_pass ? "tersedia" : "wajib dipenuhi"}. Direct Bundle→Carton authority: ⚪ NOT DEFINED.
+          </div>
         </section>
       )}
 

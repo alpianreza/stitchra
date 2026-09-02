@@ -41,6 +41,15 @@ class ScanController extends Controller
         ]));
     }
 
+    public function eligibleFinishing(Request $request): JsonResponse
+    {
+        $data = $request->validate(['production_order_id' => 'nullable|integer|min:1']);
+
+        return $this->domainResponse(fn () => response()->json([
+            'data' => $this->service->eligibleFinishingBundles(CurrentCompany::id(), $data['production_order_id'] ?? null),
+        ]));
+    }
+
     public function lineage(Request $request, string $bundleNo): JsonResponse
     {
         return $this->domainResponse(fn () => response()->json([

@@ -2,6 +2,7 @@
 
 use Modules\Core\Models\Company;
 use Modules\Core\Support\CurrentCompany;
+use Modules\Cutting\Models\Bundle;
 use Modules\Cutting\Services\CuttingService;
 use Modules\Cutting\Services\LayExecutionService;
 use Modules\MasterData\Models\ShadeGroup;
@@ -33,6 +34,18 @@ function sewingBundleFixture(): array
     return [$user,$mo,$op1,$op2,$bundles[0],$output,$lay,$roll];
 }
 
+function finishingBundleFixture(): array
+{
+    [$user,$mo,$op1,$op2,$bundle,$output,$lay,$roll] = sewingBundleFixture();
+    $service = app(ScanService::class);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'IN','stage'=>'SEWING'],$user);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'OUT','stage'=>'SEWING'],$user);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op2->id,'direction'=>'IN','stage'=>'SEWING'],$user);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op2->id,'direction'=>'OUT','stage'=>'SEWING'],$user);
+
+    return [$user,$mo,$op1,$op2,$bundle->fresh(),$output,$lay,$roll];
+}
+
 it('moves a completed cut-output bundle into sewing with quantity snapshot and lineage', function () {
     [$user,, $op1,, $bundle,$output,$lay,$roll] = sewingBundleFixture();
     $service = app(ScanService::class);
@@ -59,6 +72,46 @@ it('prevents double consumption and creates sewing output WIP only after the fin
     expect((float)$output->qty)->toBe((float)$bundle->qty)
         ->and($bundle->fresh()->current_stage)->toBe('FINISHING')
         ->and(WipTransfer::where('bundle_id',$bundle->id)->where('from_stage','SEWING')->where('to_stage','FINISHING')->count())->toBe(1);
+});
+
+it('accepts finishing input only from sewing WIP and traces finishing output', function () {
+    [$user,, $op1,, $bundle] = finishingBundleFixture();
+    $service = app(ScanService::class);
+    $eligible = collect($service->eligibleFinishingBundles(1))->firstWhere('bundle_no',$bundle->bundle_no);
+    $input = $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'IN','stage'=>'FINISHING'],$user);
+    $output = $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'OUT','stage'=>'FINISHING'],$user);
+    $lineage = $service->lineage(1,$bundle->bundle_no);
+
+    expect($eligible['source_wip_transfer_id'])->not->toBeNull()
+        ->and((float)$eligible['available_qty'])->toBe((float)$bundle->qty)
+        ->and((float)$input->qty)->toBe((float)$bundle->qty)
+        ->and((float)$output->qty)->toBe((float)$input->qty)
+        ->and($lineage['finishing_source']->to_stage)->toBe('FINISHING')
+        ->and($lineage['finishing_inputs'])->toHaveCount(1)
+        ->and($lineage['finishing_outputs'])->toHaveCount(1)
+        ->and($lineage['packing_boundary']['direct_bundle_to_carton_defined'])->toBeFalse();
+});
+
+it('rejects finishing without valid sewing WIP and duplicate finishing input', function () {
+    [$user,, $op1,, $bundle] = sewingBundleFixture();
+    $service = app(ScanService::class);
+    $bundle->update(['current_stage'=>'FINISHING']);
+    expect(fn () => $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'IN','stage'=>'FINISHING'],$user))
+        ->toThrow(RuntimeException::class,'source WIP transfer');
+
+    [$user2,, $finishingOp,, $ready] = finishingBundleFixture();
+    $service->scan(1,$ready->bundle_no,['operation_id'=>$finishingOp->id,'direction'=>'IN','stage'=>'FINISHING'],$user2);
+    expect(fn () => $service->scan(1,$ready->bundle_no,['operation_id'=>$finishingOp->id,'direction'=>'IN','stage'=>'FINISHING'],$user2))
+        ->toThrow(RuntimeException::class,'duplicate IN');
+});
+
+it('rejects backward finishing operation sequence', function () {
+    [$user,, $op1,$op2,$bundle] = finishingBundleFixture();
+    $service = app(ScanService::class);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op2->id,'direction'=>'IN','stage'=>'FINISHING'],$user);
+    $service->scan(1,$bundle->bundle_no,['operation_id'=>$op2->id,'direction'=>'OUT','stage'=>'FINISHING'],$user);
+    expect(fn () => $service->scan(1,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'IN','stage'=>'FINISHING'],$user))
+        ->toThrow(RuntimeException::class,'harus maju');
 });
 
 it('rejects a traced bundle whose parent lay is not completed', function () {
@@ -89,6 +142,7 @@ it('does not expose or process a bundle from another company', function () {
     $service = app(ScanService::class);
 
     expect($service->eligibleBundles($other->id,$mo->id))->toBe([])
+        ->and($service->eligibleFinishingBundles($other->id,$mo->id))->toBe([])
         ->and(fn () => $service->scan($other->id,$bundle->bundle_no,['operation_id'=>$op1->id,'direction'=>'IN','stage'=>'SEWING'],$user))
         ->toThrow(RuntimeException::class);
 });

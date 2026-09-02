@@ -10,6 +10,15 @@
 - Unique scan and transfer constraints plus bundle/MO row locks prevent double input, double output, and duplicate completion.
 - QC handoff directly from Sewing, QC-input quantity equivalence, and reject/rework quantity disposition remain **NOT DEFINED**. Existing NCR/Rework behavior is unchanged.
 
+## Finishing invariants (Iteration 6)
+
+- A Finishing IN is accepted only for an ACTIVE Bundle whose current stage is FINISHING and which has an append-only SEWING → FINISHING WIP transfer for the same company, MO, Bundle, and full quantity.
+- Finishing continues to reuse append-only `production_scans`; no duplicate Finishing transaction entity or stock movement is introduced.
+- Finishing OUT requires its matching IN and snapshots the same full Bundle quantity. Partial Finishing and defect/reject/rework arithmetic are **NOT DEFINED** and are not inferred.
+- Finishing operations must exist in the MO routing snapshot. After a completed Finishing operation, the next Finishing operation must move forward by routing sequence; operation-stage classification and mandatory Finishing operation set remain **NOT DEFINED**.
+- Eligible Finishing WIP and full reverse lineage are exposed through the existing Shop Floor API/UI.
+- Packing still requires QC FINAL PASS. Direct Bundle/Finishing Output → carton allocation is **NOT DEFINED**, so Iteration 6 exposes this boundary explicitly but does not invent a Packing transaction, carton allocation, stock movement, or historical backfill.
+
 ## Online and offline scan invariants
 
 - Online and offline scans share the same locked state-transition engine.
