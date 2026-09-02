@@ -4,7 +4,9 @@ namespace Modules\Planning\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\MasterData\Models\Material;
+use Modules\MasterData\Models\Uom;
 
 /** Hasil netting per material per run (BR-043). converted_to_pr = trace BR-120. */
 class MrpRequirement extends Model
@@ -33,5 +35,16 @@ class MrpRequirement extends Model
     public function material(): BelongsTo
     {
         return $this->belongsTo(Material::class);
+    }
+
+    public function uom(): BelongsTo
+    {
+        return $this->belongsTo(Uom::class);
+    }
+
+    /** BR-121: kontribusi gross per SO line × BOM line */
+    public function traceLines(): HasMany
+    {
+        return $this->hasMany(MrpTraceLine::class, 'mrp_requirement_id');
     }
 }

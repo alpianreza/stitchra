@@ -1,9 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 interface So { id: number; doc_no: string; customer?: { name: string } }
+
+interface TraceLine {
+  id: number;
+  gross_qty: string;
+  sales_order_line?: {
+    id: number;
+    qty: string;
+    sales_order?: { doc_no: string };
+    style?: { style_no: string };
+    colorway?: { id: number; lab_dip_ref: string | null };
+    size?: { code: string };
+  };
+  bom_line?: {
+    id: number;
+    qty_per_pcs: string;
+    consumption_estimated: string | null;
+    wastage_pct: string;
+    shrinkage_pct: string;
+  };
+}
 
 interface Requirement {
   id: number;
@@ -16,6 +36,7 @@ interface Requirement {
   need_date: string | null;
   converted_to_pr: boolean;
   material?: { code: string; name: string };
+  trace_lines?: TraceLine[];
 }
 
 interface Run {
@@ -26,13 +47,14 @@ interface Run {
   requirements?: Requirement[];
 }
 
-/** MRP planner: pilih SO CONFIRMED → run → shortage → konversi PR (BR-043/045/120) */
+/** MRP planner: pilih SO CONFIRMED → run → shortage → konversi PR (BR-043/045/120); drill-down trace "kenapa butuh N?" (BR-121) */
 export default function MrpPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [confirmedSos, setConfirmedSos] = useState<So[]>([]);
   const [selectedSos, setSelectedSos] = useState<number[]>([]);
   const [activeRun, setActiveRun] = useState<Run | null>(null);
   const [selectedReqs, setSelectedReqs] = useState<number[]>([]);
+  const [expandedReq, setExpandedReq] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -66,6 +88,7 @@ export default function MrpPage() {
       const run = await api.get<Run>(`/planning/mrp-runs/${id}`);
       setActiveRun(run);
       setSelectedReqs([]);
+      setExpandedReq(null);
     } catch (e: any) {
       setError(e.message);
     }
@@ -86,6 +109,13 @@ export default function MrpPage() {
   }
 
   const fmt = (v: string) => Number(v).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+
+  /** BR-121: kebutuhan per pcs termasuk wastage+shrinkage — mirror BomLine::grossPerPcs */
+  function grossPerPcs(t: TraceLine): number | null {
+    if (!t.bom_line) return null;
+    const base = Number(t.bom_line.consumption_estimated ?? t.bom_line.qty_per_pcs);
+    return base * (1 + Number(t.bom_line.wastage_pct) / 100) * (1 + Number(t.bom_line.shrinkage_pct) / 100);
+  }
 
   return (
     <div className="space-y-6">
@@ -163,31 +193,89 @@ export default function MrpPage() {
                   <th className="px-3 py-2 text-right font-medium">Net (shortage)</th>
                   <th className="px-3 py-2 font-medium">Need Date</th>
                   <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Trace</th>
                 </tr>
               </thead>
               <tbody>
                 {(activeRun.requirements ?? []).map((req) => {
                   const isShort = Number(req.net_qty) > 0;
                   return (
-                    <tr key={req.id} className={`border-b last:border-0 ${isShort && !req.converted_to_pr ? "bg-red-50" : ""}`}>
-                      <td className="px-3 py-2">
-                        {isShort && !req.converted_to_pr && (
-                          <input
-                            type="checkbox"
-                            checked={selectedReqs.includes(req.id)}
-                            onChange={(e) => setSelectedReqs(e.target.checked ? [...selectedReqs, req.id] : selectedReqs.filter((x) => x !== req.id))}
-                          />
-                        )}
-                      </td>
-                      <td className="px-3 py-2"><span className="font-mono">{req.material?.code}</span> {req.material?.name}</td>
-                      <td className="px-3 py-2 text-right">{fmt(req.gross_qty)}</td>
-                      <td className="px-3 py-2 text-right">{fmt(req.safety_stock_qty)}</td>
-                      <td className="px-3 py-2 text-right">{fmt(req.available_qty)}</td>
-                      <td className="px-3 py-2 text-right">{fmt(req.on_order_qty)}</td>
-                      <td className="px-3 py-2 text-right font-bold">{fmt(req.net_qty)}</td>
-                      <td className="px-3 py-2">{req.need_date ?? "—"}</td>
-                      <td className="px-3 py-2">{req.converted_to_pr ? <span className="text-green-700">Sudah jadi PR</span> : isShort ? <span className="text-red-600">Shortage</span> : <span className="text-slate-500">Cukup</span>}</td>
-                    </tr>
+                    <Fragment key={req.id}>
+                      <tr className={`border-b last:border-0 ${isShort && !req.converted_to_pr ? "bg-red-50" : ""}`}>
+                        <td className="px-3 py-2">
+                          {isShort && !req.converted_to_pr && (
+                            <input
+                              type="checkbox"
+                              checked={selectedReqs.includes(req.id)}
+                              onChange={(e) => setSelectedReqs(e.target.checked ? [...selectedReqs, req.id] : selectedReqs.filter((x) => x !== req.id))}
+                            />
+                          )}
+                        </td>
+                        <td className="px-3 py-2"><span className="font-mono">{req.material?.code}</span> {req.material?.name}</td>
+                        <td className="px-3 py-2 text-right">{fmt(req.gross_qty)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(req.safety_stock_qty)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(req.available_qty)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(req.on_order_qty)}</td>
+                        <td className="px-3 py-2 text-right font-bold">{fmt(req.net_qty)}</td>
+                        <td className="px-3 py-2">{req.need_date ?? "—"}</td>
+                        <td className="px-3 py-2">{req.converted_to_pr ? <span className="text-green-700">Sudah jadi PR</span> : isShort ? <span className="text-red-600">Shortage</span> : <span className="text-slate-500">Cukup</span>}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}
+                            className="text-xs font-medium text-blue-600 hover:underline"
+                          >
+                            {expandedReq === req.id ? "Tutup" : "Kenapa?"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedReq === req.id && (
+                        <tr className="border-b bg-slate-50">
+                          <td colSpan={10} className="px-3 py-3">
+                            {(req.trace_lines ?? []).length === 0 ? (
+                              <p className="text-xs text-slate-500">Trace tidak tersedia untuk run ini.</p>
+                            ) : (
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Kenapa butuh {fmt(req.gross_qty)}? — trace perhitungan (BR-121): SO line → BOM line → kontribusi gross
+                                </p>
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-left text-slate-500">
+                                      <th className="px-2 py-1 font-medium">SO</th>
+                                      <th className="px-2 py-1 font-medium">Style</th>
+                                      <th className="px-2 py-1 font-medium">Colorway</th>
+                                      <th className="px-2 py-1 font-medium">Size</th>
+                                      <th className="px-2 py-1 text-right font-medium">Qty SO line</th>
+                                      <th className="px-2 py-1 text-right font-medium">Kebutuhan/pcs (incl. wastage+shrinkage)</th>
+                                      <th className="px-2 py-1 text-right font-medium">Kontribusi gross</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(req.trace_lines ?? []).map((t) => {
+                                      const perPcs = grossPerPcs(t);
+                                      return (
+                                        <tr key={t.id} className="border-t border-slate-200">
+                                          <td className="px-2 py-1 font-mono">{t.sales_order_line?.sales_order?.doc_no ?? "—"}</td>
+                                          <td className="px-2 py-1">{t.sales_order_line?.style?.style_no ?? "—"}</td>
+                                          <td className="px-2 py-1">{t.sales_order_line?.colorway ? `CW#${t.sales_order_line.colorway.id}` : "—"}</td>
+                                          <td className="px-2 py-1">{t.sales_order_line?.size?.code ?? "—"}</td>
+                                          <td className="px-2 py-1 text-right">{t.sales_order_line ? fmt(t.sales_order_line.qty) : "—"}</td>
+                                          <td className="px-2 py-1 text-right">{perPcs === null ? "—" : perPcs.toLocaleString("id-ID", { maximumFractionDigits: 4 })}</td>
+                                          <td className="px-2 py-1 text-right font-medium">{fmt(t.gross_qty)}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                                <p className="mt-2 text-xs text-slate-500">
+                                  Σ kontribusi = gross {fmt(req.gross_qty)} → net {fmt(req.net_qty)} setelah safety {fmt(req.safety_stock_qty)}, available {fmt(req.available_qty)}, on-order {fmt(req.on_order_qty)}.
+                                </p>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

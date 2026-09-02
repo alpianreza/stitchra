@@ -44,7 +44,16 @@ class MrpController extends Controller
 
     public function show(Request $request, MrpRun $mrpRun): JsonResponse
     {
-        return response()->json($mrpRun->load('requirements.material', 'requirements.uom'));
+        // BR-121: sertakan trace "kenapa butuh N?" (SO line → BOM line → kontribusi gross)
+        return response()->json($mrpRun->load(
+            'requirements.material',
+            'requirements.uom',
+            'requirements.traceLines.salesOrderLine.salesOrder',
+            'requirements.traceLines.salesOrderLine.style',
+            'requirements.traceLines.salesOrderLine.colorway',
+            'requirements.traceLines.salesOrderLine.size',
+            'requirements.traceLines.bomLine'
+        ));
     }
 
     public function convertToPr(Request $request, MrpRun $mrpRun): JsonResponse

@@ -37,9 +37,9 @@ class MrpService
             ]);
 
             $gross = [];
+            $trace = [];   // BR-121: per material — kontribusi gross per SO line × BOM line
             foreach ($orders as $so) {
-                $qtyPerStyle = $so->lines->groupBy('style_id')->map(fn ($lines) => $lines->sum(fn ($line) => (float) $line->qty));
-                foreach ($qtyPerStyle as $styleId => $qty) {
+                foreach ($so->lines->groupBy('style_id') as $styleId => $soLines) {
                     $bom = Bom::where('style_id', $styleId)->first()?->approvedVersion();
                     if ($bom === null) throw new RuntimeException("Style #{$styleId} tidak punya BOM APPROVED (BR-023).");
                     foreach ($bom->lines as $bomLine) {
@@ -49,7 +49,18 @@ class MrpService
                         } elseif ((int) $gross[$materialId]['uom_id'] !== (int) $bomLine->uom_id) {
                             throw new RuntimeException("Material #{$materialId} memiliki UOM BOM yang tidak konsisten.");
                         }
-                        $gross[$materialId]['qty'] += $bomLine->grossPerPcs() * $qty;
+                        $perPcs = $bomLine->grossPerPcs();
+                        foreach ($soLines as $soLine) {
+                            $qty = round($perPcs * (float) $soLine->qty, 4);
+                            if ($qty <= 0) continue;
+                            $gross[$materialId]['qty'] += $qty;
+                            // BR-121: jejak "kenapa butuh N?" — SO line × BOM line
+                            $trace[$materialId][] = [
+                                'sales_order_line_id' => (int) $soLine->id,
+                                'bom_line_id' => (int) $bomLine->id,
+                                'gross_qty' => $qty,
+                            ];
+                        }
                         if ($so->ex_factory_date && (! $gross[$materialId]['need_date'] || $so->ex_factory_date->lt($gross[$materialId]['need_date']))) {
                             $gross[$materialId]['need_date'] = $so->ex_factory_date;
                         }
@@ -77,13 +88,18 @@ class MrpService
                 $available = max(0.0, (float) ($balances[$materialId] ?? 0));
                 $ordered = max(0.0, (float) ($onOrder[$materialId] ?? 0));
                 $net = max(0.0, $data['qty'] + $safety - $available - $ordered);
-                MrpRequirement::create([
+                $requirement = MrpRequirement::create([
                     'mrp_run_id' => $run->id, 'material_id' => $materialId,
                     'gross_qty' => round($data['qty'], 4), 'safety_stock_qty' => $safety,
                     'available_qty' => round($available, 4), 'on_order_qty' => round($ordered, 4),
                     'net_qty' => round($net, 4), 'uom_id' => $data['uom_id'],
                     'need_date' => $data['need_date'], 'converted_to_pr' => false,
                 ]);
+
+                // BR-121: persist trace — Σ kontribusi trace == gross_qty requirement
+                foreach ($trace[$materialId] ?? [] as $row) {
+                    $requirement->traceLines()->create($row);
+                }
             }
             return $run->load('requirements.material');
         });
