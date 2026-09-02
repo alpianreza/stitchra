@@ -8,6 +8,6 @@ class PurchasingServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../../routes/purchasing.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/purchasing.php');
     }
 }

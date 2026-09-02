@@ -8,6 +8,6 @@ class PlanningServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../../routes/planning.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/planning.php');
     }
 }

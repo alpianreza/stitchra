@@ -25,6 +25,6 @@ class CoreServiceProvider extends ServiceProvider
         // BR-015: approval APPROVED → aksi domain (SO confirm, BOM approve, dst.)
         Event::listen(DocumentApproved::class, HandleDocumentApproved::class);
 
-        $this->loadRoutesFrom(__DIR__.'/../../routes/approvals.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/approvals.php');
     }
 }

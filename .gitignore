@@ -27,3 +27,6 @@ apps/api/storage/framework/views/*
 test-results/
 playwright-report/
 coverage/
+
+# Next.js build artifact
+apps/web/tsconfig.tsbuildinfo

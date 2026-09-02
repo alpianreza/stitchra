@@ -45,7 +45,7 @@ export default function PurchaseRequestsPage() {
   return (
     <div className="space-y-4">
       <PageHeader eyebrow="Purchasing" title="Purchase Request" description="Pantau kebutuhan pembelian manual dan hasil perencanaan MRP." />
-      <FilterBar resultSummary={page ? `${page.total} purchase request` : undefined}>
+      <FilterBar summary={page ? `${page.total} purchase request` : undefined}>
         <FilterSelect label="Sumber" value={source} onChange={(event) => setSource(event.target.value)}>
           <option value="">Semua sumber</option>
           <option value="MANUAL">Manual</option>

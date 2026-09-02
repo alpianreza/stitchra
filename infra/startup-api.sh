@@ -16,6 +16,11 @@ if [ -z "${APP_KEY:-}" ]; then
     php artisan key:generate --force
 fi
 
+# Struktur storage harus ada (volume api_storage bisa kosong saat pertama kali)
+mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs storage/app/public bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+chmod -R ug+rwX storage bootstrap/cache 2>/dev/null || true
+
 echo "[startup] migrate..."
 php artisan migrate --force
 

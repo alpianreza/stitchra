@@ -54,7 +54,7 @@ export default function PurchaseOrdersPage() {
   return (
     <div className="space-y-4">
       <PageHeader eyebrow="Purchasing" title="Purchase Order" description="Kelola komitmen pembelian dan status penerimaan supplier." actions={<Link href="/purchasing/pos/new" className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">Buat PO</Link>} />
-      <FilterBar resultSummary={page ? `${page.total} purchase order` : undefined}>
+      <FilterBar summary={page ? `${page.total} purchase order` : undefined}>
         <FilterSelect label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">Semua status</option>
           {["DRAFT", "SUBMITTED", "APPROVED", "PARTIAL_RECEIVED", "RECEIVED", "CLOSED"].map((item) => <option key={item}>{item}</option>)}

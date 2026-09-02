@@ -9,6 +9,6 @@ class QcServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Route gabungan QC/Packing/Shipping/Subcon (satu file Phase 7)
-        $this->loadRoutesFrom(__DIR__.'/../../routes/qc.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/qc.php');
     }
 }

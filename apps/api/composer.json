@@ -3,7 +3,7 @@
     "description": "Stitchra ERP Garment â€” backend (modular monolith)",
     "type": "project",
     "require": {
-        "php": "^8.5",
+        "php": "^8.4|^8.5",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.0",
         "laravel/horizon": "^5.0",

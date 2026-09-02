@@ -8,6 +8,6 @@ class ShopFloorServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../../routes/shopfloor.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/shopfloor.php');
     }
 }

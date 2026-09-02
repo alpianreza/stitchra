@@ -37,7 +37,7 @@ export default function StockInquiryPage() {
   return (
     <div className="space-y-4">
       <PageHeader eyebrow="Inventory" title="Inquiry Stok" description="Saldo on hand, reservation, quality hold, dan availability per material." />
-      <FilterBar resultSummary={`${rows.length} saldo stok`}>
+      <FilterBar summary={`${rows.length} saldo stok`}>
         <FilterSelect label="Gudang" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
           <option value="">Semua gudang</option>
           {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}

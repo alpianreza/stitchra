@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
         // Company default (single-company dulu; multi siap via schema)
         $company = Company::firstOrCreate(
             ['code' => 'DEFAULT'],
-            ['name' => 'Default Company', 'base_currency' => 'IDR', 'timezone' => 'Asia/Jakarta', 'locale' => 'id']
+            ['name' => 'Default Company', 'base_currency' => 'IDR']
         );
 
         // RBAC: permissions + 16 role (dari Roles & Permissions blueprint)
@@ -62,7 +62,7 @@ class DatabaseSeeder extends Seeder
         foreach ($prefixes as $prefix) {
             DocNumberingConfig::firstOrCreate(
                 ['company_id' => $company->id, 'prefix' => $prefix],
-                ['doc_type' => $prefix, 'padding' => 6, 'reset_period' => 'YEARLY']
+                ['doc_type' => $prefix, 'digits' => 6, 'reset_yearly' => true]
             );
         }
     }

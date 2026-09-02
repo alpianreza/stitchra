@@ -13,6 +13,6 @@ class MasterDataServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../../routes/master.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/master.php');
     }
 }

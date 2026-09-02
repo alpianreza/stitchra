@@ -8,6 +8,6 @@ class CuttingServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../../routes/cutting.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/cutting.php');
     }
 }
