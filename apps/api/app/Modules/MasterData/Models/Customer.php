@@ -1,4 +1,30 @@
 <?php
+
 namespace Modules\MasterData\Models;
-use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\HasMany;use Illuminate\Database\Eloquent\Relations\HasOne;use Illuminate\Database\Eloquent\SoftDeletes;use Modules\Core\Models\Concerns\BelongsToCompany;use Modules\Cutting\Models\CustomerShadeRule;
-class Customer extends Model { use SoftDeletes,BelongsToCompany;protected $fillable=['company_id','code','name','brand','country','currency','payment_term','incoterm','shipment_tolerance_pct','is_active','created_by','updated_by'];protected function casts():array{return['is_active'=>'boolean','shipment_tolerance_pct'=>'decimal:4'];}public function aqlConfig():HasOne{return$this->hasOne(CustomerAqlConfig::class);}public function shadeRule():HasOne{return$this->hasOne(CustomerShadeRule::class);}public function styles():HasMany{return$this->hasMany(Style::class);} }
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Cutting\Models\CustomerShadeRule;
+
+class Customer extends Model
+{
+    use SoftDeletes, BelongsToCompany;
+
+    protected $fillable = [
+        'company_id', 'code', 'name', 'brand', 'country', 'currency',
+        'payment_term', 'incoterm', 'shipment_tolerance_pct', 'is_active',
+        'created_by', 'updated_by',
+    ];
+
+    protected function casts(): array
+    {
+        return ['is_active' => 'boolean', 'shipment_tolerance_pct' => 'decimal:4'];
+    }
+
+    public function aqlConfig(): HasOne { return $this->hasOne(CustomerAqlConfig::class); }
+    public function shadeRule(): HasOne { return $this->hasOne(CustomerShadeRule::class); }
+    public function styles(): HasMany { return $this->hasMany(Style::class); }
+}
