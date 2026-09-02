@@ -1,5 +1,17 @@
 # Finance
 
+## Operational posting / GL
+
+- BR-101 reuses the existing `journals`, `journal_lines`, `gl_periods`, `account_mappings`, numbering, audit, posting-key idempotency, and reversal architecture. No parallel GL or accounting ledger exists.
+- The operational authority matrix is exposed at `GET finance/gl/operational-authority`.
+- Safe Iteration 11 write scope is intentionally narrow: a POSTED Goods Receipt can be posted explicitly through `POST finance/gl/operational-postings/goods-receipts/{goodsReceipt}` only when it has exactly one traceable ITS `PURCHASE_RECEIPT`, all COMPANY ledger rows are fully valued, source currency equals company base currency, the `GR_RECEIPT` account mapping is configured, and the source-date GL period is OPEN.
+- GR amount is the sum of the stored ITS transaction costs. Posting date is the persisted `goods_receipts.received_date`; the transaction is never silently moved to another period.
+- The deterministic posting key `(company,event,source type,source id)` prevents duplicate journals; conflicting reprocessing is rejected.
+- Journal lineage is exposed at `GET finance/journals/{journal}/lineage` and includes account lines, GL period, operational source, ITS movement when supported, and reversal/original references.
+- Existing JournalService reversal remains append-only for lines: it creates a reversing journal, links it uniquely to the original, marks the original VOID, and records audit evidence. Closed-period behavior continues to fail through the existing OPEN-period gate.
+- Existing AR/AP/tax/payment/FX automatic posting remains unchanged.
+- Material issue/return, SUBCON_OUT/IN, Subcon Fee direct posting, production receipt, shipment COGS, WIP/FG valuation, actual-cost posting, and cross-currency GR posting remain BLOCKED/NOT DEFINED where amount, period, invoice, valuation, or FX authority is incomplete.
+
 ## Actual Costing / Production Cost
 
 - BR-009 authority is an **actual cost computed per Production Order/MO**.
@@ -29,4 +41,4 @@
 
 ## Still pending
 
-Actual-cost persistence/lifecycle, WIP/FG valuation, automatic operational GL wiring, country-specific tax filing/e-invoicing, and runtime, accounting, security, and UAT verification.
+Operational posting authority beyond base-currency valued GR, actual-cost persistence/lifecycle, WIP/FG valuation, COGS amount authority, cross-currency inventory treatment, country-specific tax filing/e-invoicing, and runtime, accounting, security, concurrency, and UAT verification.

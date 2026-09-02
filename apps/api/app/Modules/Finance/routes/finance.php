@@ -6,13 +6,18 @@ use Modules\Finance\Http\Controllers\BankReconciliationController;
 use Modules\Finance\Http\Controllers\CostingController;
 use Modules\Finance\Http\Controllers\FxRevaluationController;
 use Modules\Finance\Http\Controllers\JournalController;
+use Modules\Finance\Http\Controllers\OperationalPostingController;
 use Modules\Finance\Http\Controllers\PeriodCloseController;
 use Modules\Finance\Http\Controllers\TaxController;
 
 Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(function () {
     Route::post('journals', [JournalController::class, 'store'])->middleware('permission:finance.journal.create');
     Route::post('journals/{journal}/reverse', [JournalController::class, 'reverse'])->middleware('permission:finance.journal.approve');
+    Route::get('journals/{journal}/lineage', [OperationalPostingController::class, 'lineage'])->middleware('permission:finance.report.view');
     Route::get('trial-balance', [JournalController::class, 'trialBalance'])->middleware('permission:finance.report.view');
+    Route::get('gl/operational-authority', [OperationalPostingController::class, 'authority'])->middleware('permission:finance.report.view');
+    Route::post('gl/operational-postings/goods-receipts/{goodsReceipt}', [OperationalPostingController::class, 'postGoodsReceipt'])->middleware('permission:finance.journal.create');
+
     Route::post('period-close/prepare', [PeriodCloseController::class, 'prepare'])->middleware('permission:finance.period-closing.execute');
     Route::post('period-close/{periodCloseRun}/approve', [PeriodCloseController::class, 'approve'])->middleware('permission:finance.period-closing.execute');
     Route::post('period-close/{periodCloseRun}/close', [PeriodCloseController::class, 'close'])->middleware('permission:finance.period-closing.execute');
@@ -39,7 +44,6 @@ Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(functio
 
     Route::get('costing/mo/{productionOrder}/actual', [CostingController::class, 'actual'])->middleware('permission:costing.actual.view');
     Route::get('costing/mo/{productionOrder}/lineage', [CostingController::class, 'lineage'])->middleware('permission:costing.actual.view');
-
     Route::post('bep/style/{style}', [CostingController::class, 'bepStyle'])->middleware('permission:finance.bep.view');
     Route::post('bep/factory', [CostingController::class, 'bepFactory'])->middleware('permission:finance.bep.view');
 });
