@@ -34,8 +34,10 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::get('shipping/shipments/{shipment}/lineage', [ShipmentController::class, 'lineage'])->middleware('permission:shipping.shipment.view');
     Route::get('shipping/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipping.shipment.view');
 
+    Route::get('subcon/eligible-materials', [SubconOrderController::class, 'eligibleMaterials'])->middleware('permission:subcon.jwo.view');
     Route::get('subcon/orders', [SubconOrderController::class, 'index'])->middleware('permission:subcon.jwo.view');
     Route::post('subcon/orders/from-mo/{productionOrder}', [SubconOrderController::class, 'store'])->middleware('permission:subcon.jwo.create');
     Route::post('subcon/orders/{subconOrder}/receive', [SubconOrderController::class, 'receive'])->middleware('permission:subcon.movement.create');
+    Route::get('subcon/orders/{subconOrder}/lineage', [SubconOrderController::class, 'lineage'])->middleware('permission:subcon.jwo.view');
     Route::get('subcon/orders/{subconOrder}', [SubconOrderController::class, 'show'])->middleware('permission:subcon.jwo.view');
 });
