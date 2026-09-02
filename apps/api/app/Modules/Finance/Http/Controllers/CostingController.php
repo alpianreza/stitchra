@@ -13,8 +13,47 @@ use RuntimeException;
 
 class CostingController extends Controller
 {
-    public function actual(Request $request,ProductionOrder $productionOrder,ActualCostingService $service):JsonResponse{$data=$request->validate(['period'=>['nullable','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);return $this->domain(fn()=>response()->json($service->computeForMo($productionOrder,$data['period']??null)));}
-    public function bepStyle(Request $request,int $style,BepService $service):JsonResponse{$data=$request->validate(['fixed_cost_share'=>'required|numeric|min:0']);return $this->domain(fn()=>response()->json($service->forStyle(CurrentCompany::id(),$style,(float)$data['fixed_cost_share'])));}
-    public function bepFactory(Request $request,BepService $service):JsonResponse{$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'fixed_cost'=>'required|numeric|min:0']);return $this->domain(fn()=>response()->json($service->factoryWide(CurrentCompany::id(),$data['period'],(float)$data['fixed_cost'])));}
-    private function domain(callable $callback):JsonResponse{try{return $callback();}catch(RuntimeException $e){return response()->json(['message'=>$e->getMessage()],422);}}
+    public function actual(Request $request, ProductionOrder $productionOrder, ActualCostingService $service): JsonResponse
+    {
+        $data = $request->validate(['period' => ['nullable', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);
+        return $this->domain(fn () => response()->json(
+            $service->computeForMo($productionOrder, $data['period'] ?? null, CurrentCompany::id()),
+        ));
+    }
+
+    public function lineage(Request $request, ProductionOrder $productionOrder, ActualCostingService $service): JsonResponse
+    {
+        $data = $request->validate(['period' => ['nullable', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);
+        return $this->domain(fn () => response()->json(
+            $service->lineageForMo($productionOrder, $data['period'] ?? null, CurrentCompany::id()),
+        ));
+    }
+
+    public function bepStyle(Request $request, int $style, BepService $service): JsonResponse
+    {
+        $data = $request->validate(['fixed_cost_share' => 'required|numeric|min:0']);
+        return $this->domain(fn () => response()->json(
+            $service->forStyle(CurrentCompany::id(), $style, (float) $data['fixed_cost_share']),
+        ));
+    }
+
+    public function bepFactory(Request $request, BepService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'period' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            'fixed_cost' => 'required|numeric|min:0',
+        ]);
+        return $this->domain(fn () => response()->json(
+            $service->factoryWide(CurrentCompany::id(), $data['period'], (float) $data['fixed_cost']),
+        ));
+    }
+
+    private function domain(callable $callback): JsonResponse
+    {
+        try {
+            return $callback();
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
 }
