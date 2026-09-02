@@ -1,41 +1,4 @@
 <?php
-
 namespace Modules\Cutting\Models;
-
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Modules\Core\Models\Concerns\BelongsToCompany;
-use Modules\Production\Models\ProductionOrder;
-
-class CutOrder extends Model
-{
-    use BelongsToCompany;
-
-    public const STATUSES = ['DRAFT','IN_PROGRESS','COMPLETED','CANCELLED'];
-
-    protected $fillable = [
-        'company_id', 'doc_no', 'production_order_id', 'cut_date',
-        'status', 'created_by', 'updated_by',
-    ];
-
-    protected function casts(): array
-    {
-        return ['cut_date' => 'date'];
-    }
-
-    public function productionOrder(): BelongsTo
-    {
-        return $this->belongsTo(ProductionOrder::class);
-    }
-
-    public function lines(): HasMany
-    {
-        return $this->hasMany(CutOrderLine::class);
-    }
-
-    public function markerLogs(): HasMany
-    {
-        return $this->hasMany(MarkerLog::class);
-    }
-}
+use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;use Illuminate\Database\Eloquent\Relations\HasMany;use Modules\Core\Models\Concerns\BelongsToCompany;use Modules\Production\Models\ProductionOrder;
+class CutOrder extends Model { use BelongsToCompany; public const STATUSES=['DRAFT','IN_PROGRESS','COMPLETED','CANCELLED']; protected $fillable=['company_id','doc_no','production_order_id','cut_date','status','created_by','updated_by']; protected function casts():array{return['cut_date'=>'date'];} public function productionOrder():BelongsTo{return$this->belongsTo(ProductionOrder::class);} public function lines():HasMany{return$this->hasMany(CutOrderLine::class);} public function markerLogs():HasMany{return$this->hasMany(MarkerLog::class);} public function lays():HasMany{return$this->hasMany(Lay::class);} }
