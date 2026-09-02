@@ -1,5 +1,18 @@
 # Finance
 
+## WIP / FG valuation and COGS boundary
+
+- Iteration 12 is a read-only authority boundary. ITS remains quantity authority; no parallel inventory, valuation, costing, or journal ledger is introduced.
+- `GET finance/gl/valuation-authority` exposes Material Issue→WIP, Material Return, Production Output→FG, FG→Shipment, and Shipment→COGS authority states.
+- `GET finance/gl/valuation-boundaries/production-orders/{productionOrder}` traces material issue/return, production scans, WIP transfers, Packing Lists, and ITS `PRODUCTION_RECEIPT` without promoting source cost evidence into WIP or FG valuation.
+- `GET finance/gl/valuation-boundaries/shipments/{shipment}` traces Packing List receipt, FG quantity, and ITS `SHIPMENT`, then stops before valuation/COGS when no authoritative amount exists.
+- Material Issue rows may carry BR-005 moving-average cost for Iteration 10 Actual Cost evidence. This does not define a WIP debit/valuation layer; `MATERIAL_ISSUE` posting remains blocked.
+- Material Return can carry an unambiguous source issue cost, but mixed-cost allocation, WIP reversal, accounting date, and accounting event remain `NOT DEFINED`.
+- `PRODUCTION_RECEIPT` and `SHIPMENT` remain valid operational quantity movements. Current calls do not pass an authoritative FG unit cost; FG moving average, shipment valuation, and COGS amount therefore remain `NOT DEFINED`.
+- BR-083 identifies Shipment as a COGS boundary and `SHIPMENT_COGS` is a registered mapping event, but neither defines the amount. No journal is created from mapping presence alone.
+- Iteration 10 Actual Cost remains computed read-only. No persistent Actual Cost document, cost-per-unit denominator, WIP/FG bridge, standard-cost substitution, backfill, or FX inventory rule is invented.
+- Operational cancellation/reversal accounting and late-transaction treatment remain `NOT DEFINED`. Existing GL period and journal reversal controls are unchanged.
+
 ## Operational posting / GL
 
 - BR-101 reuses the existing `journals`, `journal_lines`, `gl_periods`, `account_mappings`, numbering, audit, posting-key idempotency, and reversal architecture. No parallel GL or accounting ledger exists.
@@ -10,7 +23,6 @@
 - Journal lineage is exposed at `GET finance/journals/{journal}/lineage` and includes account lines, GL period, operational source, ITS movement when supported, and reversal/original references.
 - Existing JournalService reversal remains append-only for lines: it creates a reversing journal, links it uniquely to the original, marks the original VOID, and records audit evidence. Closed-period behavior continues to fail through the existing OPEN-period gate.
 - Existing AR/AP/tax/payment/FX automatic posting remains unchanged.
-- Material issue/return, SUBCON_OUT/IN, Subcon Fee direct posting, production receipt, shipment COGS, WIP/FG valuation, actual-cost posting, and cross-currency GR posting remain BLOCKED/NOT DEFINED where amount, period, invoice, valuation, or FX authority is incomplete.
 
 ## Actual Costing / Production Cost
 
@@ -41,4 +53,4 @@
 
 ## Still pending
 
-Operational posting authority beyond base-currency valued GR, actual-cost persistence/lifecycle, WIP/FG valuation, COGS amount authority, cross-currency inventory treatment, country-specific tax filing/e-invoicing, and runtime, accounting, security, concurrency, and UAT verification.
+Defined WIP/FG valuation, authoritative cost-per-unit denominator, COGS amount authority, operational cancellation/reversal accounting, cross-currency inventory treatment, actual-cost persistence/lifecycle, country-specific tax filing/e-invoicing, and runtime, accounting, security, concurrency, and UAT verification.
