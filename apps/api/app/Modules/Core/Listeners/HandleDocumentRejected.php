@@ -9,8 +9,16 @@ class HandleDocumentRejected
 {
     public function handle(DocumentRejected $event): void
     {
-        if ($event->request->doc_type !== 'NCR') return;
-        $approverId = (int) $event->request->steps()->where('decision', 'REJECTED')->latest('id')->value('approver_id');
-        app(NcrService::class)->markRejected($event->request->doc_id, $approverId);
+        $request = $event->request;
+        if ($request->doc_type !== 'NCR') {
+            return;
+        }
+
+        $approverId = (int) $request->stepInstances()
+            ->where('decision', 'REJECTED')
+            ->latest('id')
+            ->value('approver_id');
+
+        app(NcrService::class)->markRejected($request->doc_id, $approverId);
     }
 }

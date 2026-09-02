@@ -36,8 +36,23 @@ class QcInspection extends Model
         ];
     }
 
-    public function lines(): HasMany { return $this->hasMany(QcInspectionLine::class); }
-    public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
-    public function ncr(): HasOne { return $this->hasOne(Ncr::class); }
-    public function sourceReworkOrders(): HasMany { return $this->hasMany(ReworkOrder::class, 'reinspection_id'); }
+    public function lines(): HasMany
+    {
+        return $this->hasMany(QcInspectionLine::class);
+    }
+
+    public function productionOrder(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOrder::class);
+    }
+
+    public function ncr(): HasOne
+    {
+        return $this->hasOne(Ncr::class);
+    }
+
+    public function sourceReworkOrders(): HasMany
+    {
+        return $this->hasMany(ReworkOrder::class, 'reinspection_id');
+    }
 }

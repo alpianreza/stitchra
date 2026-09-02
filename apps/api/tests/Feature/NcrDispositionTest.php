@@ -4,6 +4,7 @@ use Modules\Core\Approval\ApprovalEngine;
 use Modules\Core\Models\ApprovalFlow;
 use Modules\Core\Models\ApprovalFlowStep;
 use Modules\Core\Models\ApprovalRequest;
+use Modules\Core\Models\Company;
 use Modules\Core\Models\Role;
 use Modules\Core\Models\User;
 use Modules\MasterData\Models\DefectLibrary;
@@ -76,6 +77,7 @@ test('total disposition tidak dapat melebihi qty NCR', function () {
 
 test('user company lain tidak dapat mengubah NCR', function () {
     [, , $inspection] = failedFinalQc();
-    $outsider = User::factory()->create(['company_id' => 2]);
+    $company = Company::create(['code' => 'OTHER-'.uniqid(), 'name' => 'Other Company', 'base_currency' => 'IDR']);
+    $outsider = User::factory()->create(['company_id' => $company->id]);
     app(NcrService::class)->addDisposition($inspection->ncr, ['action' => 'REJECT', 'qty' => 1200], $outsider);
 })->throws(RuntimeException::class, 'akses ke company NCR');

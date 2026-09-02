@@ -16,6 +16,7 @@ class CoreServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Shared services — satu instance per request (singleton aman: stateless)
         $this->app->singleton(NumberingService::class);
         $this->app->singleton(AuditService::class);
         $this->app->singleton(ApprovalEngine::class);
@@ -23,8 +24,10 @@ class CoreServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // BR-015: approval APPROVED → aksi domain (SO confirm, BOM approve, dst.)
         Event::listen(DocumentApproved::class, HandleDocumentApproved::class);
         Event::listen(DocumentRejected::class, HandleDocumentRejected::class);
+
         $this->loadRoutesFrom(__DIR__.'/../routes/approvals.php');
     }
 }
