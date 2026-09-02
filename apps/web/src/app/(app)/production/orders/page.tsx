@@ -8,7 +8,6 @@ import {
   FilterBar,
   FilterSelect,
   PageHeader,
-  ProgressBar,
   StatusBadge,
   type DataTableColumn,
 } from "@/components/ui";
@@ -60,12 +59,14 @@ export default function ProductionOrdersPage() {
     { key: "style", header: "Style", cell: (mo) => mo.style?.style_no ?? "—" },
     { key: "line", header: "Line", cell: (mo) => mo.line?.name ?? "—" },
     { key: "planned", header: "Qty Plan", align: "right", className: "tabular-nums", cell: (mo) => formatQuantity(mo.qty_planned) },
-    { key: "produced", header: "Qty Produced", align: "right", className: "tabular-nums", cell: (mo) => formatQuantity(mo.qty_produced) },
     {
-      key: "progress",
-      header: "Progress",
-      cell: (mo) => <ProgressBar value={Number(mo.qty_produced)} max={Number(mo.qty_planned)} label={`Progress ${mo.doc_no}`} />,
+      key: "produced",
+      header: "qty_produced (Legacy)",
+      align: "right",
+      className: "tabular-nums",
+      cell: (mo) => <span title="Legacy compatibility fallback — not authoritative" className="text-amber-700">{formatQuantity(mo.qty_produced)}</span>,
     },
+    { key: "authority", header: "Output Authority", cell: () => <span className="rounded bg-slate-200 px-2 py-1 text-xs text-slate-700">NOT DEFINED</span> },
     { key: "status", header: "Status", cell: (mo) => <StatusBadge status={mo.status} /> },
   ];
 
@@ -74,7 +75,7 @@ export default function ProductionOrdersPage() {
       <PageHeader
         eyebrow="Manufacturing"
         title="Manufacturing Order"
-        description="Pantau rencana, output, progress, line, dan tahap produksi aktif."
+        description="Pantau rencana dan tahap produksi. qty_produced ditampilkan hanya sebagai legacy compatibility fallback, bukan output authority."
       />
 
       <FilterBar summary={page ? `${page.total.toLocaleString("id-ID")} manufacturing order` : undefined}>
@@ -94,28 +95,23 @@ export default function ProductionOrdersPage() {
         onRetry={load}
         emptyTitle="Belum ada manufacturing order"
         emptyDescription={status ? "Tidak ada MO dengan status yang dipilih." : "Manufacturing order akan tampil setelah dibuat dari workflow produksi."}
-        minWidth="980px"
-        mobileCard={(mo) => {
-          const planned = Number(mo.qty_planned);
-          const produced = Number(mo.qty_produced);
-          const percentage = planned > 0 ? Math.min(100, Math.round((produced / planned) * 100)) : 0;
-          return (
-            <Link href={`/production/orders/${mo.id}`} className="block space-y-3 p-4 hover:bg-[var(--color-surface-subtle)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono font-semibold text-[var(--color-primary)]">{mo.doc_no}</p>
-                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{mo.style?.style_no ?? "Tanpa style"} · {mo.line?.name ?? "Belum ada line"}</p>
-                </div>
-                <StatusBadge status={mo.status} />
+        minWidth="1080px"
+        mobileCard={(mo) => (
+          <Link href={`/production/orders/${mo.id}`} className="block space-y-3 p-4 hover:bg-[var(--color-surface-subtle)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono font-semibold text-[var(--color-primary)]">{mo.doc_no}</p>
+                <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{mo.style?.style_no ?? "Tanpa style"} · {mo.line?.name ?? "Belum ada line"}</p>
               </div>
-              <ProgressBar value={produced} max={planned} label={`Progress ${mo.doc_no}`} />
-              <div className="flex items-center justify-between text-xs tabular-nums text-[var(--color-text-muted)]">
-                <span>{formatQuantity(mo.qty_produced)} / {formatQuantity(mo.qty_planned)} pcs</span>
-                <strong className="text-[var(--color-text)]">{percentage}%</strong>
-              </div>
-            </Link>
-          );
-        }}
+              <StatusBadge status={mo.status} />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
+              <div className="rounded bg-slate-50 p-2"><p className="text-slate-500">Qty plan</p><p className="font-semibold">{formatQuantity(mo.qty_planned)}</p></div>
+              <div className="rounded bg-amber-50 p-2"><p className="text-amber-700">qty_produced (legacy)</p><p className="font-semibold text-amber-800">{formatQuantity(mo.qty_produced)}</p></div>
+            </div>
+            <p className="text-xs font-medium text-slate-600">⚪ Production Output Authority — NOT DEFINED</p>
+          </Link>
+        )}
       />
     </div>
   );
