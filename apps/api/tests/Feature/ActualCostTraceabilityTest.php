@@ -9,6 +9,7 @@ use Modules\MasterData\Models\Material;
 use Modules\MasterData\Models\Operation;
 use Modules\MasterData\Models\OverheadRate;
 use Modules\MasterData\Models\Style;
+use Modules\MasterData\Models\Supplier;
 use Modules\MasterData\Models\Uom;
 use Modules\MasterData\Models\Warehouse;
 use Modules\ProductDev\Models\CostSheet;
@@ -17,7 +18,6 @@ use Modules\Production\Models\MaterialIssue;
 use Modules\Production\Models\ProductionOrder;
 use Modules\Subcon\Models\SubconFee;
 use Modules\Subcon\Models\SubconOrder;
-use Modules\MasterData\Models\Supplier;
 
 function actualCostTraceFixture(): array
 {
@@ -68,14 +68,14 @@ function actualCostTraceFixture(): array
 }
 
 test('actual cost reverse traces valued material and BR-091 subcon sources without a parallel ledger', function () {
-    [$user, $period, $mo, $issue, $job] = actualCostTraceFixture();
+    [, $period, $mo, $issue, $job] = actualCostTraceFixture();
     $result = app(ActualCostingService::class)->computeForMo($mo, $period, 1);
 
     expect($result['calculation']['mode'])->toBe('COMPUTED_READ_ONLY')
         ->and($result['calculation']['persisted'])->toBeFalse()
-        ->and($result['components']['material']['issues'][0]->issue_id)->toBe($issue->id)
-        ->and((float) $result['components']['material']['issues'][0]->total_cost)->toBe(100.0)
-        ->and($result['components']['subcon']['fees'][0]->job_work_id)->toBe($job->id)
+        ->and($result['components']['material']['issues'][0]['issue_id'])->toBe($issue->id)
+        ->and((float) $result['components']['material']['issues'][0]['total_cost'])->toBe(100.0)
+        ->and($result['components']['subcon']['fees'][0]['job_work_id'])->toBe($job->id)
         ->and((float) $result['actual']['subcon'])->toBe(2.0)
         ->and($result['actual']['per_pcs'])->toBeNull()
         ->and($result['authorities']['cost_per_unit_denominator'])->toBe('NOT_DEFINED')
