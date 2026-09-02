@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\Production\Models\ProductionOrder;
 use Modules\ShopFloor\Models\ProductionScan;
+use Modules\ShopFloor\Models\WipTransfer;
 
 class Bundle extends Model
 {
@@ -22,4 +23,5 @@ class Bundle extends Model
     public function cutOutput(): BelongsTo { return $this->belongsTo(CutOutput::class); }
     public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
     public function scans(): HasMany { return $this->hasMany(ProductionScan::class); }
+    public function wipTransfers(): HasMany { return $this->hasMany(WipTransfer::class); }
 }
