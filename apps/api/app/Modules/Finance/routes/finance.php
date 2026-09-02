@@ -9,6 +9,7 @@ use Modules\Finance\Http\Controllers\JournalController;
 use Modules\Finance\Http\Controllers\OperationalPostingController;
 use Modules\Finance\Http\Controllers\PeriodCloseController;
 use Modules\Finance\Http\Controllers\TaxController;
+use Modules\Finance\Http\Controllers\ValuationBoundaryController;
 
 Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(function () {
     Route::post('journals', [JournalController::class, 'store'])->middleware('permission:finance.journal.create');
@@ -17,6 +18,9 @@ Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(functio
     Route::get('trial-balance', [JournalController::class, 'trialBalance'])->middleware('permission:finance.report.view');
     Route::get('gl/operational-authority', [OperationalPostingController::class, 'authority'])->middleware('permission:finance.report.view');
     Route::post('gl/operational-postings/goods-receipts/{goodsReceipt}', [OperationalPostingController::class, 'postGoodsReceipt'])->middleware('permission:finance.journal.create');
+    Route::get('gl/valuation-authority', [ValuationBoundaryController::class, 'authority'])->middleware('permission:finance.report.view');
+    Route::get('gl/valuation-boundaries/production-orders/{productionOrder}', [ValuationBoundaryController::class, 'productionOrder'])->middleware('permission:finance.report.view');
+    Route::get('gl/valuation-boundaries/shipments/{shipment}', [ValuationBoundaryController::class, 'shipment'])->middleware('permission:finance.report.view');
 
     Route::post('period-close/prepare', [PeriodCloseController::class, 'prepare'])->middleware('permission:finance.period-closing.execute');
     Route::post('period-close/{periodCloseRun}/approve', [PeriodCloseController::class, 'approve'])->middleware('permission:finance.period-closing.execute');
