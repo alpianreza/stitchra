@@ -5,7 +5,6 @@ use Modules\Core\Models\ApprovalFlow;
 use Modules\Core\Models\Role;
 use Modules\Packing\Models\PackingList;
 use Modules\Packing\Services\PackingService;
-use Modules\Qc\Models\QcInspection;
 use Modules\Qc\Services\QcService;
 
 function d05LegacyPackingList($so, $mo, $user): PackingList
@@ -168,7 +167,7 @@ test('D-05 static contract keeps API UI approval guards and migration free of hi
         ->toContain('chronology QC FINAL PASS dan Carton tidak plausible')
         ->toContain('stock_movements')->toContain('stock_ledger')->toContain('shipments')
         ->toContain('ApprovalEngine')
-        ->not->toContain("if (! $packingList->qc_inspection_id) { $packingList->update");
+        ->not->toContain('if (! $packingList->qc_inspection_id) { $packingList->update');
     expect($routes)->toContain('legacy-source-candidates')->toContain('source-attachments')->toContain('applySourceAttachment');
     expect($ui)->toContain('MISSING_LEGACY_SOURCE · READ-ONLY')->toContain('Ajukan approval')->toContain('Terapkan source yang disetujui');
     expect(strtoupper($migration))->not->toContain('UPDATE PACKING_LISTS')->not->toContain('INSERT INTO PACKING_LISTS');
