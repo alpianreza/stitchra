@@ -3,7 +3,7 @@
 namespace Modules\Finance\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;use Illuminate\Http\Request;use Illuminate\Routing\Controller;use Illuminate\Support\Facades\DB;use Illuminate\Validation\Rule;use Modules\Core\Services\AuditService;use Modules\Core\Support\CurrentCompany;use Modules\Finance\Models\AccountMapping;use Modules\Finance\Models\Journal;use Modules\Finance\Services\JournalService;use RuntimeException;
-class JournalController
+class JournalController extends Controller
 {
  public function __construct(private JournalService$service,private AuditService$audit){}
  public function store(Request$request):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'journal_date'=>'nullable|date_format:Y-m-d','description'=>'nullable|string|max:1000','lines'=>'required|array|min:2','lines.*.coa_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'lines.*.debit'=>'nullable|numeric|min:0','lines.*.credit'=>'nullable|numeric|min:0','lines.*.memo'=>'nullable|string|max:1000']);return$this->domain(fn()=>response()->json($this->service->post($company,$data,$data['lines'],$request->user()),201));}
