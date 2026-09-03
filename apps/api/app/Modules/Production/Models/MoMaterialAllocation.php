@@ -5,12 +5,13 @@ namespace Modules\Production\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\MasterData\Models\Material;
+use Modules\MasterData\Models\Uom;
 
 class MoMaterialAllocation extends Model
 {
     protected $fillable = [
-        'production_order_id', 'material_id', 'qty_required', 'qty_reserved',
-        'qty_issued', 'qty_consumed', 'actual_consumption_per_pcs', 'is_backflush',
+        'production_order_id', 'material_id', 'uom_id', 'qty_required', 'qty_reserved',
+        'qty_issued', 'qty_consumed', 'actual_consumption_per_pcs', 'is_backflush', 'backflush_stage',
     ];
 
     protected function casts(): array
@@ -24,4 +25,5 @@ class MoMaterialAllocation extends Model
 
     public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
     public function material(): BelongsTo { return $this->belongsTo(Material::class); }
+    public function uom(): BelongsTo { return $this->belongsTo(Uom::class); }
 }
