@@ -22,6 +22,9 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::get('packing/eligible-inputs', [PackingListController::class, 'eligible'])->middleware('permission:packing.packinglist.view');
     Route::get('packing/lists', [PackingListController::class, 'index'])->middleware('permission:packing.packinglist.view');
     Route::post('packing/lists/from-so/{salesOrder}', [PackingListController::class, 'store'])->middleware('permission:packing.packinglist.create');
+    Route::get('packing/lists/{packingList}/legacy-source-candidates', [PackingListController::class, 'legacySourceCandidates'])->middleware('permission:packing.packinglist.view');
+    Route::post('packing/lists/{packingList}/source-attachments', [PackingListController::class, 'requestSourceAttachment'])->middleware('permission:packing.packinglist.update');
+    Route::post('packing/source-attachments/{packingSourceAttachment}/apply', [PackingListController::class, 'applySourceAttachment'])->middleware('permission:packing.packinglist.update');
     Route::post('packing/lists/{packingList}/cartons', [PackingListController::class, 'addCarton'])->middleware('permission:packing.carton.create');
     Route::post('packing/lists/{packingList}/finalize', [PackingListController::class, 'finalize'])->middleware('permission:packing.packinglist.submit');
     Route::get('packing/lists/{packingList}/lineage', [PackingListController::class, 'lineage'])->middleware('permission:packing.packinglist.view');
