@@ -4,7 +4,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 
 return new class extends Migration
 {
@@ -93,7 +92,7 @@ return new class extends Migration
         );
 
         if (! $engine || strtoupper((string) $engine->ENGINE) !== 'INNODB') {
-            throw new RuntimeException('D-08 reconcile: '.self::TABLE.' must be InnoDB; stopping for manual inspection.');
+            throw new \RuntimeException('D-08 reconcile: '.self::TABLE.' must be InnoDB; stopping for manual inspection.');
         }
 
         $this->verifyColumns($database);
@@ -160,7 +159,7 @@ return new class extends Migration
         $extra = array_diff(array_keys($actual), array_keys($expected));
 
         if ($missing !== [] || $extra !== []) {
-            throw new RuntimeException(sprintf(
+            throw new \RuntimeException(sprintf(
                 'D-08 reconcile: incompatible column set on %s — missing: [%s], unexpected: [%s]. Stopping for manual inspection; no changes were made.',
                 self::TABLE,
                 implode(', ', $missing),
@@ -194,7 +193,7 @@ return new class extends Migration
         }
 
         if ($diffs !== []) {
-            throw new RuntimeException('D-08 reconcile: incompatible column definitions on '.self::TABLE.' — '.implode('; ', $diffs).'. Stopping for manual inspection; no changes were made.');
+            throw new \RuntimeException('D-08 reconcile: incompatible column definitions on '.self::TABLE.' — '.implode('; ', $diffs).'. Stopping for manual inspection; no changes were made.');
         }
     }
 
@@ -236,7 +235,7 @@ return new class extends Migration
         }
 
         if (! isset($actual['PRIMARY'])) {
-            throw new RuntimeException('D-08 reconcile: '.self::TABLE.' has no PRIMARY KEY; stopping for manual inspection.');
+            throw new \RuntimeException('D-08 reconcile: '.self::TABLE.' has no PRIMARY KEY; stopping for manual inspection.');
         }
 
         $missing = [];
@@ -248,7 +247,7 @@ return new class extends Migration
             }
 
             if ($actual[$name]['columns'] !== $definition['columns'] || $actual[$name]['unique'] !== $definition['unique']) {
-                throw new RuntimeException(sprintf(
+                throw new \RuntimeException(sprintf(
                     'D-08 reconcile: key [%s] on %s exists with a different definition (columns: %s). Stopping for manual inspection.',
                     $name,
                     self::TABLE,
@@ -352,7 +351,7 @@ return new class extends Migration
             || $actual->referenced_table !== $referencedTable
             || $deleteRule !== 'RESTRICT'
             || ! in_array($updateRule, ['RESTRICT', 'NO ACTION'], true)) {
-            throw new RuntimeException(sprintf(
+            throw new \RuntimeException(sprintf(
                 'D-08 reconcile: FK [%s] on %s mismatch (column %s → %s, ON DELETE %s, ON UPDATE %s; expected %s → %s ON DELETE RESTRICT). Stopping for manual inspection.',
                 $name,
                 self::TABLE,
