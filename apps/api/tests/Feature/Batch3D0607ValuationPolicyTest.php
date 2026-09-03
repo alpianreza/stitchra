@@ -37,9 +37,11 @@ it('does not add inventory movement types or D-08 D-10 posting behavior', functi
 
 it('uses deterministic identities and explicit fail-closed boundaries', function () {
     $service=file_get_contents(app_path('Modules/Finance/Services/ManufacturingValuationService.php'));
-    expect($service)->toContain('uq_wip_val_source_stage_component')
-        ->or(fn($expectation)=>$expectation->toContain('source_type'));
-    expect($service)->toContain('FAIL_CLOSED')
+    expect($service)->toContain("where('source_type',$sourceType)")
+        ->toContain("where('source_id',$sourceId)")
+        ->toContain("where('valuation_stage',$stage)")
+        ->toContain("where('component',$component)")
+        ->toContain('FAIL_CLOSED')
         ->toContain('CONFLICT: WIP valuation identity')
         ->toContain('CONFLICT: FG valuation identity')
         ->toContain('CONFLICT: variance identity');
