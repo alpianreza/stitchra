@@ -47,6 +47,14 @@ it('uses deterministic identities and explicit fail-closed boundaries', function
         ->toContain('CONFLICT: variance identity');
 });
 
+it('serializes FG valuation and freeze workflows around the MO', function () {
+    $workflow=file_get_contents(app_path('Modules/Finance/Services/ManufacturingValuationWorkflow.php'));
+    expect($workflow)->toContain('lockForUpdate()')
+        ->toContain('VALUED_REPLAY')
+        ->toContain('all authoritative FG receipts must be valued')
+        ->toContain('pending actual-cost freeze has different source evidence');
+});
+
 it('keeps valuation tables separate from inventory balances', function () {
     $migration=file_get_contents(database_path('migrations/2026_09_03_000030_add_d06_d07_manufacturing_valuation.php'));
     expect($migration)->not->toContain("Schema::table('stock_ledger'")

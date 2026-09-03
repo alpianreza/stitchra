@@ -10,6 +10,7 @@ use Modules\Finance\Models\ActualCostFreeze;
 use Modules\Finance\Models\MoValuationEligibility;
 use Modules\Finance\Models\ValuationAllocationProfile;
 use Modules\Finance\Services\ManufacturingValuationService;
+use Modules\Finance\Services\ManufacturingValuationWorkflow;
 use Modules\Production\Models\ProductionOrder;
 use RuntimeException;
 
@@ -34,12 +35,12 @@ class ManufacturingValuationController extends Controller
     { return $this->domain(fn()=>response()->json($service->activateEligibility($eligibility,$request->user()))); }
     public function valueWip(Request $request, ProductionOrder $productionOrder, int $transfer, ManufacturingValuationService $service): JsonResponse
     { return $this->domain(fn()=>response()->json($service->valueWipTransfer($productionOrder,$transfer,$request->user()))); }
-    public function valueFg(Request $request, ProductionOrder $productionOrder, int $movement, ManufacturingValuationService $service): JsonResponse
-    { return $this->domain(fn()=>response()->json($service->valueFgReceipt($productionOrder,$movement,$request->user()))); }
-    public function createFreeze(Request $request, ProductionOrder $productionOrder, ManufacturingValuationService $service): JsonResponse
+    public function valueFg(Request $request, ProductionOrder $productionOrder, int $movement, ManufacturingValuationWorkflow $workflow): JsonResponse
+    { return $this->domain(fn()=>response()->json($workflow->valueFgReceipt($productionOrder,$movement,$request->user()))); }
+    public function createFreeze(Request $request, ProductionOrder $productionOrder, ManufacturingValuationWorkflow $workflow): JsonResponse
     {
         $data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'other_amount'=>'nullable|numeric','other_source'=>'nullable|string|max:500']);
-        return $this->domain(fn()=>response()->json($service->createFreeze($productionOrder,$data['period'],$data['other_amount']??null,$data['other_source']??null,$request->user()),201));
+        return $this->domain(fn()=>response()->json($workflow->createFreeze($productionOrder,$data['period'],$data['other_amount']??null,$data['other_source']??null,$request->user()),201));
     }
     public function applyFreeze(Request $request, ActualCostFreeze $freeze, ManufacturingValuationService $service): JsonResponse
     { return $this->domain(fn()=>response()->json($service->applyFreeze($freeze,$request->user()))); }
