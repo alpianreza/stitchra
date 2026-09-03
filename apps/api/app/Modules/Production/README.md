@@ -36,6 +36,22 @@ MO menyimpan snapshot BOM/routing dan release menghasilkan hard reservation.
 - Production Order detail menampilkan lightweight Operational Integrity / Authority panel: authority conflict matrix, Marker/Lay evidence, legacy `qty_produced`, Backflush boundary, ITS/GL state, and truthful forward/reverse lineage.
 - Migration: **NONE**. No historical backfill, destructive migration, parallel ledger, quantity writer, valuation, atau accounting ledger.
 
+## Cross-module integrity / hardening (Iteration 16)
+
+- Request tenant context sekarang menolak company inactive/soft-deleted sebelum company scope dipasang; existing `auth:sanctum`, `company`, permission middleware, company scopes, policies, dan service lifecycle checks tetap dipakai tanpa authorization framework baru.
+- ITS tetap satu-satunya inventory movement authority. `post()`, quality release, dan adjustment menolak company inactive; posting baru juga menolak warehouse inactive.
+- Deterministic ITS source key tetap `company_id × movement_type × source_document_type × source_document_id`. Identical replay mengembalikan movement existing; replay dengan line payload berbeda ditolak eksplisit sebagai `ITS_IDEMPOTENCY_CONFLICT` tanpa movement, ledger, atau balance tambahan.
+- Existing stock balance key lock, row lock, transaction rollback, non-negative stock, quality hold, reservation, transfer, Material Issue/Return, Subcon, Packing receipt, dan Shipment controls tetap dipertahankan.
+- Manual Journal posting dan GL period close sekarang menolak company inactive. Existing append-only journal/reversal, period lock, COA company validation, dan reversal idempotency tetap dipertahankan.
+- Deterministic GL `posting_key` tetap authority existing. Identical retry tetap mengembalikan journal existing; retry source/event yang sama dengan amount, period, atau explicit journal date berbeda ditolak sebagai `GL_IDEMPOTENCY_CONFLICT` sehingga tidak ada silent period/date substitution.
+- GR base-currency chain tetap `GR POSTED → ITS PURCHASE_RECEIPT → GR_RECEIPT → Journal`; tidak dibuat journal writer atau accounting framework baru.
+- Iteration 15 Marker/Lay mixed-path blocking, shared Roll/dispatch locks, historical readability, dan no-backfill policy tidak diubah. Authority tetap `DECISION REQUIRED`.
+- `qty_produced` tetap `LEGACY COMPATIBILITY FALLBACK — NOT AUTHORITATIVE`; tidak dibuat writer baru dan Backflush convergence tetap `BLOCKED — PRODUCTION_OUTPUT_AUTHORITY NOT DEFINED`.
+- Actual Cost tetap `COMPUTED_READ_ONLY`. `WIP_VALUATION`, `FG_VALUATION`, `SHIPMENT_VALUATION`, `COGS`, dan `COST_PER_UNIT` tetap `NOT DEFINED`.
+- Defined operational lineage tetap: `MO → Material Issue → ITS`, `QC FINAL PASS → Packing → PRODUCTION_RECEIPT → FG`, `Packing → Shipment → ITS SHIPMENT`, serta reverse lineage ke source existing. Legacy rows tidak direlasikan secara asumtif dan tidak di-backfill.
+- API surface dan UI authority panels tidak berubah; legacy endpoints dipertahankan.
+- Migration: **NONE**. Tidak ada destructive migration, historical rewrite/backfill, movement type baru, parallel ledger, atau valuation/accounting behavior baru.
+
 ## Material issue dan BR-042
 
 - Fabric issue wajib menunjuk reservation dan roll yang sama dalam UOM pemakaian material.
@@ -49,6 +65,6 @@ MO menyimpan snapshot BOM/routing dan release menghasilkan hard reservation.
 
 ## Verification
 
-Feature tests Iteration 15 disiapkan untuk Marker-after-Lay/Lay-after-Marker blocking, no mutation on blocked attempt, historical mixed visibility, completion block, `qty_produced`/Backflush classification, ITS/GL convergence, read-only behavior, lineage, dan company isolation. Existing Production/Cutting/Shopfloor/Packing/Shipment/Finance tests tetap dipertahankan.
+Feature tests Iteration 16 disiapkan untuk active-company/warehouse blocking, ITS identical/divergent replay, no duplicate movement/ledger/balance mutation, inactive-company Journal blocking, dan GL identical/divergent retry. Existing tenant, permission, lifecycle, quantity, Marker/Lay, `qty_produced`, QC/Packing, FG/Shipment, GR posting, period, reversal, Actual Cost, valuation boundary, dan lineage suites tetap menjadi regression coverage.
 
-Runtime tetap **DEFERRED — FINAL VERIFICATION PHASE**; jangan klaim PASS sebelum fase verifikasi final.
+Tests: **PREPARED**. Runtime tetap **DEFERRED — FINAL VERIFICATION PHASE**; jangan klaim PASS sebelum fase verifikasi final.
