@@ -1,0 +1,9 @@
+<?php
+
+use Modules\Core\Models\User;use Modules\MasterData\Models\Material;use Modules\MasterData\Models\Style;use Modules\MasterData\Models\Uom;use Modules\ProductDev\Services\BomService;
+
+test('BR-066 requires one Named Stage for BACKFLUSH',function(){$user=User::factory()->create(['company_id'=>1]);$uom=Uom::create(['company_id'=>1,'code'=>'PCS'.substr(uniqid(),-3),'name'=>'Pcs']);$material=Material::create(['company_id'=>1,'code'=>'TRM-'.uniqid(),'name'=>'Trim','type'=>'TRIM','tracking_level'=>'LOT','use_uom_id'=>$uom->id]);$style=Style::create(['company_id'=>1,'style_no'=>'BR66-'.uniqid(),'category'=>'WOVEN']);expect(fn()=>app(BomService::class)->createVersion($style->id,[['material_id'=>$material->id,'qty_per_pcs'=>1,'uom_id'=>$uom->id,'is_backflush'=>true]],$user))->toThrow(RuntimeException::class,'Named Stage');});
+
+test('BR-066 prohibits fabric backflush',function(){$user=User::factory()->create(['company_id'=>1]);$uom=Uom::create(['company_id'=>1,'code'=>'MTR'.substr(uniqid(),-3),'name'=>'Meter']);$material=Material::create(['company_id'=>1,'code'=>'FAB-'.uniqid(),'name'=>'Fabric','type'=>'FABRIC','tracking_level'=>'ROLL','use_uom_id'=>$uom->id]);$style=Style::create(['company_id'=>1,'style_no'=>'BR66F-'.uniqid(),'category'=>'WOVEN']);expect(fn()=>app(BomService::class)->createVersion($style->id,[['material_id'=>$material->id,'qty_per_pcs'=>1,'uom_id'=>$uom->id,'is_backflush'=>true,'backflush_stage'=>'CUT_OUTPUT']],$user))->toThrow(RuntimeException::class,'fabric');});
+
+test('BR-066 stores one Named Stage on released MO material allocation',function(){[,,$trim,,,,$mo]=shopFixture();$allocation=$mo->materialAllocations()->where('material_id',$trim->id)->firstOrFail();expect($allocation->is_backflush)->toBeTrue()->and($allocation->backflush_stage)->toBe('CUT_OUTPUT')->and($allocation->uom_id)->not->toBeNull();});
