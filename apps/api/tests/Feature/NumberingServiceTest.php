@@ -31,7 +31,7 @@ test('counter berurutan dan tidak pernah reuse', function () {
     $b = $svc->next(1, 'TEST');
     $c = $svc->next(1, 'TEST');
 
-    expect([$a, $b, $c])->toBeUnique();
+    expect(count(array_unique([$a, $b, $c])))->toBe(3);
     expect($b)->toBeGreaterThan($a);
     expect($c)->toBeGreaterThan($b);
 });

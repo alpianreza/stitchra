@@ -6,6 +6,9 @@ use Modules\Finance\Models\Journal;
 use Modules\Finance\Services\JournalService;
 use Modules\MasterData\Models\ChartOfAccount;
 
+function curPeriod():string{return now()->format('Y-m');}
+function prevPeriod():string{return now()->subMonthNoOverflow()->format('Y-m');}
+
 function coa(string $code, string $type, string $normal): ChartOfAccount
 {
     return ChartOfAccount::create([
@@ -18,7 +21,7 @@ test('BR-101: jurnal tidak balance DITOLAK', function () {
     $kas = coa('1101', 'ASSET', 'DEBIT');
     $pendapatan = coa('4101', 'REVENUE', 'CREDIT');
 
-    app(JournalService::class)->post(1, ['period' => '2026-08'], [
+    app(JournalService::class)->post(1, ['period' => curPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 1000],
         ['coa_id' => $pendapatan->id, 'credit' => 900],   // tidak balance
     ], $user);
@@ -30,7 +33,7 @@ test('baris jurnal wajib debit XOR credit', function () {
     $pendapatan = coa('4101', 'REVENUE', 'CREDIT');
 
     // Dua sisi terisi sekaligus → tolak
-    app(JournalService::class)->post(1, ['period' => '2026-08'], [
+    app(JournalService::class)->post(1, ['period' => curPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 100, 'credit' => 100],
         ['coa_id' => $pendapatan->id, 'credit' => 100],
     ], $user);
@@ -54,7 +57,7 @@ test('jurnal valid terposting balanced dengan nomor JE (BR-010/101)', function (
     expect($journal->lines)->toHaveCount(2);
 
     // Periode auto-create OPEN
-    expect(GlPeriod::withoutGlobalScopes()->where('period', '2026-08')->first()->status)->toBe('OPEN');
+    expect(GlPeriod::withoutGlobalScopes()->where('period', curPeriod())->first()->status)->toBe('OPEN');
 });
 
 test('BR-103: periode CLOSED menolak posting', function () {
@@ -63,14 +66,14 @@ test('BR-103: periode CLOSED menolak posting', function () {
     $pendapatan = coa('4101', 'REVENUE', 'CREDIT');
 
     $svc = app(JournalService::class);
-    $svc->post(1, ['period' => '2026-07'], [
+    $svc->post(1, ['period' => prevPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 100],
         ['coa_id' => $pendapatan->id, 'credit' => 100],
     ], $user);
 
-    $svc->closePeriod(1, '2026-07', $user);
+    $svc->closePeriod(1, prevPeriod(), $user);
 
-    $svc->post(1, ['period' => '2026-07'], [
+    $svc->post(1, ['period' => prevPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 50],
         ['coa_id' => $pendapatan->id, 'credit' => 50],
     ], $user);
@@ -82,7 +85,7 @@ test('koreksi via reversal: jurnal balik terbalik sisi, asli VOID (BR-016 append
     $pendapatan = coa('4101', 'REVENUE', 'CREDIT');
 
     $svc = app(JournalService::class);
-    $journal = $svc->post(1, ['period' => '2026-08'], [
+    $journal = $svc->post(1, ['period' => curPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 200],
         ['coa_id' => $pendapatan->id, 'credit' => 200],
     ], $user);
@@ -102,17 +105,17 @@ test('trial balance: agregasi per akun dari jurnal POSTED saja', function () {
     $pendapatan = coa('4101', 'REVENUE', 'CREDIT');
 
     $svc = app(JournalService::class);
-    $j1 = $svc->post(1, ['period' => '2026-08'], [
+    $j1 = $svc->post(1, ['period' => curPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 500],
         ['coa_id' => $pendapatan->id, 'credit' => 500],
     ], $user);
-    $svc->post(1, ['period' => '2026-08'], [
+    $svc->post(1, ['period' => curPeriod()], [
         ['coa_id' => $kas->id, 'debit' => 300],
         ['coa_id' => $pendapatan->id, 'credit' => 300],
     ], $user);
     $svc->reverse($j1, $user);   // j1 VOID → tidak dihitung; reversal ikut menetralkan
 
-    $tb = collect($svc->trialBalance(1, '2026-08'))->keyBy('code');
+    $tb = collect($svc->trialBalance(1, curPeriod()))->keyBy('code');
 
     // Kas: 500 (j1) + 300 (j2) − 500 (reversal) = 300 debit; Pendapatan: 800 kredit − 500 = 300
     expect((float) $tb['1101']->total_debit - (float) $tb['1101']->total_credit)->toBe(300.0);

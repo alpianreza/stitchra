@@ -15,7 +15,8 @@ return new class extends Migration
             $table->foreignId('shipment_line_id')->constrained('shipment_lines')->restrictOnDelete();
             $table->foreignId('packing_list_id')->constrained('packing_lists')->restrictOnDelete();
             $table->foreignId('production_order_id')->constrained('production_orders')->restrictOnDelete();
-            $table->foreignId('production_receipt_movement_id')->constrained('stock_movements')->restrictOnDelete();
+            $table->foreignId('production_receipt_movement_id');
+            $table->foreign('production_receipt_movement_id', 'd08_siv_prod_receipt_fk')->references('id')->on('stock_movements')->restrictOnDelete();
             $table->foreignId('shipment_movement_id')->constrained('stock_movements')->restrictOnDelete();
             $table->foreignId('shipment_ledger_id')->constrained('stock_ledger')->restrictOnDelete();
             $table->foreignId('stock_balance_id')->constrained('stock_balances')->restrictOnDelete();

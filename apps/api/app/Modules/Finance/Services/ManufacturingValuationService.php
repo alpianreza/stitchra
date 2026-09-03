@@ -193,7 +193,7 @@ class ManufacturingValuationService
                 $this->insertWipEvent($locked,$eligibility,'stock_movements',(int)$movement->id,'FINISHING_TO_FG','FINISHING','FG_RECEIVED_QTY','RELIEF',$component,-$qty,-$unit,-$delta,$movement->created_at,$user);
                 $events[]=(array)DB::table('fg_valuation_events')->where('company_id',$locked->company_id)->where('stock_movement_id',$movement->id)->where('component',$component)->first();
             }
-            $this->audit->record('create','fg_valuation_events',documentId:(int)$movement->id,after:['mo_id'=>$locked->id,'receipt_qty'=>$qty,'components'=>self::COMPONENTS]);
+            $this->audit->record('create','fg_valuation_events',documentId:(int)$movement->id,companyId:(int)$locked->company_id,after:['mo_id'=>$locked->id,'receipt_qty'=>$qty,'components'=>self::COMPONENTS]);
             return ['status'=>'VALUED','events'=>$events];
         });
     }

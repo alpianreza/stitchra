@@ -37,7 +37,7 @@ it('rejects carton creation when QC FINAL is pending', function () {
 });
 
 it('rejects cumulative carton quantity above the QC FINAL PASS lot', function () {
-    [$user, , $style, $so, $mo, $colorway, $size] = packFixture(qty: 120);
+    [$user, , $style, $so, $mo, $colorway, $size] = packFixture(soQty: 120);
     $qc = app(QcService::class);
     $qc->finalize($qc->create($mo, 'FINAL', 100, $user), $user);
     $packing = app(PackingService::class);

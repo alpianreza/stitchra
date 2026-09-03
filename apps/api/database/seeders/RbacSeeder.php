@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Modules\Core\Models\Company;
 use Modules\Core\Models\Permission;
 use Modules\Core\Models\Role;
 
@@ -20,9 +21,11 @@ class RbacSeeder extends Seeder
             Permission::firstOrCreate(['code' => $code]);
         }
 
+        $companyId = (int) (Company::withoutGlobalScopes()->where('code', 'DEFAULT')->value('id') ?? 1);
+
         foreach ($this->roleMap() as $code => $perms) {
             $role = Role::withoutGlobalScopes()->firstOrCreate(
-                ['company_id' => 1, 'code' => $code],
+                ['company_id' => $companyId, 'code' => $code],
                 ['name' => ucwords(str_replace(['_', '-'], ' ', $code))],
             );
 

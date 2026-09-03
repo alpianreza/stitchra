@@ -43,7 +43,7 @@ function glMappings(): array
 test('BR-101: jurnal AUTO gagal jelas bila mapping belum ada (tidak mengarang akun)', function () {
     $user = User::factory()->create(['company_id' => 1]);
 
-    app(GlPostingService::class)->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 1, 1000, '2026-08', $user);
+    app(GlPostingService::class)->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 1, 1000, now()->format('Y-m'), $user);
 })->throws(RuntimeException::class);
 
 test('jurnal AUTO deterministik + idempotent (event+dokumen sama tidak ganda)', function () {
@@ -52,13 +52,13 @@ test('jurnal AUTO deterministik + idempotent (event+dokumen sama tidak ganda)', 
 
     $gl = app(GlPostingService::class);
 
-    $first = $gl->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 42, 2500000, '2026-08', $user, 'GR test');
+    $first = $gl->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 42, 2500000, now()->format('Y-m'), $user, 'GR test');
     expect($first['created'])->toBeTrue();
     expect($first['journal']->source)->toBe('AUTO');
     expect((float) $first['journal']->total_debit)->toBe(2500000.0);
 
     // Panggil lagi — tidak membuat jurnal baru
-    $second = $gl->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 42, 2500000, '2026-08', $user);
+    $second = $gl->postEvent(1, 'GR_RECEIPT', 'goods_receipts', 42, 2500000, now()->format('Y-m'), $user);
     expect($second['created'])->toBeFalse();
     expect($second['journal']->id)->toBe($first['journal']->id);
     expect(Journal::withoutGlobalScopes()->count())->toBe(1);

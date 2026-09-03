@@ -13,6 +13,8 @@
         "spatie/browsershot": "^5.0"
     },
     "require-dev": {
+        "mockery/mockery": "^1.6",
+        "fakerphp/faker": "^1.23",
         "laravel/pint": "^1.0",
         "laravel/telescope": "^5.0",
         "pestphp/pest": "^4.0",
@@ -25,7 +27,8 @@
             "Modules\\": "app/Modules/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "files": ["bootstrap/helpers.php"]
     },
     "autoload-dev": {
         "psr-4": {

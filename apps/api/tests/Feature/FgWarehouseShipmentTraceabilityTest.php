@@ -8,16 +8,6 @@ use Modules\Packing\Services\PackingService;
 use Modules\Qc\Services\QcService;
 use Modules\Shipping\Services\ShipmentService;
 
-function approvedFgFixture(): array
-{
-    [$user, $buyer, $style, $so, $mo, $colorway, $size, $fg] = packFixture();
-    $qc = app(QcService::class);
-    $qc->finalize($qc->create($mo, 'FINAL', 100, $user), $user);
-    $packing = app(PackingService::class);
-    $pl = $packing->create($so, $mo->id, $user);
-    $packing->addCarton($pl, [], [['style_id' => $style->id, 'colorway_id' => $colorway->id, 'size_id' => $size->id, 'qty' => 100]], $user);
-    return [$user, $buyer, $style, $so, $mo, $colorway, $size, $fg, $packing->finalize($pl->fresh(), $fg->id, $user)];
-}
 
 it('mengekspos eligible FG dengan source Packing List dan PRODUCTION_RECEIPT', function () {
     [$user, , , , , , , $fg, $pl] = approvedFgFixture();

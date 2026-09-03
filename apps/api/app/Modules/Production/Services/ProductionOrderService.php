@@ -36,7 +36,7 @@ class ProductionOrderService
                 $mos[] = $this->costSnapshots->attachIfAvailable($mo);
             }
             if ($mos === []) throw new RuntimeException('Semua style di SO ini sudah punya MO.');
-            $this->audit->record('create', 'production_orders', after: ['sales_order' => $lockedSo->doc_no, 'mo_count' => count($mos)]);
+            $this->audit->record('create', 'production_orders', documentId: (int) ($mos[0]->id ?? 0), companyId: (int) $lockedSo->company_id, after: ['sales_order' => $lockedSo->doc_no, 'mo_count' => count($mos)]);
             return $mos;
         });
     }

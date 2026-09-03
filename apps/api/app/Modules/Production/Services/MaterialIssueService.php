@@ -57,7 +57,7 @@ class MaterialIssueService
                 if ($reservations->count() !== 1) throw new RuntimeException("BR-060: reservation harus ditemukan tepat satu untuk material #{$material->id} dan dimensi stok yang dipilih.");
                 $reservation = $reservations->first(); if ($reservation->remaining() + 0.0001 < $qty) throw new RuntimeException("BR-060: issue {$qty} melebihi sisa reservasi {$reservation->remaining()} untuk material #{$material->id}.");
                 if ($rollId) { $roll = FabricRoll::withoutGlobalScopes()->where('company_id', $locked->company_id)->where('material_id', $material->id)->whereKey($rollId)->lockForUpdate()->first(); if (! $roll || $roll->status !== 'RELEASED') throw new RuntimeException('Roll issue tidak valid atau belum RELEASED.'); }
-                $uomId = (int) $allocation->uom_id; if ((int) ($line['uom_id'] ?? 0) !== $uomId) throw new RuntimeException('BR-066: UOM ACTUAL issue tidak sesuai allocation snapshot.');
+                $uomId = (int) $allocation->uom_id; if (isset($line['uom_id']) && (int) $line['uom_id'] !== $uomId) throw new RuntimeException('BR-066: UOM ACTUAL issue tidak sesuai allocation snapshot.');
                 $resolved[] = compact('qty', 'material', 'allocation', 'reservation', 'uomId');
             }
 

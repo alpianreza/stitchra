@@ -28,10 +28,11 @@ class AuditService
         ?array $before = null,
         ?array $after = null,
         ?int $lineId = null,
+        ?int $companyId = null,
         ?Request $request = null,
     ): AuditLog {
         $log = new AuditLog([
-            'company_id' => CurrentCompany::id() ?? ($document instanceof Model ? $document->company_id : null),
+            'company_id' => CurrentCompany::id() ?? ($document instanceof Model ? $document->company_id : null) ?? $companyId,
             'user_id' => auth()->id(),
             'action' => $action,
             'document_type' => $document instanceof Model ? $document->getTable() : $document,

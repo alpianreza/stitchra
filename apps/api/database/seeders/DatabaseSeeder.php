@@ -13,9 +13,11 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Company default (single-company dulu; multi siap via schema)
+        // Deterministic id=1: fixture/seeder tests assume company id 1, and MySQL
+        // auto-increment does not roll back between RefreshDatabase transactions.
         $company = Company::firstOrCreate(
-            ['code' => 'DEFAULT'],
-            ['name' => 'Default Company', 'base_currency' => 'IDR']
+            ['id' => 1],
+            ['code' => 'DEFAULT', 'name' => 'Default Company', 'base_currency' => 'IDR']
         );
 
         // RBAC: permissions + 16 role (dari Roles & Permissions blueprint)

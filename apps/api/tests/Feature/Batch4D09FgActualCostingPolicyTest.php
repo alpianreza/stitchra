@@ -14,7 +14,7 @@ it('uses only company ITS production receipts as the final denominator',function
     $source=file_get_contents(app_path('Modules/Finance/Services/FgActualCostingService.php'));
     expect($source)->toContain("where('l.movement_type','PRODUCTION_RECEIPT')")
         ->toContain("where('l.ownership','COMPANY')")
-        ->toContain("where('p.production_order_id',$mo->id)")
+        ->toContain('where(\'p.production_order_id\',$mo->id)')
         ->not->toContain('qty_produced')->not->toContain('PACKED_QTY')->not->toContain('SHIPPED_QTY');
 });
 
