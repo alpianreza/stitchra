@@ -8,7 +8,9 @@ use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 use Modules\Core\Support\CurrentCompany;
 use Modules\Packing\Models\PackingList;
+use Modules\Packing\Models\PackingSourceAttachment;
 use Modules\Packing\Services\PackingService;
+use Modules\Qc\Models\QcInspection;
 use Modules\Sales\Models\SalesOrder;
 use RuntimeException;
 
@@ -36,6 +38,32 @@ class PackingListController extends Controller
         return $this->domain(fn () => response()->json($this->service->create($salesOrder, (int) $data['production_order_id'], $request->user()), 201));
     }
 
+    public function legacySourceCandidates(Request $request, PackingList $packingList): JsonResponse
+    {
+        return $this->domain(fn () => response()->json(['data' => $this->service->legacySourceCandidates($packingList, $request->user())]));
+    }
+
+    public function requestSourceAttachment(Request $request, PackingList $packingList): JsonResponse
+    {
+        $company = CurrentCompany::id();
+        $data = $request->validate([
+            'qc_inspection_id' => ['required', 'integer', Rule::exists('qc_inspections', 'id')->where('company_id', $company)],
+            'reason' => 'required|string|max:1000',
+        ]);
+        $source = QcInspection::withoutGlobalScopes()->where('company_id', $company)->findOrFail($data['qc_inspection_id']);
+        return $this->domain(fn () => response()->json(
+            $this->service->requestLegacySourceAttachment($packingList, $source, $data['reason'], $request->user()),
+            201,
+        ));
+    }
+
+    public function applySourceAttachment(Request $request, PackingSourceAttachment $packingSourceAttachment): JsonResponse
+    {
+        return $this->domain(fn () => response()->json(
+            $this->service->applyLegacySourceAttachment($packingSourceAttachment, $request->user()),
+        ));
+    }
+
     public function addCarton(Request $request, PackingList $packingList): JsonResponse
     {
         $company = CurrentCompany::id();
@@ -59,7 +87,10 @@ class PackingListController extends Controller
 
     public function show(Request $request, PackingList $packingList): JsonResponse
     {
-        return response()->json($packingList->load('cartons.lines', 'salesOrder.customer', 'productionOrder', 'qcInspection', 'shipment'));
+        return response()->json($packingList->load(
+            'cartons.lines', 'salesOrder.customer', 'productionOrder', 'qcInspection',
+            'sourceAttachments.qcInspection', 'sourceAttachments.approvalRequest', 'shipment',
+        ));
     }
 
     public function lineage(Request $request, PackingList $packingList): JsonResponse
