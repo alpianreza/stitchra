@@ -23,7 +23,7 @@ export default function ValuationBoundaryPanel() {
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [moId, setMoId] = useState("");
   const [shipmentId, setShipmentId] = useState("");
-  const [trace, setTrace] = useState<unknown>(null);
+  const [trace, setTrace] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export default function ValuationBoundaryPanel() {
 
   async function load(path: string) {
     setError(null); setTrace(null);
-    try { setTrace(await api.get(path)); }
+    try { setTrace(await api.get<Record<string, unknown>>(path)); }
     catch (e: any) { setError(e.message); }
   }
 
