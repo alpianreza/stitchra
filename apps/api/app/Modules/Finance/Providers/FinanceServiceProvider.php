@@ -10,5 +10,6 @@ class FinanceServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/../routes/finance.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/cogs.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/corrections.php');
     }
 }

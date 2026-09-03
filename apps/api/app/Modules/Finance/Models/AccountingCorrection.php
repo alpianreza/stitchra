@@ -1,0 +1,10 @@
+<?php
+namespace Modules\Finance\Models;
+use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;use LogicException;use Modules\Core\Models\ApprovalRequest;use Modules\Core\Models\Concerns\BelongsToCompany;
+class AccountingCorrection extends Model
+{
+ use BelongsToCompany;public $timestamps=false;protected $fillable=['company_id','original_journal_id','original_source_type','original_source_id','original_event','original_gl_period','original_posting_date','original_amount','corrected_amount','adjustment_amount','currency','period_state','correction_mode','reason','status','account_mapping_id','debit_account_id','credit_account_id','adjustment_period','adjustment_posting_date','approval_request_id','reversal_journal_id','corrected_journal_id','adjustment_journal_id','correction_version','source_hash','requested_by','requested_at','approved_by','approved_at','posted_by','posted_at','created_at'];
+ protected function casts():array{return['original_posting_date'=>'date','adjustment_posting_date'=>'date','original_amount'=>'decimal:4','corrected_amount'=>'decimal:4','adjustment_amount'=>'decimal:4','requested_at'=>'datetime','approved_at'=>'datetime','posted_at'=>'datetime','created_at'=>'datetime'];}
+ protected static function booted():void{static::updating(fn()=>throw new LogicException('Accounting correction fields are workflow-controlled.'));static::deleting(fn()=>throw new LogicException('Accounting correction cannot be deleted.'));}
+ public function originalJournal():BelongsTo{return$this->belongsTo(Journal::class,'original_journal_id');}public function approvalRequest():BelongsTo{return$this->belongsTo(ApprovalRequest::class);}public function reversalJournal():BelongsTo{return$this->belongsTo(Journal::class,'reversal_journal_id');}public function correctedJournal():BelongsTo{return$this->belongsTo(Journal::class,'corrected_journal_id');}public function adjustmentJournal():BelongsTo{return$this->belongsTo(Journal::class,'adjustment_journal_id');}
+}
