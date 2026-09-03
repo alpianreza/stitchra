@@ -2,29 +2,14 @@
 
 namespace Modules\Finance\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
-use Modules\Core\Services\AuditService;
-use Modules\Core\Support\CurrentCompany;
-use Modules\Finance\Models\AccountMapping;
-use Modules\Finance\Models\Journal;
-use Modules\Finance\Services\JournalService;
-use RuntimeException;
-
-class JournalController extends Controller
+use Illuminate\Http\JsonResponse;use Illuminate\Http\Request;use Illuminate\Routing\Controller;use Illuminate\Support\Facades\DB;use Illuminate\Validation\Rule;use Modules\Core\Services\AuditService;use Modules\Core\Support\CurrentCompany;use Modules\Finance\Models\AccountMapping;use Modules\Finance\Models\Journal;use Modules\Finance\Services\JournalService;use RuntimeException;
+class JournalController
 {
-    public function __construct(private JournalService $service,private AuditService $audit){}
-    public function store(Request $request):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'journal_date'=>'nullable|date_format:Y-m-d','description'=>'nullable|string|max:1000','lines'=>'required|array|min:2','lines.*.coa_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'lines.*.debit'=>'nullable|numeric|min:0','lines.*.credit'=>'nullable|numeric|min:0','lines.*.memo'=>'nullable|string|max:1000']);return $this->domain(fn()=>response()->json($this->service->post($company,$data,$data['lines'],$request->user()),201));}
-    public function reverse(Request $request,Journal $journal):JsonResponse{$data=$request->validate(['reason'=>'nullable|string|max:1000']);return $this->domain(fn()=>response()->json($this->service->reverse($journal,$request->user(),$data['reason']??null),201));}
-    public function trialBalance(Request $request):JsonResponse{$data=$request->validate(['period'=>['nullable','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);$period=$data['period']??now()->format('Y-m');return $this->domain(fn()=>response()->json(['period'=>$period,'data'=>$this->service->trialBalance(CurrentCompany::id(),$period)]));}
-    public function closePeriod(Request $request):JsonResponse{$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);return $this->domain(fn()=>response()->json($this->service->closePeriod(CurrentCompany::id(),$data['period'],$request->user())));}
-    public function setMapping(Request $request):JsonResponse
-    {
-        $company=CurrentCompany::id();$data=$request->validate(['event'=>['required',Rule::in(AccountMapping::EVENTS)],'debit_account_id'=>['required','integer','different:credit_account_id',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'credit_account_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)]]);
-        return DB::transaction(function()use($company,$data,$request){$mapping=AccountMapping::updateOrCreate(['company_id'=>$company,'event'=>$data['event']],['debit_account_id'=>$data['debit_account_id'],'credit_account_id'=>$data['credit_account_id'],'updated_by'=>$request->user()->id]);$this->audit->record('update','account_mappings',documentId:$mapping->id,after:$mapping->toArray(),request:$request);return response()->json($mapping);});
-    }
-    private function domain(callable $callback):JsonResponse{try{return $callback();}catch(RuntimeException $e){return response()->json(['message'=>$e->getMessage()],422);}}
+ public function __construct(private JournalService$service,private AuditService$audit){}
+ public function store(Request$request):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/'],'journal_date'=>'nullable|date_format:Y-m-d','description'=>'nullable|string|max:1000','lines'=>'required|array|min:2','lines.*.coa_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'lines.*.debit'=>'nullable|numeric|min:0','lines.*.credit'=>'nullable|numeric|min:0','lines.*.memo'=>'nullable|string|max:1000']);return$this->domain(fn()=>response()->json($this->service->post($company,$data,$data['lines'],$request->user()),201));}
+ public function reverse(Request$request,Journal$journal):JsonResponse{$data=$request->validate(['reason'=>'nullable|string|max:1000']);if($journal->event==='SHIPMENT_COGS'||$journal->source_document_type==='shipment_cogs'||$journal->source_document_type==='accounting_corrections')return response()->json(['message'=>'BR-109: costing/shipment journals must use Accounting Correction; direct reversal is prohibited.'],422);return$this->domain(fn()=>response()->json($this->service->reverse($journal,$request->user(),$data['reason']??null),201));}
+ public function trialBalance(Request$request):JsonResponse{$data=$request->validate(['period'=>['nullable','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);$period=$data['period']??now()->format('Y-m');return$this->domain(fn()=>response()->json(['period'=>$period,'data'=>$this->service->trialBalance(CurrentCompany::id(),$period)]));}
+ public function closePeriod(Request$request):JsonResponse{$data=$request->validate(['period'=>['required','regex:/^\d{4}-(0[1-9]|1[0-2])$/']]);return$this->domain(fn()=>response()->json($this->service->closePeriod(CurrentCompany::id(),$data['period'],$request->user())));}
+ public function setMapping(Request$request):JsonResponse{$company=CurrentCompany::id();$data=$request->validate(['event'=>['required',Rule::in(AccountMapping::EVENTS)],'debit_account_id'=>['required','integer','different:credit_account_id',Rule::exists('chart_of_accounts','id')->where('company_id',$company)],'credit_account_id'=>['required','integer',Rule::exists('chart_of_accounts','id')->where('company_id',$company)]]);return DB::transaction(function()use($company,$data,$request){$mapping=AccountMapping::updateOrCreate(['company_id'=>$company,'event'=>$data['event']],['debit_account_id'=>$data['debit_account_id'],'credit_account_id'=>$data['credit_account_id'],'updated_by'=>$request->user()->id]);$this->audit->record('update','account_mappings',documentId:$mapping->id,after:$mapping->toArray(),request:$request);return response()->json($mapping);});}
+ private function domain(callable$callback):JsonResponse{try{return$callback();}catch(RuntimeException$e){return response()->json(['message'=>$e->getMessage()],422);}}
 }
