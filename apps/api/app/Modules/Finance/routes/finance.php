@@ -6,6 +6,7 @@ use Modules\Finance\Http\Controllers\BankReconciliationController;
 use Modules\Finance\Http\Controllers\CostingController;
 use Modules\Finance\Http\Controllers\FxRevaluationController;
 use Modules\Finance\Http\Controllers\JournalController;
+use Modules\Finance\Http\Controllers\ManufacturingValuationController;
 use Modules\Finance\Http\Controllers\OperationalPostingController;
 use Modules\Finance\Http\Controllers\PeriodCloseController;
 use Modules\Finance\Http\Controllers\TaxController;
@@ -21,6 +22,16 @@ Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(functio
     Route::get('gl/valuation-authority', [ValuationBoundaryController::class, 'authority'])->middleware('permission:finance.report.view');
     Route::get('gl/valuation-boundaries/production-orders/{productionOrder}', [ValuationBoundaryController::class, 'productionOrder'])->middleware('permission:finance.report.view');
     Route::get('gl/valuation-boundaries/shipments/{shipment}', [ValuationBoundaryController::class, 'shipment'])->middleware('permission:finance.report.view');
+
+    Route::post('valuation/allocation-profiles', [ManufacturingValuationController::class, 'createProfile'])->middleware('permission:master.finance.manage');
+    Route::post('valuation/allocation-profiles/{profile}/activate', [ManufacturingValuationController::class, 'activateProfile'])->middleware('permission:master.finance.manage');
+    Route::post('valuation/production-orders/{productionOrder}/eligibility', [ManufacturingValuationController::class, 'createEligibility'])->middleware('permission:master.finance.manage');
+    Route::post('valuation/eligibilities/{eligibility}/activate', [ManufacturingValuationController::class, 'activateEligibility'])->middleware('permission:master.finance.manage');
+    Route::post('valuation/production-orders/{productionOrder}/wip-transfers/{transfer}', [ManufacturingValuationController::class, 'valueWip'])->middleware('permission:finance.journal.create');
+    Route::post('valuation/production-orders/{productionOrder}/fg-receipts/{movement}', [ManufacturingValuationController::class, 'valueFg'])->middleware('permission:finance.journal.create');
+    Route::post('valuation/production-orders/{productionOrder}/freezes', [ManufacturingValuationController::class, 'createFreeze'])->middleware('permission:finance.journal.create');
+    Route::post('valuation/freezes/{freeze}/apply', [ManufacturingValuationController::class, 'applyFreeze'])->middleware('permission:finance.journal.approve');
+    Route::get('valuation/production-orders/{productionOrder}', [ManufacturingValuationController::class, 'show'])->middleware('permission:costing.actual.view');
 
     Route::post('period-close/prepare', [PeriodCloseController::class, 'prepare'])->middleware('permission:finance.period-closing.execute');
     Route::post('period-close/{periodCloseRun}/approve', [PeriodCloseController::class, 'approve'])->middleware('permission:finance.period-closing.execute');
@@ -45,7 +56,6 @@ Route::middleware(['auth:sanctum', 'company'])->prefix('finance')->group(functio
     Route::post('ap/invoices/{supplierInvoice}/payments', [ArApController::class, 'payAp'])->middleware('permission:finance.payment.create');
     Route::get('ar/aging', [ArApController::class, 'agingAr'])->middleware('permission:finance.report.view');
     Route::get('ap/aging', [ArApController::class, 'agingAp'])->middleware('permission:finance.report.view');
-
     Route::get('costing/mo/{productionOrder}/actual', [CostingController::class, 'actual'])->middleware('permission:costing.actual.view');
     Route::get('costing/mo/{productionOrder}/lineage', [CostingController::class, 'lineage'])->middleware('permission:costing.actual.view');
     Route::post('bep/style/{style}', [CostingController::class, 'bepStyle'])->middleware('permission:finance.bep.view');
