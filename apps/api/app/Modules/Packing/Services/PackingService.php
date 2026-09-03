@@ -21,13 +21,17 @@ class PackingService
 
     public function eligiblePackingInputs(int $companyId): array
     {
-        $passes = QcInspection::withoutGlobalScopes()->with(['productionOrder.salesOrder', 'productionOrder.style'])
-            ->where('company_id', $companyId)->where('stage', 'FINAL')->where('verdict', 'PASS')->orderByDesc('cycle')->orderByDesc('id')->get();
+        $latestFinals = QcInspection::withoutGlobalScopes()->with(['productionOrder.salesOrder', 'productionOrder.style'])
+            ->where('company_id', $companyId)->where('stage', 'FINAL')->orderByDesc('cycle')->orderByDesc('id')->get();
         $seen = []; $eligible = [];
-        foreach ($passes as $pass) { $mo = $pass->productionOrder; if ($mo === null || $mo->status !== 'QC' || isset($seen[$mo->id])) continue; $seen[$mo->id] = true;
-            $packed = $this->packedQuantityForMo((int) $mo->id); $remaining = max(0.0, (float) $pass->lot_qty - $packed); if ($remaining <= 0.0001) continue;
-            $eligible[] = ['qc_inspection_id' => $pass->id, 'qc_doc_no' => $pass->doc_no, 'qc_stage' => $pass->stage, 'qc_verdict' => $pass->verdict,
-                'qc_cycle' => $pass->cycle, 'eligible_qty' => (float) $pass->lot_qty, 'packed_qty' => $packed, 'remaining_qty' => $remaining,
+        foreach ($latestFinals as $inspection) {
+            $mo = $inspection->productionOrder;
+            if ($mo === null || isset($seen[$mo->id])) continue;
+            $seen[$mo->id] = true;
+            if ($inspection->verdict !== 'PASS' || $mo->status !== 'QC') continue;
+            $packed = $this->packedQuantityForMo((int) $mo->id); $remaining = max(0.0, (float) $inspection->lot_qty - $packed); if ($remaining <= 0.0001) continue;
+            $eligible[] = ['qc_inspection_id' => $inspection->id, 'qc_doc_no' => $inspection->doc_no, 'qc_stage' => $inspection->stage, 'qc_verdict' => $inspection->verdict,
+                'qc_cycle' => $inspection->cycle, 'eligible_qty' => (float) $inspection->lot_qty, 'packed_qty' => $packed, 'remaining_qty' => $remaining,
                 'production_order_id' => $mo->id, 'production_order_no' => $mo->doc_no, 'production_order_status' => $mo->status,
                 'sales_order_id' => $mo->sales_order_id, 'sales_order_no' => $mo->salesOrder?->doc_no, 'style_no' => $mo->style?->style_no]; }
         return $eligible;
@@ -41,8 +45,9 @@ class PackingService
             if ($moId === null) throw new RuntimeException('BR-080: MO wajib dipilih agar source Packing dapat ditelusuri ke QC FINAL.');
             $mo = ProductionOrder::withoutGlobalScopes()->where('company_id', $locked->company_id)->where('sales_order_id', $locked->id)->whereKey($moId)->lockForUpdate()->first();
             if ($mo === null) throw new RuntimeException('MO packing bukan milik SO/company ini.');
-            $pass = QcInspection::withoutGlobalScopes()->where('company_id', $locked->company_id)->where('production_order_id', $mo->id)
-                ->where('stage', 'FINAL')->where('verdict', 'PASS')->orderByDesc('cycle')->orderByDesc('id')->first();
+            $latest = QcInspection::withoutGlobalScopes()->where('company_id', $locked->company_id)->where('production_order_id', $mo->id)
+                ->where('stage', 'FINAL')->orderByDesc('cycle')->orderByDesc('id')->first();
+            $pass = $latest?->verdict === 'PASS' ? $latest : null;
             $created = PackingList::create(['company_id' => $locked->company_id, 'doc_no' => $this->numbering->next($locked->company_id, 'PL'),
                 'sales_order_id' => $locked->id, 'production_order_id' => $mo->id, 'qc_inspection_id' => $mo->status === 'QC' ? $pass?->id : null,
                 'status' => 'DRAFT', 'created_by' => $user->id]);
@@ -140,12 +145,14 @@ class PackingService
     private function assertPackingInput(PackingList $packingList, ProductionOrder $mo, User $user): QcInspection
     {
         if ($mo->status !== 'QC') throw new RuntimeException('BR-080: MO wajib berstatus QC setelah QC FINAL PASS sebelum Packing.');
-        $query = QcInspection::withoutGlobalScopes()->where('company_id', $packingList->company_id)->where('production_order_id', $mo->id)->where('stage', 'FINAL')->where('verdict', 'PASS');
-        $pass = $packingList->qc_inspection_id ? $query->whereKey($packingList->qc_inspection_id)->lockForUpdate()->first()
-            : $query->orderByDesc('cycle')->orderByDesc('id')->lockForUpdate()->first();
-        if ($pass === null) throw new RuntimeException('BR-080: hanya QC FINAL PASS yang dapat menjadi Packing Input.');
-        if (! $packingList->qc_inspection_id) { $packingList->update(['qc_inspection_id' => $pass->id, 'updated_by' => $user->id]); $this->audit->record('update', $packingList, after: ['qc_inspection_id' => $pass->id]); }
-        return $pass;
+        $latest = QcInspection::withoutGlobalScopes()->where('company_id', $packingList->company_id)->where('production_order_id', $mo->id)
+            ->where('stage', 'FINAL')->orderByDesc('cycle')->orderByDesc('id')->lockForUpdate()->first();
+        if ($latest === null || $latest->verdict !== 'PASS') throw new RuntimeException('BR-080: cycle QC FINAL terbaru bukan PASS; Packing Input tidak tersedia.');
+        if ($packingList->qc_inspection_id && (int) $packingList->qc_inspection_id !== (int) $latest->id) {
+            throw new RuntimeException('BR-080: source QC FINAL Packing sudah stale terhadap cycle terbaru.');
+        }
+        if (! $packingList->qc_inspection_id) { $packingList->update(['qc_inspection_id' => $latest->id, 'updated_by' => $user->id]); $this->audit->record('update', $packingList, after: ['qc_inspection_id' => $latest->id]); }
+        return $latest;
     }
 
     private function packedQuantityForMo(int $moId): float

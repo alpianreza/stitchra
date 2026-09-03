@@ -71,9 +71,16 @@ class NamedProductionMeasureService
 
     private function qcFinalPass(ProductionOrder $mo): array
     {
-        $pass = DB::table('qc_inspections')->where('company_id', $mo->company_id)->where('production_order_id', $mo->id)
-            ->where('stage', 'FINAL')->where('verdict', 'PASS')->orderByDesc('cycle')->orderByDesc('id')->first(['id', 'cycle', 'lot_qty']);
-        return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', $pass ? (float)$pass->lot_qty : 0.0, 'BR-065:QC_FINAL_PASS', 'DEFINED', $pass?['qc_inspection_id'=>(int)$pass->id,'cycle'=>(int)$pass->cycle]:[]);
+        $latest = DB::table('qc_inspections')->where('company_id', $mo->company_id)->where('production_order_id', $mo->id)
+            ->where('stage', 'FINAL')->orderByDesc('cycle')->orderByDesc('id')->first(['id', 'cycle', 'lot_qty', 'verdict']);
+        if ($latest === null) {
+            return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', ['reason'=>'NO_FINAL_CYCLE']);
+        }
+        $source = ['qc_inspection_id'=>(int)$latest->id,'cycle'=>(int)$latest->cycle,'verdict'=>(string)$latest->verdict];
+        if ($latest->verdict !== 'PASS') {
+            return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', $source + ['reason'=>'LATEST_FINAL_CYCLE_NOT_PASS']);
+        }
+        return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', (float)$latest->lot_qty, 'BR-065:QC_FINAL_PASS', 'DEFINED', $source);
     }
 
     private function result(string $key, string $label, ?float $qty, string $authority, string $status='DEFINED', array $source=[]): array
