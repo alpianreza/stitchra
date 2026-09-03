@@ -25,8 +25,8 @@ class ShipmentInventoryValuationService
             $this->access($user,(int)$locked->company_id);
             $existing=ShipmentInventoryValuation::withoutGlobalScopes()->where('company_id',$locked->company_id)->where('shipment_id',$locked->id)->lockForUpdate()->get();
             if($locked->status==='SHIPPED'){
-                if($existing->count()===$locked->lines->count())return $locked->fresh(['lines','packingList']);
-                throw new RuntimeException('CONFLICT: SHIPPED shipment has incomplete D-08 valuation.');
+                $this->assertReplay($locked,$existing,$warehouseId);
+                return $locked->fresh(['lines','packingList']);
             }
             if($existing->isNotEmpty())throw new RuntimeException('CONFLICT: unshipped Shipment already has D-08 valuation.');
             $pl=PackingList::withoutGlobalScopes()->where('company_id',$locked->company_id)->whereKey($locked->packing_list_id)->lockForUpdate()->firstOrFail();
@@ -65,8 +65,7 @@ class ShipmentInventoryValuationService
                 if(!$ledger)throw new RuntimeException('FAIL_CLOSED: ITS SHIPMENT ledger line is missing.');
                 if($ledger->ownership!=='COMPANY'||$ledger->item_type!=='FG')throw new RuntimeException('CONFLICT: ITS SHIPMENT ledger is not company-owned FG.');
                 if($ledger->unit_cost===null&&$ledger->total_cost===null){
-                    DB::table('stock_ledger')->where('id',$ledger->id)->where('company_id',$locked->company_id)->update([
-                        'unit_cost'=>$snapshot['unit_cost'],'total_cost'=>$snapshot['total_cost']]);
+                    DB::table('stock_ledger')->where('id',$ledger->id)->where('company_id',$locked->company_id)->update(['unit_cost'=>$snapshot['unit_cost'],'total_cost'=>$snapshot['total_cost']]);
                 }elseif(abs((float)$ledger->unit_cost-$snapshot['unit_cost'])>0.000001||abs((float)$ledger->total_cost-$snapshot['total_cost'])>0.0001){
                     throw new RuntimeException('CONFLICT: ITS SHIPMENT ledger cost differs from pre-OUT moving average.');
                 }
@@ -108,6 +107,20 @@ class ShipmentInventoryValuationService
     {
         $base=$this->shipments->lineage($shipment,$user);$base['inventory_valuation']=$this->valuation($shipment,$user);
         return $base;
+    }
+
+    private function assertReplay(Shipment $shipment,$existing,int $warehouseId):void
+    {
+        if($existing->count()!==$shipment->lines->count())throw new RuntimeException('CONFLICT: SHIPPED shipment has incomplete D-08 valuation.');
+        foreach($shipment->lines as $line){
+            $row=$existing->firstWhere('shipment_line_id',$line->id);
+            if(!$row||(int)$row->company_id!==(int)$shipment->company_id||(int)$row->warehouse_id!==$warehouseId
+                ||$row->valuation_event!==self::EVENT||$row->cost_method!==self::METHOD
+                ||(int)$row->style_id!==(int)$line->style_id||(int)$row->colorway_id!==(int)$line->colorway_id
+                ||(int)$row->size_id!==(int)$line->size_id||abs((float)$row->shipment_quantity-(float)$line->qty_shipped)>0.0001){
+                throw new RuntimeException('CONFLICT: D-08 retry payload differs from immutable Shipment valuation.');
+            }
+        }
     }
 
     private function access(User $user,int $companyId):void
