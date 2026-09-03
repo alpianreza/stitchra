@@ -34,7 +34,12 @@ class GlPostingService
 
             $existing = Journal::withoutGlobalScopes()->where('company_id', $companyId)->where('posting_key', $key)->first();
             if ($existing) {
-                if (abs((float) $existing->total_debit - $amount) > 0.0001) throw new RuntimeException('Idempotency conflict: source jurnal sama memiliki amount berbeda.');
+                $amountConflict = abs((float) $existing->total_debit - $amount) > 0.0001;
+                $periodConflict = (string) $existing->period !== $period;
+                $dateConflict = $journalDate !== null && $existing->journal_date?->toDateString() !== $journalDate;
+                if ($amountConflict || $periodConflict || $dateConflict) {
+                    throw new RuntimeException('GL_IDEMPOTENCY_CONFLICT: source jurnal sama memiliki amount, period, atau journal date berbeda.');
+                }
                 return ['journal' => $existing, 'created' => false];
             }
 
