@@ -27,5 +27,6 @@ class PackingList extends Model
     public function productionOrder(): BelongsTo{return $this->belongsTo(ProductionOrder::class);}
     public function qcInspection(): BelongsTo{return $this->belongsTo(QcInspection::class);}
     public function cartons(): HasMany{return $this->hasMany(Carton::class);}
+    public function sourceAttachments(): HasMany{return $this->hasMany(PackingSourceAttachment::class);}
     public function shipment(): HasOne{return $this->hasOne(Shipment::class);}
 }
