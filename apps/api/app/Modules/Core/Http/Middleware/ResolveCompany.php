@@ -4,6 +4,7 @@ namespace Modules\Core\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Modules\Core\Support\CurrentCompany;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -30,6 +31,9 @@ class ResolveCompany
 
         if ($companyId <= 0 || ! in_array($companyId, $allowed, true)) {
             abort(403, 'Anda tidak memiliki akses ke company ini.');
+        }
+        if (! DB::table('companies')->where('id', $companyId)->where('is_active', true)->whereNull('deleted_at')->exists()) {
+            abort(403, 'Company tidak aktif.');
         }
 
         CurrentCompany::set($companyId);
