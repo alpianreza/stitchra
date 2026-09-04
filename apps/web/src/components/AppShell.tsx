@@ -87,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
     id: "finance",
     label: "Finance",
     items: [
+      { href: "/finance/ar-ap", label: "AR / AP", icon: "finance" },
       { href: "/finance/journals", label: "Jurnal", icon: "finance" },
       { href: "/finance/costing", label: "Costing Aktual", icon: "finance" },
       { href: "/finance/costing/valuation", label: "Valuasi Produksi", icon: "finance" },
