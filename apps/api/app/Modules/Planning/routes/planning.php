@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Planning\Http\Controllers\CutPlanController;
 use Modules\Planning\Http\Controllers\MrpController;
 use Modules\Planning\Http\Controllers\ProductionPlanningController;
 use Modules\Production\Http\Controllers\OperationalIntegrityController;
@@ -21,6 +22,12 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::put('planning/production-plans/{productionPlan}', [ProductionPlanningController::class, 'update'])->middleware('permission:planning.production.update');
     Route::post('planning/production-plans/{productionPlan}/loadings', [ProductionPlanningController::class, 'storeLoading'])->middleware('permission:planning.production.create');
     Route::put('planning/line-loadings/{lineLoading}', [ProductionPlanningController::class, 'updateLoading'])->middleware('permission:planning.production.update');
+
+    Route::get('planning/cut-plans/options', [CutPlanController::class, 'options'])->middleware('permission:planning.cutplan.view');
+    Route::get('planning/cut-plans', [CutPlanController::class, 'index'])->middleware('permission:planning.cutplan.view');
+    Route::post('planning/cut-plans/from-mo/{productionOrder}', [CutPlanController::class, 'store'])->middleware('permission:planning.cutplan.create');
+    Route::post('planning/cut-plans/{cutPlan}/cut-order', [CutPlanController::class, 'createCutOrder'])
+        ->middleware(['permission:planning.cutplan.update', 'permission:cutting.order.execute']);
 
     Route::get('production/operational-integrity/authority', [OperationalIntegrityController::class, 'authority'])->middleware('permission:production.mo.view');
     Route::get('production/orders', [ProductionOrderController::class, 'index'])->middleware('permission:production.mo.view');
