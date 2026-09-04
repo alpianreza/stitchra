@@ -57,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/production/orders", label: "Manufacturing Order", icon: "production" },
       { href: "/production/cutting", label: "Cutting", icon: "production" },
       { href: "/shopfloor/scan", label: "Stasiun Scan", icon: "scan" },
+      { href: "/shopfloor/monitor", label: "Monitor Shop Floor", icon: "scan" },
     ],
   },
   {
