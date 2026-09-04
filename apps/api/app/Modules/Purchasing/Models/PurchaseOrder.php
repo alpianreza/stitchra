@@ -24,30 +24,18 @@ class PurchaseOrder extends Model
     {
         return [
             'order_date' => 'date', 'expected_date' => 'date',
-            'exchange_rate' => 'decimal:6', 'total_amount' => 'decimal:4',
+            'exchange_rate' => 'decimal:12', 'total_amount' => 'decimal:4',
         ];
     }
 
-    public function lines(): HasMany
-    {
-        return $this->hasMany(PoLine::class)->orderBy('line_no');
-    }
+    public function lines(): HasMany { return $this->hasMany(PoLine::class)->orderBy('line_no'); }
+    public function supplier(): BelongsTo { return $this->belongsTo(Supplier::class); }
 
-    public function supplier(): BelongsTo
-    {
-        return $this->belongsTo(Supplier::class);
-    }
-
-    /** BR-051: status turunan dari received_qty vs qty */
     public function refreshReceivingStatus(): void
     {
         $totalOrdered = (float) $this->lines()->sum('qty');
         $totalReceived = (float) $this->lines()->sum('received_qty');
-
-        if ($totalReceived <= 0) {
-            return;
-        }
-
+        if ($totalReceived <= 0) return;
         $this->status = $totalReceived >= $totalOrdered ? 'RECEIVED' : 'PARTIAL_RECEIVED';
         $this->save();
     }

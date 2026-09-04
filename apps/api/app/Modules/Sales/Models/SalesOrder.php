@@ -27,33 +27,14 @@ class SalesOrder extends Model
         return [
             'order_date' => 'date',
             'ex_factory_date' => 'date',
-            'exchange_rate' => 'decimal:6',
+            'exchange_rate' => 'decimal:12',
             'tolerance_pct' => 'decimal:4',
         ];
     }
 
-    public function lines(): HasMany
-    {
-        return $this->hasMany(SalesOrderLine::class);
-    }
-
-    public function customer(): BelongsTo
-    {
-        return $this->belongsTo(Customer::class);
-    }
-
-    public function currency(): BelongsTo
-    {
-        return $this->belongsTo(Currency::class);
-    }
-
-    public function amendments(): HasMany
-    {
-        return $this->hasMany(OrderAmendment::class);
-    }
-
-    public function deliverySchedules(): HasMany
-    {
-        return $this->hasMany(DeliverySchedule::class);
-    }
+    public function lines(): HasMany { return $this->hasMany(SalesOrderLine::class); }
+    public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
+    public function currency(): BelongsTo { return $this->belongsTo(Currency::class); }
+    public function amendments(): HasMany { return $this->hasMany(OrderAmendment::class); }
+    public function deliverySchedules(): HasMany { return $this->hasMany(DeliverySchedule::class); }
 }

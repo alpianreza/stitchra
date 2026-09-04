@@ -14,7 +14,7 @@ class ExchangeRate extends Model
 
     protected function casts(): array
     {
-        return ['rate' => 'decimal:6', 'rate_date' => 'date'];
+        return ['rate' => 'decimal:12', 'rate_date' => 'date'];
     }
 
     public function currency(): BelongsTo
