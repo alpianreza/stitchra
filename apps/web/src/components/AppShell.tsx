@@ -55,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Manufacturing",
     items: [
       { href: "/production/orders", label: "Manufacturing Order", icon: "production" },
+      { href: "/production/cutting", label: "Cutting", icon: "production" },
       { href: "/shopfloor/scan", label: "Stasiun Scan", icon: "scan" },
     ],
   },
@@ -87,7 +88,11 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/finance/journals", label: "Jurnal", icon: "finance" },
       { href: "/finance/costing", label: "Costing Aktual", icon: "finance" },
+      { href: "/finance/costing/valuation", label: "Valuasi Produksi", icon: "finance" },
       { href: "/finance/bep", label: "BEP", icon: "finance" },
+      { href: "/finance/cogs", label: "Shipment COGS", icon: "finance" },
+      { href: "/finance/corrections", label: "Koreksi Akuntansi", icon: "finance" },
+      { href: "/shipping/shipments/valuation", label: "Valuasi Shipment", icon: "inventory" },
     ],
   },
   {
@@ -199,6 +204,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -206,6 +212,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     setUser(getUser());
+    setCompanyId(localStorage.getItem("stitchra_company"));
     setCollapsed(localStorage.getItem("stitchra_sidebar_collapsed") === "true");
     setReady(true);
   }, [router]);
@@ -323,6 +330,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-2 border-r border-[var(--color-border-subtle)] pr-3 sm:flex">
+              {companyId && (
+                <span className="hidden rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--color-text-muted)] lg:inline-flex">
+                  Company #{companyId}
+                </span>
+              )}
               <span className="flex size-8 items-center justify-center rounded-full bg-[var(--color-primary-soft)] text-xs font-bold text-[var(--color-primary)]">
                 {userInitial}
               </span>

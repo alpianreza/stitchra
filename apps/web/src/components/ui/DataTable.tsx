@@ -23,6 +23,8 @@ interface DataTableProps<T> {
   emptyAction?: ReactNode;
   mobileCard?: (row: T) => ReactNode;
   minWidth?: string;
+  /** Batas tinggi kontainer scroll; header tetap sticky. Pakai "none" untuk menonaktifkan. */
+  maxHeight?: string;
 }
 
 const alignClasses = {
@@ -44,7 +46,10 @@ export function DataTable<T>({
   emptyAction,
   mobileCard,
   minWidth = "720px",
+  maxHeight = "70vh",
 }: DataTableProps<T>) {
+  const scrollVertically = maxHeight !== "none";
+
   return (
     <section className="overflow-hidden rounded-[var(--radius-surface)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] shadow-[var(--shadow-raised)]">
       {error ? (
@@ -65,16 +70,25 @@ export function DataTable<T>({
         <>
           {mobileCard && (
             <div className="divide-y divide-[var(--color-border-subtle)] md:hidden">
-              {rows.map((row, index) => <div key={getRowKey(row, index)}>{mobileCard(row)}</div>)}
+              {rows.map((row, index) => (
+                <div key={getRowKey(row, index)}>{mobileCard(row)}</div>
+              ))}
             </div>
           )}
-          <div className={`overflow-x-auto ${mobileCard ? "hidden md:block" : ""}`}>
+          <div
+            className={`${scrollVertically ? "overflow-auto" : "overflow-x-auto"} ${mobileCard ? "hidden md:block" : ""}`}
+            style={scrollVertically ? { maxHeight } : undefined}
+          >
             <table className="w-full border-collapse text-[13px]" style={{ minWidth }}>
               <caption className="sr-only">{caption}</caption>
               <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)]">
                 <tr>
                   {columns.map((column) => (
-                    <th key={column.key} scope="col" className={`h-9 whitespace-nowrap px-3 font-semibold text-[var(--color-text-muted)] ${alignClasses[column.align ?? "left"]} ${column.headerClassName ?? ""}`}>
+                    <th
+                      key={column.key}
+                      scope="col"
+                      className={`h-9 whitespace-nowrap px-3 font-semibold text-[var(--color-text-muted)] shadow-[inset_0_-1px_0_var(--color-border)] ${alignClasses[column.align ?? "left"]} ${column.headerClassName ?? ""}`}
+                    >
                       {column.header}
                     </th>
                   ))}
@@ -84,7 +98,10 @@ export function DataTable<T>({
                 {rows.map((row, index) => (
                   <tr key={getRowKey(row, index)} className="h-10 transition-colors hover:bg-[var(--color-surface-subtle)]/70">
                     {columns.map((column) => (
-                      <td key={column.key} className={`whitespace-nowrap px-3 py-2 text-[var(--color-text)] ${alignClasses[column.align ?? "left"]} ${column.className ?? ""}`}>
+                      <td
+                        key={column.key}
+                        className={`whitespace-nowrap px-3 py-2 text-[var(--color-text)] ${alignClasses[column.align ?? "left"]} ${column.className ?? ""}`}
+                      >
                         {column.cell(row)}
                       </td>
                     ))}

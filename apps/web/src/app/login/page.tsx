@@ -34,9 +34,9 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} className="w-full max-w-sm rounded-xl bg-white p-8 shadow">
         <h1 className="mb-6 text-2xl font-bold">Stitchra ERP</h1>
 
-        <label className="mb-1 block text-sm font-medium">{t("login.email")}</label>
+        <label htmlFor="email" className="mb-1 block text-sm font-medium">{t("login.email")}</label>
         <input
-          type="email"
+          id="email" type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -44,9 +44,9 @@ export default function LoginPage() {
           className="mb-4 w-full rounded border px-3 py-2"
         />
 
-        <label className="mb-1 block text-sm font-medium">{t("login.password")}</label>
+        <label htmlFor="password" className="mb-1 block text-sm font-medium">{t("login.password")}</label>
         <input
-          type="password"
+          id="password" type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required

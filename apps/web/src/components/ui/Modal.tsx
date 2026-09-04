@@ -11,6 +11,8 @@ interface ModalProps {
   onClose: () => void;
   closeDisabled?: boolean;
   size?: "sm" | "md" | "lg";
+  /** "alertdialog" untuk dialog konfirmasi destruktif. */
+  role?: "dialog" | "alertdialog";
 }
 
 const sizeClasses = {
@@ -37,12 +39,15 @@ export function Modal({
   onClose,
   closeDisabled = false,
   size = "md",
+  role = "dialog",
 }: ModalProps) {
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  // Lock scroll, simpan & pulihkan fokus, pindahkan fokus ke kontrol pertama
+  // (fallback: panel itu sendiri bila tidak ada kontrol fokusabel).
   useEffect(() => {
     if (!open) return;
 
@@ -52,7 +57,7 @@ export function Modal({
 
     const frame = window.requestAnimationFrame(() => {
       const firstControl = panelRef.current?.querySelector<HTMLElement>(focusableSelector);
-      firstControl?.focus();
+      (firstControl ?? panelRef.current)?.focus();
     });
 
     return () => {
@@ -62,15 +67,22 @@ export function Modal({
     };
   }, [open]);
 
+  // ESC bekerja meski fokus secara tak sengaja keluar dari panel.
+  useEffect(() => {
+    if (!open || closeDisabled) return;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, closeDisabled, onClose]);
+
   if (!open) return null;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape" && !closeDisabled) {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-
     if (event.key !== "Tab") return;
     const controls = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
     if (controls.length === 0) {
@@ -95,21 +107,24 @@ export function Modal({
       <button
         type="button"
         aria-label="Tutup dialog"
-        className="absolute inset-0 bg-slate-950/55"
+        disabled={closeDisabled}
+        className="absolute inset-0 cursor-default bg-[var(--color-overlay)] disabled:cursor-default"
         onClick={closeDisabled ? undefined : onClose}
       />
       <div
         ref={panelRef}
-        role="dialog"
+        role={role}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`relative flex max-h-[92vh] w-full flex-col rounded-t-xl bg-[var(--color-surface)] shadow-[var(--shadow-overlay)] sm:rounded-[var(--radius-surface)] ${sizeClasses[size]}`}
+        className={`relative flex max-h-[92vh] w-full flex-col rounded-t-[var(--radius-surface)] bg-[var(--color-surface)] shadow-[var(--shadow-overlay)] sm:rounded-[var(--radius-surface)] ${sizeClasses[size]}`}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
           <div>
-            <h2 id={titleId} className="text-lg font-semibold text-[var(--color-text)]">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-[var(--color-text)]">
+              {title}
+            </h2>
             {description && <p id={descriptionId} className="mt-1 text-sm text-[var(--color-text-muted)]">{description}</p>}
           </div>
           <button
@@ -117,13 +132,17 @@ export function Modal({
             onClick={onClose}
             disabled={closeDisabled}
             aria-label="Tutup"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-xl text-[var(--color-text-muted)] hover:bg-[var(--color-surface-subtle)] disabled:opacity-40"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-xl text-[var(--color-text-muted)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text)] disabled:opacity-40"
           >
             <span aria-hidden="true">×</span>
           </button>
         </header>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <footer className="flex flex-col-reverse gap-2 border-t border-[var(--color-border-subtle)] px-5 py-4 sm:flex-row sm:justify-end">{footer}</footer>}
+        {footer && (
+          <footer className="flex flex-col-reverse gap-2 border-t border-[var(--color-border-subtle)] px-5 py-4 sm:flex-row sm:justify-end">
+            {footer}
+          </footer>
+        )}
       </div>
     </div>
   );

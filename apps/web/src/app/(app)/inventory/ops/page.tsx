@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Button, ConfirmDialog } from "@/components/ui";
 
 interface Warehouse { id: number; code: string; name: string }
 interface Material { id: number; code: string; name: string }
@@ -20,6 +21,10 @@ export default function InventoryOpsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lastTransfer, setLastTransfer] = useState<{ id: number; doc_no: string } | null>(null);
+  const [receiveId, setReceiveId] = useState("");
+  const [receiveConfirmOpen, setReceiveConfirmOpen] = useState(false);
+  const [receiveBusy, setReceiveBusy] = useState(false);
 
   // Transfer state
   const [trf, setTrf] = useState({ from: "", to: "", notes: "" });
@@ -40,6 +45,7 @@ export default function InventoryOpsPage() {
     api.get<{ data: Uom[] }>("/master/uoms?per_page=100").then((r) => setUoms(r.data)).catch(() => {});
   }, []);
 
+  const effectiveReceiveId = receiveId || (lastTransfer ? String(lastTransfer.id) : "");
   const input = "w-full rounded border px-2 py-1.5 text-sm";
 
   async function submitTransfer(e: React.FormEvent) {
@@ -53,12 +59,28 @@ export default function InventoryOpsPage() {
         lines: trfLines.map((l) => ({ material_id: Number(l.material_id), qty: Number(l.qty), uom_id: Number(l.uom_id) })),
       });
       await api.post(`/inventory/transfers/${t.id}/post`, {});
+      setLastTransfer({ id: t.id, doc_no: t.doc_no });
       setMessage(`Transfer ${t.doc_no} diposting — IN_TRANSIT ke gudang tujuan (terima via API receive).`);
       setTrf({ from: "", to: "", notes: "" }); setTrfLines([{ material_id: "", qty: "", uom_id: "" }]);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function receiveTransfer() {
+    if (!effectiveReceiveId) return;
+    setReceiveBusy(true); setError(null); setMessage(null);
+    try {
+      const r = await api.post<{ doc_no?: string }>(`/inventory/transfers/${effectiveReceiveId}/receive`, {});
+      setMessage(`Transfer ${r?.doc_no ?? `#${effectiveReceiveId}`} diterima - stok gudang tujuan bertambah.`);
+      setLastTransfer(null); setReceiveId(""); setReceiveConfirmOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menerima transfer");
+      setReceiveConfirmOpen(false);
+    } finally {
+      setReceiveBusy(false);
     }
   }
 
@@ -136,6 +158,7 @@ export default function InventoryOpsPage() {
       {message && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
 
       {tab === "transfer" && (
+        <>
         <form onSubmit={submitTransfer} className="space-y-3 rounded-xl border bg-white p-4">
           <h2 className="font-semibold">Transfer antar gudang</h2>
           <div className="grid grid-cols-3 gap-3">
@@ -175,7 +198,34 @@ export default function InventoryOpsPage() {
             <button disabled={busy} className="rounded bg-slate-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">{busy ? "…" : "Buat + Posting Transfer"}</button>
           </div>
         </form>
-      )}
+
+        <div className="space-y-2 rounded-xl border bg-white p-4">
+          <h2 className="font-semibold">Terima transfer (IN_TRANSIT)</h2>
+          <p className="text-xs text-slate-500">Transfer yang sudah diposting berstatus IN_TRANSIT. Terima di gudang tujuan agar stok gudang tujuan bertambah.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            {lastTransfer && (
+              <div className="rounded-lg border bg-slate-50 px-3 py-2 text-sm">
+                Transfer terakhir: <span className="font-mono font-medium">{lastTransfer.doc_no}</span> (#{lastTransfer.id})
+              </div>
+            )}
+            <label className="text-sm">
+              <span className="mb-1 block font-medium">ID Transfer</span>
+              <input value={receiveId} onChange={(e) => setReceiveId(e.target.value.replace(/\D/g, ""))} placeholder={lastTransfer ? String(lastTransfer.id) : "mis. 12"} className={`${input} w-36`} />
+            </label>
+            <Button size="sm" variant="success" disabled={!effectiveReceiveId} onClick={() => setReceiveConfirmOpen(true)}>Terima di Gudang Tujuan</Button>
+          </div>
+          <ConfirmDialog
+            open={receiveConfirmOpen}
+            title="Terima transfer?"
+            description={`Stok gudang tujuan akan bertambah untuk transfer #${effectiveReceiveId}. Pastikan barang sudah tiba.`}
+            confirmLabel="Terima"
+            variant="success"
+            loading={receiveBusy}
+            onConfirm={receiveTransfer}
+            onCancel={() => setReceiveConfirmOpen(false)}
+          />
+        </div>
+        </>      )}
 
       {tab === "adjustment" && (
         <form onSubmit={submitAdjustment} className="space-y-3 rounded-xl border bg-white p-4">

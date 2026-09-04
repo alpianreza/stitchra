@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import ValuationBoundaryPanel from "./valuation-boundary-panel";
+import { Button, ConfirmDialog } from "@/components/ui";
 
 interface Coa { id: number; code: string; name: string; type: string }
 interface JLine { coa_id: string; debit: string; credit: string; memo: string }
@@ -25,6 +26,9 @@ export default function JournalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reversing, setReversing] = useState(false);
+  const [reverseReason, setReverseReason] = useState("");
 
   useEffect(() => {
     api.get<{ data: Coa[] }>("/master/chart-of-accounts?per_page=500").then((r) => setCoas(r.data)).catch((e) => setError(e.message));
@@ -71,6 +75,19 @@ export default function JournalsPage() {
     catch (err: any) { setError(err.message); }
   }
 
+  async function reverseJournal() {
+    if (!journalId) return;
+    setReversing(true); setError(null); setSuccess(null);
+    try {
+      await api.post(`/finance/journals/${journalId}/reverse`, reverseReason ? { reason: reverseReason } : {});
+      setSuccess(`Jurnal #${journalId} berhasil direversal - jurnal balik terposting immutable.`);
+      setReverseOpen(false); setReverseReason("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal reversal jurnal");
+      setReverseOpen(false);
+    } finally { setReversing(false); }
+  }
+
   const input = "w-full rounded border px-2 py-1.5 text-sm";
   const fmt = (n: number) => new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2 }).format(n);
   const tone = (status: string) => status === "DEFINED" ? "text-green-700" : status === "BLOCKED" ? "text-red-700" : "text-amber-700";
@@ -89,8 +106,24 @@ export default function JournalsPage() {
           <button type="button" disabled={!grId} onClick={postGr} className="rounded bg-slate-900 px-4 py-1.5 text-sm text-white disabled:opacity-50">Post GR to GL</button>
           <label className="text-sm"><span className="block">Journal ID</span><input type="number" min="1" value={journalId} onChange={(e) => setJournalId(e.target.value)} className={input} /></label>
           <button type="button" disabled={!journalId} onClick={loadLineage} className="rounded border px-4 py-1.5 text-sm disabled:opacity-50">Load lineage</button>
+          <Button size="sm" variant="danger" disabled={!journalId} onClick={() => setReverseOpen(true)}>Reverse Jurnal</Button>
         </div>
         {lineage && <pre className="mt-3 max-h-80 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(lineage, null, 2)}</pre>}
+        <ConfirmDialog
+          open={reverseOpen}
+          title="Reverse jurnal?"
+          description={`Jurnal #${journalId} akan dibuat jurnal baliknya (immutable, teraudit). Jurnal costing/shipment harus lewat Accounting Correction dan akan ditolak sistem.`}
+          confirmLabel="Reverse"
+          variant="danger"
+          loading={reversing}
+          onConfirm={reverseJournal}
+          onCancel={() => setReverseOpen(false)}
+        >
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Alasan (opsional)</span>
+            <textarea value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} maxLength={1000} rows={2} className="w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+        </ConfirmDialog>
       </section>
 
       {authority && <section className="rounded-xl border bg-white p-4">

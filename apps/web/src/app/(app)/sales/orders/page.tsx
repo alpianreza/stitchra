@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import {
+  Button,
+  ConfirmDialog,
   DataTable,
   FilterBar,
   FilterSelect,
@@ -26,11 +28,36 @@ interface Page { data: So[]; total: number }
 
 const STATUSES = ["DRAFT", "SUBMITTED", "APPROVED", "CONFIRMED", "IN_PROGRESS", "CLOSED"];
 
+type SoAction = "submit" | "confirm";
+
+const ACTION_META: Record<SoAction, {
+  title: string;
+  description: (so: So) => string;
+  confirmLabel: string;
+  variant: "primary" | "success";
+}> = {
+  submit: {
+    title: "Ajukan Sales Order?",
+    description: (so) => `Sales order ${so.doc_no} akan berstatus SUBMITTED dan menunggu persetujuan.`,
+    confirmLabel: "Ajukan",
+    variant: "primary",
+  },
+  confirm: {
+    title: "Konfirmasi Sales Order?",
+    description: (so) => `Sales order ${so.doc_no} akan dikonfirmasi dan statusnya menjadi CONFIRMED.`,
+    confirmLabel: "Konfirmasi",
+    variant: "success",
+  },
+};
+
 export default function SalesOrdersPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<{ so: So; action: SoAction } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -43,6 +70,36 @@ export default function SalesOrdersPage() {
 
   useEffect(load, [load]);
 
+  const openAction = (so: So, action: SoAction) => {
+    setActionError(null);
+    setPendingAction({ so, action });
+  };
+
+  const runAction = useCallback(async () => {
+    if (!pendingAction) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.post(`/sales/orders/${pendingAction.so.id}/${pendingAction.action}`, {});
+      setPendingAction(null);
+      load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [pendingAction, load]);
+
+  const renderActions = (so: So) => {
+    if (so.status === "DRAFT") {
+      return <Button size="sm" onClick={() => openAction(so, "submit")} disabled={busy}>Ajukan</Button>;
+    }
+    if (so.status === "SUBMITTED") {
+      return <Button size="sm" variant="success" onClick={() => openAction(so, "confirm")} disabled={busy}>Konfirmasi</Button>;
+    }
+    return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
+  };
+
   const columns: DataTableColumn<So>[] = [
     { key: "doc_no", header: "No. SO", cell: (so) => <span className="font-mono font-semibold">{so.doc_no}</span> },
     { key: "customer", header: "Customer", cell: (so) => so.customer?.name ?? "—" },
@@ -50,6 +107,7 @@ export default function SalesOrdersPage() {
     { key: "ex_factory", header: "Ex-Factory", cell: (so) => so.ex_factory_date ?? "—" },
     { key: "lines", header: "Lines", align: "right", className: "tabular-nums", cell: (so) => so.lines_count ?? "—" },
     { key: "status", header: "Status", cell: (so) => <StatusBadge status={so.status} /> },
+    { key: "actions", header: "Aksi", align: "right", cell: renderActions },
   ];
 
   return (
@@ -103,9 +161,34 @@ export default function SalesOrdersPage() {
               <div><dt className="text-[var(--color-text-muted)]">Order</dt><dd className="mt-0.5 font-medium">{so.order_date}</dd></div>
               <div><dt className="text-[var(--color-text-muted)]">Ex-Factory</dt><dd className="mt-0.5 font-medium">{so.ex_factory_date ?? "—"}</dd></div>
             </dl>
+            {(so.status === "DRAFT" || so.status === "SUBMITTED") && (
+              <div className="flex justify-end gap-1.5">{renderActions(so)}</div>
+            )}
           </article>
         )}
       />
+
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction ? ACTION_META[pendingAction.action].title : ""}
+        description={pendingAction ? ACTION_META[pendingAction.action].description(pendingAction.so) : ""}
+        confirmLabel={pendingAction ? ACTION_META[pendingAction.action].confirmLabel : "OK"}
+        variant={pendingAction ? ACTION_META[pendingAction.action].variant : "primary"}
+        loading={busy}
+        onConfirm={runAction}
+        onCancel={() => {
+          if (!busy) {
+            setPendingAction(null);
+            setActionError(null);
+          }
+        }}
+      >
+        {actionError && (
+          <p role="alert" className="rounded-[var(--radius-surface)] border border-[var(--color-danger-soft-border)] bg-[var(--color-danger-soft)] p-3 text-sm text-[var(--color-danger)]">
+            {actionError}
+          </p>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

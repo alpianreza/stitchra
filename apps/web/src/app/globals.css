@@ -1,13 +1,47 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
+/* ---------------------------------------------------------------------------
+   Stitchra Design Tokens (Tailwind v4 CSS-first config)
+   - Palet semantik light theme (primary/success/warning/danger/info + soft)
+   - Skala tipografi eksplisit 12/13/14/17/20/24 dengan leading proporsional
+   - Elevasi bertingkat (shadow token) & radius konsisten
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Tipografi — skala UI padat, leading proporsional 1.45 → 1.2 */
+  --text-xs: 0.75rem; /* 12px */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.8125rem; /* 13px */
+  --text-sm--line-height: 1.4;
+  --text-base: 0.875rem; /* 14px — basis UI */
+  --text-base--line-height: 1.35;
+  --text-lg: 1.0625rem; /* 17px */
+  --text-lg--line-height: 1.3;
+  --text-xl: 1.25rem; /* 20px */
+  --text-xl--line-height: 1.25;
+  --text-2xl: 1.5rem; /* 24px */
+  --text-2xl--line-height: 1.2;
 
-  --color-background: #f8fafc;
+  /* Elevasi bertingkat */
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-md: 0 2px 4px rgb(15 23 42 / 0.05), 0 6px 16px rgb(15 23 42 / 0.08);
+  --shadow-lg: 0 8px 20px rgb(15 23 42 / 0.1), 0 20px 44px rgb(15 23 42 / 0.12);
+
+  /* Alias semantik (dipakai komponen & halaman via shadow-[var(--…)]) */
+  --shadow-raised: var(--shadow-sm);
+  --shadow-overlay: var(--shadow-lg);
+
+  /* Radius konsisten */
+  --radius-control: 0.375rem; /* kontrol: input, button, select */
+  --radius-surface: 0.5rem; /* permukaan: card, panel, modal */
+  --radius-pill: 999px; /* chip / badge */
+
+  /* Warna semantik — light theme */
+  --color-background: #f6f7f9; /* sedikit lebih gelap — kartu putih lebih kontras */
   --color-surface: #ffffff;
   --color-surface-subtle: #f1f5f9;
-  --color-border: #cbd5e1;
-  --color-border-subtle: #e2e8f0;
+  --color-border: #cfd6e1; /* sedikit lebih lembut dari slate-300 */
+  --color-border-subtle: #e5eaf1;
   --color-text: #0f172a;
   --color-text-muted: #64748b;
   --color-primary: #1d4ed8;
@@ -22,11 +56,28 @@
   --color-info: #0369a1;
   --color-info-soft: #e0f2fe;
   --color-focus: #2563eb;
+  --color-overlay: rgb(15 23 42 / 0.55);
 
-  --radius-control: 0.375rem;
-  --radius-surface: 0.5rem;
-  --shadow-raised: 0 1px 2px rgb(15 23 42 / 0.06);
-  --shadow-overlay: 0 16px 40px rgb(15 23 42 / 0.16);
+  /* Tepi untuk varian "soft" (badge/chip) — pasangan dari token *-soft */
+  --color-primary-soft-border: #93c5fd;
+  --color-success-soft-border: #86efac;
+  --color-warning-soft-border: #fcd34d;
+  --color-danger-soft-border: #fca5a5;
+  --color-info-soft-border: #7dd3fc;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Token runtime — dideklarasikan langsung di :root (CSS murni) agar selalu
+     tersedia via var(), tanpa bergantung pada emisi variabel @theme yang hanya
+     terjadi bila utility-nya terpakai.
+     Catatan: --radius-lg menimpa default Tailwind, sehingga util rounded-lg
+     (default 0.5rem) ikut menjadi 0.75rem. */
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --radius-lg: 0.75rem; /* permukaan besar: modal, drawer, panel utama */
+  --shadow-flat: 0 0 0 1px rgb(15 23 42 / 0.04); /* elevasi nol — cukup garis halus */
 }
 
 * {
@@ -41,10 +92,14 @@ body {
   margin: 0;
   background: var(--color-background);
   color: var(--color-text);
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 0.875rem;
+  /* Inter (next/font) menimpa --font-sans di <body>; stack system di :root
+     berlaku sebagai fallback bila font tidak tersedia. */
+  font-family: var(--font-sans);
+  font-size: var(--text-base); /* 14px — basis UI */
   line-height: 1.5;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -59,9 +114,11 @@ button:not(:disabled),
   cursor: pointer;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
 }
 
 ::selection {

@@ -4,10 +4,10 @@ type MetricTone = "neutral" | "info" | "warning" | "danger" | "success";
 
 const toneClasses: Record<MetricTone, string> = {
   neutral: "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
-  info: "border-sky-200 bg-[var(--color-info-soft)]/30",
-  warning: "border-amber-300 bg-[var(--color-warning-soft)]/30",
-  danger: "border-red-300 bg-[var(--color-danger-soft)]/30",
-  success: "border-green-300 bg-[var(--color-success-soft)]/30",
+  info: "border-[var(--color-info-soft-border)] bg-[var(--color-info-soft)]/30",
+  warning: "border-[var(--color-warning-soft-border)] bg-[var(--color-warning-soft)]/30",
+  danger: "border-[var(--color-danger-soft-border)] bg-[var(--color-danger-soft)]/30",
+  success: "border-[var(--color-success-soft-border)] bg-[var(--color-success-soft)]/30",
 };
 
 const valueClasses: Record<MetricTone, string> = {
