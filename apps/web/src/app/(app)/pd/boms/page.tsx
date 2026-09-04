@@ -33,6 +33,8 @@ export default function BomEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadId, setLoadId] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     api.get<{ data: Style[] }>("/master/styles?per_page=200").then((r) => setStyles(r.data)).catch(() => {});
@@ -41,6 +43,35 @@ export default function BomEditorPage() {
     api.get<{ data: Colorway[] }>("/master/colorways?per_page=500").then((r) => setColorways(r.data)).catch(() => {});
   }, []);
 
+  async function loadBom() {
+    if (!loadId) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      const v = await api.get<BomVersion & { style_id?: number; lines?: Array<Record<string, unknown>> }>(`/pd/boms/${loadId}`);
+      const loaded: Line[] = (v.lines ?? []).map((raw) => {
+        const l = raw as Record<string, unknown>;
+        return {
+          material_id: String(l.material_id ?? ""),
+          uom_id: String(l.uom_id ?? ""),
+          qty_per_pcs: String(l.qty_per_pcs ?? "0"),
+          wastage_pct: String(l.wastage_pct ?? "0"),
+          shrinkage_pct: String(l.shrinkage_pct ?? "0"),
+          consumption_estimated: l.consumption_estimated === null || l.consumption_estimated === undefined ? "" : String(l.consumption_estimated),
+          is_backflush: Boolean(l.is_backflush),
+          backflush_stage: String(l.backflush_stage ?? ""),
+          colorway_id: l.colorway_id === null || l.colorway_id === undefined ? "" : String(l.colorway_id),
+        };
+      });
+      if (v.style_id) setStyleId(String(v.style_id));
+      setLines(loaded.length > 0 ? loaded : [blank()]);
+      setCreated(null);
+      setEditingId(v.id);
+      setMessage(`BOM #${v.id} (v${v.version_no}, ${v.status}) dimuat. Simpan perubahan lalu submit ke approval.`);
+      setLoadId("");
+    } catch (x) {
+      setError(x instanceof Error ? x.message : "Gagal memuat BOM");
+    } finally { setBusy(false); }
+  }
   function setLine(i: number, k: keyof Line, v: string | boolean) {
     setLines((prev) =>
       prev.map((row, idx) => {
@@ -56,27 +87,30 @@ export default function BomEditorPage() {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const v = await api.post<BomVersion>("/pd/boms", {
-        style_id: Number(styleId),
-        lines: lines.map((l) => ({
-          material_id: Number(l.material_id),
-          uom_id: Number(l.uom_id),
-          qty_per_pcs: Number(l.qty_per_pcs),
-          wastage_pct: Number(l.wastage_pct) || 0,
-          shrinkage_pct: Number(l.shrinkage_pct) || 0,
-          consumption_estimated: l.consumption_estimated ? Number(l.consumption_estimated) : undefined,
-          is_backflush: l.is_backflush,
-          backflush_stage: l.is_backflush ? l.backflush_stage : undefined,
-          colorway_id: l.colorway_id ? Number(l.colorway_id) : undefined,
-        })),
-      });
-      setCreated(v);
-      setMessage(`BOM v${v.version_no} dibuat.`);
+      const payloadLines = lines.map((l) => ({
+        material_id: Number(l.material_id),
+        uom_id: Number(l.uom_id),
+        qty_per_pcs: Number(l.qty_per_pcs),
+        wastage_pct: Number(l.wastage_pct) || 0,
+        shrinkage_pct: Number(l.shrinkage_pct) || 0,
+        consumption_estimated: l.consumption_estimated ? Number(l.consumption_estimated) : undefined,
+        is_backflush: l.is_backflush,
+        backflush_stage: l.is_backflush ? l.backflush_stage : undefined,
+        colorway_id: l.colorway_id ? Number(l.colorway_id) : undefined,
+      }));
+      if (editingId !== null) {
+        const v = await api.put<BomVersion>(`/pd/boms/${editingId}`, { lines: payloadLines });
+        setCreated(v);
+        setMessage(`BOM v${v.version_no} diperbarui (DRAFT).`);
+      } else {
+        const v = await api.post<BomVersion>("/pd/boms", { style_id: Number(styleId), lines: payloadLines });
+        setCreated(v);
+        setMessage(`BOM v${v.version_no} dibuat.`);
+      }
     } catch (x) {
       setError(x instanceof Error ? x.message : "Gagal menyimpan BOM");
     } finally { setBusy(false); }
   }
-
   async function submit() {
     if (!created) return;
     setBusy(true); setError(null);
@@ -110,6 +144,13 @@ export default function BomEditorPage() {
         </p>
       )}
 
+      <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius-surface)] border bg-white p-3 shadow-[var(--shadow-raised)]">
+        <label className="text-sm">
+          <span className="mb-1 block font-medium">Muat BOM existing (ID)</span>
+          <Input type="number" min="1" value={loadId} onChange={(e) => setLoadId(e.target.value)} placeholder="mis. 3" className="w-40" />
+        </label>
+        <Button type="button" variant="secondary" loading={busy} disabled={!loadId} onClick={loadBom}>Muat & Edit</Button>
+      </div>
       <div className="rounded-[var(--radius-surface)] border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
         <b>BR-066:</b> ACTUAL/BACKFLUSH exclusive per material; fabric wajib ACTUAL; BACKFLUSH wajib satu Named Stage.
       </div>
@@ -117,7 +158,7 @@ export default function BomEditorPage() {
       <form onSubmit={save} className="space-y-4 rounded-[var(--radius-surface)] border bg-white p-4 shadow-[var(--shadow-raised)]">
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Style *</span>
-          <Select value={styleId} onChange={(e) => setStyleId(e.target.value)} required disabled={!!created} className={cls}>
+          <Select value={styleId} onChange={(e) => setStyleId(e.target.value)} required disabled={!!created || editingId !== null} className={cls}>
             <option value="">- pilih style -</option>
             {styles.map((s) => (
               <option key={s.id} value={s.id}>{s.style_no}</option>
@@ -152,7 +193,7 @@ export default function BomEditorPage() {
               {lines.map((l, i) => (
                 <tr key={i} className="border-b align-top last:border-0">
                   <td className="py-2 pr-2">
-                    <Select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)} required disabled={!!created} className={cls}>
+                    <Select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)} required disabled={!!created || editingId !== null} className={cls}>
                       <option value="">-</option>
                       {materials.map((m) => (
                         <option key={m.id} value={m.id}>{m.code} - {m.name} ({m.type})</option>
@@ -225,7 +266,12 @@ export default function BomEditorPage() {
           </table>
         </div>
 
-        {!created ? (
+        {editingId !== null ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-[var(--color-text-muted)]">Mode edit BOM #{editingId} - simpan perubahan lalu submit ke approval.</span>
+            <Button type="button" variant="ghost" onClick={() => { setEditingId(null); setCreated(null); setLines([blank()]); }}>Keluar mode edit</Button>
+          </div>
+        ) : !created ? (
           <Button type="submit" loading={busy} disabled={busy || !styleId}>Simpan Versi BOM</Button>
         ) : (
           <div className="flex flex-wrap items-center gap-3">

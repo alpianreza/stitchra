@@ -27,6 +27,8 @@ interface MoDetail {
 interface Warehouse { id: number; code: string; name: string; type: string }
 interface Roll { id: number; roll_no: string; qty_remaining_meter: string; lot_no: string | null }
 interface IssueInput { qty: string; roll_id: string }
+interface IssueLine { id: number; material_id?: number; qty?: string; material?: { code: string; name: string } | null; roll?: { id: number; roll_no: string } | null }
+interface IssueRow { id: number; doc_no: string; mode: string; status: string; lines?: IssueLine[] }
 
 /** Detail MO: snapshot BOM/Routing, alokasi material, release/unrelease (BR-060), issue material (BR-041) */
 export default function MoDetailPage() {
@@ -43,6 +45,11 @@ export default function MoDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showUnreleaseConfirm, setShowUnreleaseConfirm] = useState(false);
+  const [issues, setIssues] = useState<IssueRow[] | null>(null);
+  const [returnRollId, setReturnRollId] = useState("");
+  const [returnWarehouseId, setReturnWarehouseId] = useState("");
+  const [returnQty, setReturnQty] = useState("");
+  const [returnReason, setReturnReason] = useState("");
 
   function load() {
     api.get<MoDetail>(`/production/orders/${id}`).then(setMo).catch((e) => setError(e.message));
@@ -53,6 +60,7 @@ export default function MoDetailPage() {
     api.get<{ data: Warehouse[] }>("/master/warehouses?per_page=100")
       .then((r) => setWarehouses(r.data.filter((w) => w.type === "RM")))
       .catch(() => {});
+    loadIssues();
   }, [id]);
 
   // Ambil roll RELEASED untuk material fabric yang dialokasikan
@@ -123,12 +131,36 @@ export default function MoDetailPage() {
       });
       setMessage(`Material issue ${res.doc_no} diposting (BR-041/060).`);
       setIssueInputs({});
+      loadIssues();
       load();
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  function loadIssues() {
+    api.get<IssueRow[]>(`/production/orders/${id}/issues`)
+      .then((r) => setIssues(Array.isArray(r) ? r : []))
+      .catch(() => setIssues([]));
+  }
+
+  async function submitReturn() {
+    if (!returnRollId || !returnWarehouseId) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      await api.post(`/production/orders/${id}/rolls/${returnRollId}/return`, {
+        warehouse_id: Number(returnWarehouseId),
+        qty: returnQty ? Number(returnQty) : undefined,
+        reason: returnReason || undefined,
+      });
+      setMessage("Sisa roll dikembalikan ke gudang (leftover BR-041).");
+      setReturnRollId(""); setReturnQty(""); setReturnReason("");
+      loadIssues();
+    } catch (e: any) {
+      setError(e.message);
+    } finally { setBusy(false); }
   }
 
   if (error && !mo) return <p className="text-red-600">{error}</p>;
@@ -139,6 +171,12 @@ export default function MoDetailPage() {
   const allocations = mo.material_allocations ?? [];
   const reservedMaterialCount = allocations.filter((allocation) => Number(allocation.qty_reserved) > Number(allocation.qty_issued)).length;
   const totalRemainingReservation = allocations.reduce((total, allocation) => total + Math.max(0, Number(allocation.qty_reserved) - Number(allocation.qty_issued)), 0);
+  const returnableRolls = Array.from(
+    new Map(
+      (issues ?? [])
+        .flatMap((iss) => (iss.lines ?? []).filter((l) => l.roll).map((l) => [l.roll!.id, { rollId: l.roll!.id, rollNo: l.roll!.roll_no }]))
+    ).entries()
+  ).map(([, v]) => v);
 
   return (
     <div className="space-y-4">
@@ -306,6 +344,50 @@ export default function MoDetailPage() {
           <p className="mt-2 text-xs text-slate-500">
             BR-041: fabric wajib pilih roll (aktual terukur); trim backflush tidak perlu issue manual. BR-060: issue ≤ sisa reservasi.
           </p>
+        )}
+      </section>
+
+      <section className="overflow-x-auto rounded-xl border bg-white p-4">
+        <h2 className="mb-2 font-semibold">Riwayat Material Issue</h2>
+        <table className="w-full min-w-[700px] text-sm">
+          <thead className="border-b text-left text-xs text-slate-500">
+            <tr><th className="py-1">Doc</th><th className="py-1">Mode</th><th className="py-1">Status</th><th className="py-1">Lines</th></tr>
+          </thead>
+          <tbody>
+            {(issues ?? []).map((iss) => (
+              <tr key={iss.id} className="border-b last:border-0">
+                <td className="py-1.5 font-mono">{iss.doc_no}</td>
+                <td className="py-1.5">{iss.mode}</td>
+                <td className="py-1.5"><span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{iss.status}</span></td>
+                <td className="py-1.5">
+                  {(iss.lines ?? []).map((l) => (
+                    <div key={l.id}>{l.material?.code ?? l.material_id} - qty {l.qty ?? "?"}{l.roll ? ` (roll ${l.roll.roll_no})` : ""}</div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+            {issues && issues.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-slate-500">Belum ada issue.</td></tr>}
+          </tbody>
+        </table>
+
+        {canIssue && (
+          <div className="mt-4 rounded-lg border bg-slate-50 p-3">
+            <h3 className="text-sm font-semibold">Return sisa roll (leftover)</h3>
+            <div className="mt-2 grid gap-2 sm:grid-cols-5">
+              <select value={returnRollId} onChange={(e) => setReturnRollId(e.target.value)} className="rounded border px-2 py-1.5 text-sm" aria-label="Roll">
+                <option value="">Roll *</option>
+                {returnableRolls.map((r) => <option key={r.rollId} value={r.rollId}>{r.rollNo}</option>)}
+              </select>
+              <select value={returnWarehouseId} onChange={(e) => setReturnWarehouseId(e.target.value)} className="rounded border px-2 py-1.5 text-sm" aria-label="Gudang tujuan">
+                <option value="">Gudang tujuan *</option>
+                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code}</option>)}
+              </select>
+              <input type="number" step="any" min="0" value={returnQty} onChange={(e) => setReturnQty(e.target.value)} placeholder="Qty (kosong = semua)" className="rounded border px-2 py-1.5 text-sm" aria-label="Qty return" />
+              <input value={returnReason} onChange={(e) => setReturnReason(e.target.value)} placeholder="Alasan (opsional)" className="rounded border px-2 py-1.5 text-sm" aria-label="Alasan return" />
+              <button onClick={submitReturn} disabled={!returnRollId || !returnWarehouseId || busy} className="rounded bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">Return Roll</button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Roll diambil dari riwayat issue MO ini. Qty kosong = kembalikan seluruh sisa roll.</p>
+          </div>
         )}
       </section>
 

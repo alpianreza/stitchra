@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
 import { masterEntities } from "@/lib/masterMeta";
 import { Button, ConfirmDialog, Input, PageHeader } from "@/components/ui";
 
@@ -26,6 +26,9 @@ export default function MasterEntityPage() {
   const [q, setQ] = useState("");
   const [deleting, setDeleting] = useState<Record<string, any> | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   function load(search = q) {
     api.get<Page>(`/master/${entity}${search ? `?q=${encodeURIComponent(search)}` : ""}`)
@@ -97,6 +100,24 @@ export default function MasterEntityPage() {
     }
   }
 
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setError(null); setMessage(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const job = await apiUpload<{ total_rows?: number; success_rows?: number; failed_rows?: number }>(`/master/${entity}/import`, form);
+      setMessage(`Import selesai: ${job.success_rows ?? 0} sukses, ${job.failed_rows ?? 0} gagal dari ${job.total_rows ?? 0} baris.`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import gagal");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -108,9 +129,17 @@ export default function MasterEntityPage() {
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari kode/nama..." className="w-56" />
             </form>
             <Button size="sm" onClick={openCreate}>+ Tambah</Button>
+            <Button size="sm" variant="secondary" loading={importing} onClick={() => fileRef.current?.click()}>Import CSV</Button>
+            <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={onImportFile} aria-label="Pilih file CSV" />
           </div>
         }
       />
+
+      {message && (
+        <p role="status" className="rounded-[var(--radius-surface)] bg-[var(--color-success-soft)] p-3 text-sm text-[var(--color-success)]">
+          {message}
+        </p>
+      )}
 
       {error && (
         <div role="alert" className="rounded-[var(--radius-surface)] border border-[var(--color-danger-soft)] bg-[var(--color-danger-soft)]/40 p-3 text-sm text-[var(--color-danger)]">

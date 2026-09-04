@@ -36,3 +36,24 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
+
+/**
+ * Upload multipart (mis. import CSV master). Headers auth tanpa Content-Type
+ * agar browser men-set multipart boundary otomatis.
+ */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const h: Record<string, string> = { Accept: "application/json" };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("stitchra_token");
+    if (token) h["Authorization"] = `Bearer ${token}`;
+    const companyId = localStorage.getItem("stitchra_company");
+    if (companyId) h["X-Company-Id"] = companyId;
+  }
+  const res = await fetch(`${API_URL}/api${path}`, { method: "POST", headers: h, body: form });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try { const data = await res.json(); message = data.message ?? message; } catch {}
+    throw new Error(message);
+  }
+  return res.status === 204 ? (undefined as T) : res.json();
+}
