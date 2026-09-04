@@ -3,9 +3,11 @@
 namespace Modules\MasterData\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Core\Models\Factory;
 use Modules\Planning\Models\LineLoading;
 use Modules\Planning\Models\ProductionPlan;
 
@@ -21,6 +23,11 @@ class Line extends Model
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
+    }
+
+    public function factory(): BelongsTo
+    {
+        return $this->belongsTo(Factory::class);
     }
 
     public function machines(): HasMany

@@ -7,14 +7,28 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 use Modules\Core\Support\CurrentCompany;
+use Modules\MasterData\Models\Line;
 use Modules\Planning\Models\LineLoading;
 use Modules\Planning\Models\ProductionPlan;
 use Modules\Planning\Services\ProductionPlanningService;
+use Modules\Production\Models\ProductionOrder;
+use Modules\Sales\Models\SalesOrder;
 use RuntimeException;
 
 class ProductionPlanningController extends Controller
 {
     public function __construct(private ProductionPlanningService $service) {}
+
+    public function options(Request $request): JsonResponse
+    {
+        return response()->json([
+            'sales_orders' => SalesOrder::with(['customer', 'lines.style'])
+                ->where('status', 'CONFIRMED')->orderByDesc('id')->limit(100)->get(),
+            'lines' => Line::with('factory')->where('is_active', true)->orderBy('code')->get(),
+            'production_orders' => ProductionOrder::with(['style', 'salesOrder'])
+                ->where('status', 'PLANNED')->orderByDesc('id')->limit(200)->get(),
+        ]);
+    }
 
     public function index(Request $request): JsonResponse
     {

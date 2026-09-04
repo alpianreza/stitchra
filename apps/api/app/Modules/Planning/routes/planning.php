@@ -14,6 +14,7 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::post('planning/mrp-runs/{mrpRun}/convert-to-pr', [MrpController::class, 'convertToPr'])
         ->middleware(['permission:planning.mrp.execute', 'permission:purchasing.pr.create']);
 
+    Route::get('planning/production-plans/options', [ProductionPlanningController::class, 'options'])->middleware('permission:planning.production.view');
     Route::get('planning/line-loading/capacity', [ProductionPlanningController::class, 'capacity'])->middleware('permission:planning.production.view');
     Route::get('planning/production-plans', [ProductionPlanningController::class, 'index'])->middleware('permission:planning.production.view');
     Route::post('planning/production-plans', [ProductionPlanningController::class, 'store'])->middleware('permission:planning.production.create');
