@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\Packing\Models\PackingList;
+use Modules\Sales\Models\DeliverySchedule;
 use Modules\Sales\Models\SalesOrder;
 
 /** BR-021: toleransi over/under per buyer; di luar batas butuh approval eksplisit */
@@ -18,30 +19,16 @@ class Shipment extends Model
     public const TOLERANCE_CHECKS = ['PENDING','OK','OVER','UNDER'];
 
     protected $fillable = [
-        'company_id', 'doc_no', 'sales_order_id', 'packing_list_id',
+        'company_id', 'doc_no', 'sales_order_id', 'packing_list_id', 'delivery_schedule_id',
         'ship_date', 'forwarder', 'booking_no', 'container_no', 'vessel_flight',
         'port_of_loading', 'port_of_discharge',
         'tolerance_check', 'over_tolerance_approved', 'status',
         'created_by', 'updated_by',
     ];
 
-    protected function casts(): array
-    {
-        return ['ship_date' => 'date', 'over_tolerance_approved' => 'boolean'];
-    }
-
-    public function salesOrder(): BelongsTo
-    {
-        return $this->belongsTo(SalesOrder::class);
-    }
-
-    public function packingList(): BelongsTo
-    {
-        return $this->belongsTo(PackingList::class);
-    }
-
-    public function lines(): HasMany
-    {
-        return $this->hasMany(ShipmentLine::class);
-    }
+    protected function casts(): array { return ['ship_date' => 'date', 'over_tolerance_approved' => 'boolean']; }
+    public function salesOrder(): BelongsTo { return $this->belongsTo(SalesOrder::class); }
+    public function packingList(): BelongsTo { return $this->belongsTo(PackingList::class); }
+    public function deliverySchedule(): BelongsTo { return $this->belongsTo(DeliverySchedule::class); }
+    public function lines(): HasMany { return $this->hasMany(ShipmentLine::class); }
 }
