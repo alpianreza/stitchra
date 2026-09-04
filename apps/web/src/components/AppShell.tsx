@@ -52,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/planning/mrp", label: "MRP", icon: "planning" },
       { href: "/planning/production-plans", label: "Production Plan & Line Loading", icon: "planning" },
+      { href: "/planning/cut-plans", label: "Cut Plan & Planned Lays", icon: "planning" },
     ],
   },
   {
