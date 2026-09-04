@@ -1,6 +1,6 @@
 # Iteration 26 — Commercial Invoice, Export Documents & Container
 
-Status: **IMPLEMENTED / STATIC READBACK PENDING / RUNTIME NOT RUN**
+Status: **IMPLEMENTED / STATIC READBACK PASS / RUNTIME NOT RUN**
 
 ## Scope
 - Add Shipment-scoped Container, Commercial Invoice, normalized CI lines, and Export Document evidence.
@@ -18,7 +18,7 @@ Status: **IMPLEMENTED / STATIC READBACK PENDING / RUNTIME NOT RUN**
 - All mutations use tenant checks, transactions, row locks, audit records, and existing permissions.
 
 ## Boundary
-Mandatory document combinations per country, destination, incoterm, buyer, or LC are not defined. No invented completeness blocker, customs workflow, carrier integration, or file binary storage was added. Shipment stock-out, valuation, COGS, tax, and GL authority remain unchanged.
+Mandatory document combinations per country, destination, incoterm, buyer, or LC are not defined. No invented completeness blocker, customs workflow, carrier integration, or file binary storage was added. Shipment stock-out, valuation, COGS, tax, and GL authority remain unchanged. Commercial Invoice issue uses the existing controlled submit permission; the two-level Shipping Manager → Finance approval matrix remains configuration/runtime evidence, not claimed as executed.
 
 ## Verification
-Static readback pending. Migration, Pest, TypeScript, Next build, API/E2E, approval-flow, and concurrency verification are NOT RUN.
+Static readback passed for migration, numbering, models, relations, service, controller, routes, Commercial Invoice → AR gate, authority read model, workbench, and navigation. Migration, Pest, TypeScript, Next build, API/E2E, approval-flow, and concurrency verification are NOT RUN.
