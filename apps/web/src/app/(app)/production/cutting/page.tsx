@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useState } from "react";
 import { api } from "@/lib/api";
-import { Button, ConfirmDialog, Input, PageHeader, Select, StatusBadge } from "@/components/ui";
+import { Button, ConfirmDialog, Input, PageHeader, StatusBadge } from "@/components/ui";
 
 type Lay = {
   id: number;
@@ -13,7 +14,6 @@ type Lay = {
   rolls?: Array<{ id: number; qty_used: string; shade_override: boolean; fabric_roll?: { roll_no: string; shade_group_id: number | null } }>;
   cut_outputs?: Array<{ id: number; qty_cut: string; cut_order_line?: { id: number; qty_cut: string }; bundles?: Array<{ bundle_no: string; qty: string }> }>;
 };
-type Mo = { id: number; doc_no: string };
 type FieldState = {
   layId: string; rollId: string; qty: string; lineId: string; outputQty: string;
   outputId: string; bundleSize: string; reason: string; overrideId: string; layers: string;
@@ -26,8 +26,6 @@ export default function CuttingExecutionPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [mos, setMos] = useState<Mo[]>([]);
-  const [fromMo, setFromMo] = useState("");
   const [completeOpen, setCompleteOpen] = useState(false);
   const [field, setField] = useState<FieldState>({
     layId: "", rollId: "", qty: "", lineId: "", outputQty: "", outputId: "",
@@ -35,10 +33,6 @@ export default function CuttingExecutionPage() {
   });
 
   const set = (k: keyof FieldState, v: string) => setField((x) => ({ ...x, [k]: v }));
-
-  useEffect(() => {
-    api.get<{ data: Mo[] }>("/production/orders?per_page=100").then((r) => setMos(r.data)).catch(() => {});
-  }, []);
 
   async function load() {
     if (!cutOrder) return;
@@ -59,26 +53,13 @@ export default function CuttingExecutionPage() {
       setMessage("Tersimpan");
       if (cutOrder) await load();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Gagal");
+      setError(e instanceof Error ? e.message : "Gagal");
     } finally { setBusy(false); }
   }
 
   function submit(e: FormEvent, fn: () => Promise<unknown>) {
     e.preventDefault();
     execute(fn);
-  }
-
-  async function createFromMo() {
-    if (!fromMo) return;
-    setBusy(true); setError(null);
-    try {
-      const r = await api.post<{ id: number; doc_no?: string }>(`/cutting/orders/from-mo/${fromMo}`, {});
-      setCutOrder(String(r.id));
-      setMessage(`Cut Order ${r.doc_no ?? `#${r.id}`} dibuat dari MO - Cut Order ID terisi otomatis.`);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal membuat cut order");
-    } finally { setBusy(false); }
   }
 
   async function completeCutOrder() {
@@ -104,22 +85,15 @@ export default function CuttingExecutionPage() {
       />
 
       <div className="rounded-[var(--radius-surface)] border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-        Alur: Lay Roll → Cut Output → Bundle. Tidak ada stock movement baru; consumption tetap memakai dispatch balance dan physical Fabric Roll.
+        Alur: Cut Plan → Cut Order → Lay Roll → Cut Output → Bundle. Tidak ada stock movement baru; consumption tetap memakai dispatch balance dan physical Fabric Roll.
       </div>
 
       <section className="rounded-[var(--radius-surface)] border bg-white p-4 shadow-[var(--shadow-raised)]">
-        <h2 className="font-semibold">Buat Cut Order dari Manufacturing Order</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Select value={fromMo} onChange={(e) => setFromMo(e.target.value)} className="w-80">
-            <option value="">- pilih MO -</option>
-            {mos.map((m) => (
-              <option key={m.id} value={m.id}>{m.doc_no}</option>
-            ))}
-          </Select>
-          <Button variant="success" loading={busy} disabled={!fromMo} onClick={createFromMo}>
-            Buat Cut Order
-          </Button>
-        </div>
+        <h2 className="font-semibold">Sumber Eksekusi Cutting</h2>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">Untuk eksekusi baru, susun planned lay dan size ratio lalu buat Cut Order dari workbench Cut Plan. Endpoint direct MO lama tetap dipertahankan hanya untuk kompatibilitas.</p>
+        <Link href="/planning/cut-plans" className="mt-3 inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">
+          Buka Cut Plan & Planned Lays
+        </Link>
       </section>
 
       <div className="rounded-[var(--radius-surface)] border bg-white p-4 shadow-[var(--shadow-raised)]">
