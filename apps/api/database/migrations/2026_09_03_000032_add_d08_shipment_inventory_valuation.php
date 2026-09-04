@@ -144,7 +144,7 @@ return new class extends Migration
             'SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
              FROM information_schema.COLUMNS
              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-             ORDER BY ORDINAL POSITION',
+             ORDER BY ORDINAL_POSITION',
             [$database, self::TABLE]
         );
 
