@@ -21,20 +21,22 @@ class CuttingService
             if ($lines === []) throw new RuntimeException('Cut order wajib punya minimal 1 line.');
             $locked = ProductionOrder::withoutGlobalScopes()->whereKey($mo->id)->lockForUpdate()->firstOrFail(); $this->access($user, (int) $locked->company_id);
             if (! in_array($locked->status, ['RELEASED', 'CUTTING'], true)) throw new RuntimeException('Status MO tidak mengizinkan cut order.');
+            $hasMoMatrix = DB::table('mo_lines')->where('production_order_id', $locked->id)->exists();
             $seen = [];
             foreach ($lines as $line) { $qty = (float) ($line['qty_cut'] ?? 0); if ($qty <= 0) throw new RuntimeException('Qty cut wajib lebih besar dari nol.');
                 $key = (int) $line['colorway_id'].':'.(int) $line['size_id']; if (isset($seen[$key])) throw new RuntimeException('Matrix cut order tidak boleh duplikat.'); $seen[$key] = true;
-                $ordered = (float) DB::table('sales_order_lines')->where('sales_order_id', $locked->sales_order_id)->where('style_id', $locked->style_id)
-                    ->where('colorway_id', $line['colorway_id'])->where('size_id', $line['size_id'])->sum('qty');
+                $ordered = $hasMoMatrix
+                    ? (float) DB::table('mo_lines')->where('production_order_id', $locked->id)->where('colorway_id', $line['colorway_id'])->where('size_id', $line['size_id'])->sum('qty_planned')
+                    : (float) DB::table('sales_order_lines')->where('sales_order_id', $locked->sales_order_id)->where('style_id', $locked->style_id)->where('colorway_id', $line['colorway_id'])->where('size_id', $line['size_id'])->sum('qty');
                 $cut = (float) DB::table('cut_order_lines')->join('cut_orders', 'cut_orders.id', '=', 'cut_order_lines.cut_order_id')
                     ->where('cut_orders.production_order_id', $locked->id)->where('cut_orders.status', '<>', 'CANCELLED')
                     ->where('cut_order_lines.colorway_id', $line['colorway_id'])->where('cut_order_lines.size_id', $line['size_id'])->sum('cut_order_lines.qty_cut');
-                if ($ordered <= 0 || $cut + $qty - $ordered > 0.0001) throw new RuntimeException('Qty cut melebihi matrix SO/MO.'); }
+                if ($ordered <= 0 || $cut + $qty - $ordered > 0.0001) throw new RuntimeException($hasMoMatrix ? 'Qty cut melebihi matrix MO.' : 'Qty cut melebihi legacy matrix SO.'); }
             $cutOrder = CutOrder::create(['company_id' => $locked->company_id, 'doc_no' => $this->numbering->next($locked->company_id, 'CUT'),
                 'production_order_id' => $locked->id, 'cut_date' => now()->toDateString(), 'status' => 'IN_PROGRESS', 'created_by' => $user->id]);
             foreach ($lines as $line) $cutOrder->lines()->create($line);
             if ($locked->status === 'RELEASED') $locked->update(['status' => 'CUTTING', 'actual_start' => now()->toDateString(), 'updated_by' => $user->id]);
-            $this->audit->record('create', $cutOrder, after: ['doc_no' => $cutOrder->doc_no, 'mo' => $locked->doc_no]); return $cutOrder->load('lines');
+            $this->audit->record('create', $cutOrder, after: ['doc_no' => $cutOrder->doc_no, 'mo' => $locked->doc_no, 'matrix_source' => $hasMoMatrix ? 'MO_LINES' : 'LEGACY_SO_LINES']); return $cutOrder->load('lines');
         });
     }
 

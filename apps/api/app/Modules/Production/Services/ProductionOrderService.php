@@ -26,17 +26,28 @@ class ProductionOrderService
             $this->access($creator, (int) $lockedSo->company_id);
             if ($lockedSo->status !== 'CONFIRMED') throw new RuntimeException('MO hanya bisa dibuat dari SO CONFIRMED (BR-023).');
             $mos = [];
-            foreach ($lockedSo->lines->groupBy('style_id')->map(fn ($rows) => $rows->sum(fn ($line) => (float) $line->qty)) as $styleId => $qty) {
+            foreach ($lockedSo->lines->groupBy('style_id') as $styleId => $matrixLines) {
                 if (ProductionOrder::withoutGlobalScopes()->where('company_id', $lockedSo->company_id)->where('sales_order_id', $lockedSo->id)->where('style_id', $styleId)->exists()) continue;
                 $bom = Bom::where('style_id', $styleId)->first()?->approvedVersion(); $routing = Routing::where('style_id', $styleId)->first()?->approvedVersion();
                 if (! $bom || ! $routing) throw new RuntimeException("Style #{$styleId} belum punya BOM/Routing APPROVED (BR-023).");
+                $qty = $matrixLines->sum(fn ($line) => (float) $line->qty);
+                if ($qty <= 0) throw new RuntimeException('BR-020: total matrix MO wajib lebih besar dari nol.');
                 $mo = ProductionOrder::create(['company_id' => $lockedSo->company_id, 'doc_no' => $this->numbering->next($lockedSo->company_id, 'MO'),
                     'sales_order_id' => $lockedSo->id, 'style_id' => $styleId, 'bom_version_id' => $bom->id,
                     'routing_version_id' => $routing->id, 'qty_planned' => $qty, 'status' => 'PLANNED', 'created_by' => $creator->id]);
+                foreach ($matrixLines as $sourceLine) {
+                    $mo->matrixLines()->create([
+                        'company_id' => $lockedSo->company_id,
+                        'sales_order_line_id' => $sourceLine->id,
+                        'colorway_id' => $sourceLine->colorway_id,
+                        'size_id' => $sourceLine->size_id,
+                        'qty_planned' => $sourceLine->qty,
+                    ]);
+                }
                 $mos[] = $this->costSnapshots->attachIfAvailable($mo);
             }
             if ($mos === []) throw new RuntimeException('Semua style di SO ini sudah punya MO.');
-            $this->audit->record('create', 'production_orders', documentId: (int) ($mos[0]->id ?? 0), companyId: (int) $lockedSo->company_id, after: ['sales_order' => $lockedSo->doc_no, 'mo_count' => count($mos)]);
+            $this->audit->record('create', 'production_orders', documentId: (int) ($mos[0]->id ?? 0), companyId: (int) $lockedSo->company_id, after: ['sales_order' => $lockedSo->doc_no, 'mo_count' => count($mos), 'matrix_source' => 'SALES_ORDER_LINES']);
             return $mos;
         });
     }
@@ -44,9 +55,10 @@ class ProductionOrderService
     public function release(ProductionOrder $mo, int $warehouseId, User $user): ProductionOrder
     {
         return DB::transaction(function () use ($mo, $warehouseId, $user): ProductionOrder {
-            $locked = ProductionOrder::withoutGlobalScopes()->with('bomVersion.lines.material')->whereKey($mo->id)->lockForUpdate()->firstOrFail();
+            $locked = ProductionOrder::withoutGlobalScopes()->with('bomVersion.lines.material', 'matrixLines')->whereKey($mo->id)->lockForUpdate()->firstOrFail();
             $this->access($user, (int) $locked->company_id);
             if ($locked->status !== 'PLANNED') throw new RuntimeException('Hanya MO PLANNED yang bisa di-release.');
+            if ($locked->matrixLines->isNotEmpty() && abs((float) $locked->matrixLines->sum('qty_planned') - (float) $locked->qty_planned) > 0.0001) throw new RuntimeException('BR-020: total matrix MO tidak sama dengan qty planned MO.');
             $locked = $this->costSnapshots->requireForRelease($locked)->load('bomVersion.lines.material');
             if (! DB::table('warehouses')->where('id', $warehouseId)->where('company_id', $locked->company_id)->exists()) throw new RuntimeException('Warehouse tidak ditemukan pada company MO.');
             if (StockReservation::withoutGlobalScopes()->where('mo_id', $locked->id)->whereIn('status', ['ACTIVE', 'PARTIAL_ISSUED'])->exists()) throw new RuntimeException('MO masih memiliki reservasi aktif.');

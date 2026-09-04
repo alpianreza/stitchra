@@ -22,7 +22,7 @@ class ProductionOrderController extends Controller
             'status' => ['nullable', Rule::in(ProductionOrder::STATUSES)],
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
-        $query = ProductionOrder::with('style', 'salesOrder', 'line');
+        $query = ProductionOrder::with('style', 'salesOrder', 'line')->withCount('matrixLines');
         if (! empty($filters['status'])) $query->where('status', $filters['status']);
         return response()->json($query->orderByDesc('id')->paginate($filters['per_page'] ?? 25));
     }
@@ -33,6 +33,45 @@ class ProductionOrderController extends Controller
             'style', 'salesOrder.customer', 'bomVersion.lines.material',
             'routingVersion.operations.operation', 'materialAllocations.material', 'line',
         ]));
+    }
+
+    public function matrix(Request $request, ProductionOrder $productionOrder): JsonResponse
+    {
+        $matrix = $productionOrder->matrixLines()
+            ->with(['colorway.color', 'size'])
+            ->orderBy('colorway_id')->orderBy('size_id')->get();
+
+        if ($matrix->isNotEmpty()) {
+            return response()->json([
+                'source' => 'MO_SNAPSHOT',
+                'qty_planned' => $productionOrder->qty_planned,
+                'matrix_total' => number_format((float) $matrix->sum('qty_planned'), 4, '.', ''),
+                'data' => $matrix,
+            ]);
+        }
+
+        $legacy = $productionOrder->salesOrder->lines()
+            ->where('style_id', $productionOrder->style_id)
+            ->with(['colorway.color', 'size'])
+            ->orderBy('colorway_id')->orderBy('size_id')->get()
+            ->map(fn ($line) => [
+                'id' => null,
+                'company_id' => $productionOrder->company_id,
+                'production_order_id' => $productionOrder->id,
+                'sales_order_line_id' => $line->id,
+                'colorway_id' => $line->colorway_id,
+                'size_id' => $line->size_id,
+                'qty_planned' => $line->qty,
+                'colorway' => $line->colorway,
+                'size' => $line->size,
+            ]);
+
+        return response()->json([
+            'source' => 'LEGACY_SO_FALLBACK',
+            'qty_planned' => $productionOrder->qty_planned,
+            'matrix_total' => number_format((float) $legacy->sum(fn ($line) => (float) $line['qty_planned']), 4, '.', ''),
+            'data' => $legacy,
+        ]);
     }
 
     public function createFromSo(Request $request, SalesOrder $salesOrder): JsonResponse
