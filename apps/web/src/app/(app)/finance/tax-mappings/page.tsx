@@ -27,7 +27,7 @@ export default function TaxMappingsPage() {
 
   useEffect(() => {
     loadTaxes();
-    api.get<{ data: Coa[] }>("/master/chart-of-accounts?per_page=500").then((r) => setCoas(r.data)).catch(() => {});
+    api.get<{ data: Coa[] }>("/master/chart-of-accounts?per_page=100").then((r) => setCoas(r.data)).catch(() => {});
   }, []);
 
   function loadTaxes() {

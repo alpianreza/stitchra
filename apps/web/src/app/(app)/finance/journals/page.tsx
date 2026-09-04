@@ -79,7 +79,7 @@ export default function JournalsPage() {
   const [reverseReason, setReverseReason] = useState("");
 
   useEffect(() => {
-    api.get<{ data: Coa[] }>("/master/chart-of-accounts?per_page=500").then((r) => setCoas(r.data)).catch((e) => setError(e.message));
+    api.get<{ data: Coa[] }>("/master/chart-of-accounts?per_page=100").then((r) => setCoas(r.data)).catch((e) => setError(e.message));
     api.get<Authority>("/finance/gl/operational-authority").then(setAuthority).catch(() => {});
   }, []);
 
@@ -160,7 +160,13 @@ export default function JournalsPage() {
       {success && <p role="status" className="rounded-[var(--radius-surface)] bg-[var(--color-success-soft)] p-3 text-sm text-[var(--color-success)]">{success}</p>}
 
       {tab === "manual" && (
-        <form onSubmit={save} className="space-y-4">
+          <>
+        <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-surface)] border bg-white p-3 text-sm">
+            <span className="font-medium">Mata uang jurnal:</span>
+            <span className="rounded-full bg-[var(--color-primary-soft)] px-3 py-0.5 text-xs font-bold text-[var(--color-primary)]">{authority?.company.base_currency ?? "IDR"} (default perusahaan)</span>
+            <span className="text-xs text-[var(--color-text-muted)]">GL mencatat dalam mata uang perusahaan. Transaksi dolar ditangani di dokumen sumber (SO/customer) dan pembayaran AR/AP dengan exchange rate.</span>
+          </div>
+          <form onSubmit={save} className="space-y-4">
           <section className="grid gap-3 rounded-[var(--radius-surface)] border bg-white p-4 shadow-[var(--shadow-raised)] md:grid-cols-3">
             <label className="text-sm"><span className="mb-1 block font-medium">Periode (YYYY-MM) *</span><input value={period} onChange={(e) => setPeriod(e.target.value)} required pattern="\d{4}-\d{2}" className={input} /></label>
             <label className="text-sm"><span className="mb-1 block font-medium">Tanggal</span><input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} className={input} /></label>
@@ -174,6 +180,7 @@ export default function JournalsPage() {
           </section>
           <Button type="submit" loading={saving} disabled={saving || !totals.balanced}>Posting Jurnal</Button>
         </form>
+          </>
       )}
 
       {tab === "posting" && (

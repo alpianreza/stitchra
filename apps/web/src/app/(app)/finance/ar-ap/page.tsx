@@ -56,6 +56,8 @@ function PaymentForm({ endpoint, label }: { endpoint: (invoiceId: string) => str
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
+  const [currency, setCurrency] = useState("IDR");
+  const [exchangeRate, setExchangeRate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -79,6 +81,17 @@ function PaymentForm({ endpoint, label }: { endpoint: (invoiceId: string) => str
 
   return (
     <div className="space-y-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">Mata uang:</span>
+        <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-32">
+          <option value="IDR">IDR - Rupiah (default)</option>
+          <option value="USD">USD - Dolar</option>
+        </Select>
+        {currency === "USD" && (
+          <Input type="number" step="any" min="0" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="Exchange rate ke IDR *" className="w-48" aria-label="Exchange rate" />
+        )}
+        {currency === "USD" && !exchangeRate && <span className="text-xs text-amber-700">USD wajib diisi exchange rate.</span>}
+      </div>
       <div className="grid gap-2 sm:grid-cols-5">
         <Input value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} placeholder={`ID ${label} *`} aria-label={`ID ${label}`} />
         <Input type="number" step="any" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount *" aria-label="Amount" />
@@ -88,7 +101,7 @@ function PaymentForm({ endpoint, label }: { endpoint: (invoiceId: string) => str
       </div>
       {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
       {done && <p role="status" className="text-sm text-[var(--color-success)]">{done}</p>}
-      <Button loading={busy} disabled={!invoiceId || !(Number(amount) > 0)} onClick={pay}>Catat Pembayaran</Button>
+      <Button loading={busy} disabled={!invoiceId || !(Number(amount) > 0) || (currency === "USD" && !exchangeRate)} onClick={pay}>Catat Pembayaran</Button>
     </div>
   );
 }
