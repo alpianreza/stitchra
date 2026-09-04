@@ -6,6 +6,7 @@ use Modules\Packing\Http\Controllers\PackingListController;
 use Modules\Qc\Http\Controllers\NcrController;
 use Modules\Qc\Http\Controllers\QcInspectionController;
 use Modules\Shipping\Http\Controllers\CommercialFulfillmentController;
+use Modules\Shipping\Http\Controllers\DeliveryScheduleController;
 use Modules\Shipping\Http\Controllers\ShipmentController;
 use Modules\Subcon\Http\Controllers\SubconOrderController;
 
@@ -32,6 +33,9 @@ Route::middleware(['auth:sanctum','company'])->group(function(){
     Route::post('packing/lists/{packingList}/finalize',[PackingInstructionController::class,'finalize'])->middleware('permission:packing.packinglist.submit');
     Route::get('packing/lists/{packingList}/lineage',[PackingListController::class,'lineage'])->middleware('permission:packing.packinglist.view');
     Route::get('packing/lists/{packingList}',[PackingListController::class,'show'])->middleware('permission:packing.packinglist.view');
+    Route::get('shipping/delivery-schedules',[DeliveryScheduleController::class,'index'])->middleware('permission:shipping.shipment.view');
+    Route::get('shipping/delivery-schedules/sales-orders',[DeliveryScheduleController::class,'salesOrders'])->middleware('permission:shipping.shipment.view');
+    Route::post('shipping/delivery-schedules/from-so/{salesOrder}',[DeliveryScheduleController::class,'store'])->middleware('permission:shipping.shipment.create');
     Route::get('shipping/commercial-fulfillment/authority',[CommercialFulfillmentController::class,'authority'])->middleware('permission:shipping.shipment.view');
     Route::get('shipping/commercial-fulfillment/sales-orders/{salesOrder}',[CommercialFulfillmentController::class,'salesOrder'])->middleware('permission:shipping.shipment.view');
     Route::get('shipping/eligible-fg',[ShipmentController::class,'eligibleFg'])->middleware('permission:shipping.shipment.view');
