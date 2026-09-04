@@ -5,252 +5,40 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 interface Opt { id: number; code: string; name: string }
-interface EligibleBundle {
-  bundle_no: string;
-  qty: number;
-  available_qty?: number;
-  production_order_id: number;
-  cut_output_id?: number | null;
-  source_wip_transfer_id?: number;
-  last_finishing_operation_id?: number | null;
-  last_finishing_direction?: string | null;
-  lineage_complete: boolean;
-}
+interface EligibleBundle { bundle_no:string;qty:number;available_qty?:number;production_order_id:number;cut_output_id?:number|null;source_wip_transfer_id?:number;last_finishing_operation_id?:number|null;last_finishing_direction?:string|null;lineage_complete:boolean }
+interface CompletionEligible { bundle_no:string;qty:number;production_order_id:number;source_scan_id:number;source_operation_id:number;scanned_at:string }
 interface Lineage {
-  bundle: { cut_output_id: number | null; current_stage: string };
-  sewing_inputs: unknown[];
-  sewing_outputs: unknown[];
-  wip_transfers: unknown[];
-  finishing_inputs: unknown[];
-  finishing_outputs: unknown[];
-  finishing_source: { id: number; qty: number } | null;
-  packing_boundary: {
-    finishing_output_available: boolean;
-    qc_final_pass_required: boolean;
-    qc_final_pass: boolean;
-    direct_bundle_to_carton_defined: boolean;
-    status: string;
-  };
+  bundle:{cut_output_id:number|null;current_stage:string};sewing_inputs:unknown[];sewing_outputs:unknown[];wip_transfers:unknown[];finishing_inputs:unknown[];finishing_outputs:unknown[];
+  finishing_completion:{id:number;qty:number;completed_at:string}|null;finishing_source:{id:number;qty:number}|null;
+  packing_boundary:{finishing_output_available:boolean;qc_final_pass_required:boolean;qc_final_pass:boolean;direct_bundle_to_carton_defined:boolean;status:string};
 }
+type ProductionStage="SEWING"|"FINISHING";
 
-type ProductionStage = "SEWING" | "FINISHING";
-
-export default function ScanStationPage() {
-  const searchParams = useSearchParams();
-  const requestedStage: ProductionStage = searchParams.get("stage") === "FINISHING" ? "FINISHING" : "SEWING";
-  const [operations, setOperations] = useState<Opt[]>([]);
-  const [lines, setLines] = useState<Opt[]>([]);
-  const [eligible, setEligible] = useState<EligibleBundle[]>([]);
-  const [operationId, setOperationId] = useState("");
-  const [lineId, setLineId] = useState("");
-  const [direction, setDirection] = useState<"IN" | "OUT">("IN");
-  const [stage, setStage] = useState<ProductionStage>(requestedStage);
-  const [bundleNo, setBundleNo] = useState("");
-  const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
-  const [recent, setRecent] = useState<string[]>([]);
-  const [lineage, setLineage] = useState<Lineage | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [defects, setDefects] = useState<{ id: number; code: string; name: string }[]>([]);
-  const [rework, setRework] = useState({ bundle_no: "", defect_id: "", qty: "", operation_id: "", notes: "" });
-  const [reworkRecord, setReworkRecord] = useState<{ id: number; bundle_no?: string; status?: string } | null>(null);
-  const [reworkBusy, setReworkBusy] = useState(false);
-
-  useEffect(() => {
-    api.get<{ data: { id: number; code: string; name: string }[] }>("/master/defect-library?per_page=200").then((r) => setDefects(r.data)).catch(() => {});
-  }, []);
-
-  const refreshEligible = (selectedStage = stage) => {
-    const endpoint = selectedStage === "FINISHING" ? "/shopfloor/finishing/eligible" : "/shopfloor/bundles/eligible";
-    return api.get<{ data: EligibleBundle[] }>(endpoint).then((response) => setEligible(response.data)).catch(() => {});
-  };
-
-  useEffect(() => {
-    api.get<{ data: Opt[] }>("/master/operations?per_page=100").then((r) => setOperations(r.data)).catch(() => {});
-    api.get<{ data: Opt[] }>("/master/lines?per_page=100").then((r) => setLines(r.data)).catch(() => {});
-    refreshEligible(requestedStage);
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    setStage(requestedStage);
-  }, [requestedStage]);
-
-  useEffect(() => {
-    setBundleNo("");
-    setLineage(null);
-    refreshEligible(stage);
-  }, [stage]);
-
-  async function inspect(no: string) {
-    setBundleNo(no);
-    try {
-      const response = await api.get<{ data: Lineage }>(`/shopfloor/bundles/${encodeURIComponent(no)}/lineage`);
-      setLineage(response.data);
-    } catch {
-      setLineage(null);
-    }
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!bundleNo.trim() || !operationId) return;
-    const scannedBundle = bundleNo.trim();
-
-    try {
-      await api.post("/shopfloor/scans", {
-        bundle_no: scannedBundle,
-        operation_id: Number(operationId),
-        direction,
-        stage,
-        line_id: lineId ? Number(lineId) : undefined,
-      });
-      setFeedback({ ok: true, message: `✔ ${scannedBundle} — ${stage} ${direction} tercatat` });
-      setRecent((items) => [`${scannedBundle} ${stage} ${direction}`, ...items].slice(0, 10));
-      await inspect(scannedBundle);
-      refreshEligible(stage);
-    } catch (error: any) {
-      setFeedback({ ok: false, message: `✘ ${error.message}` });
-    }
-
-    inputRef.current?.focus();
-  }
-
-  const selected = eligible.find((bundle) => bundle.bundle_no === bundleNo);
-
-  async function submitRework(e: React.FormEvent) {
-    e.preventDefault();
-    if (!rework.bundle_no.trim() || !rework.defect_id) return;
-    setReworkBusy(true);
-    try {
-      const r = await api.post<{ id: number; bundle_no?: string; status?: string }>("/shopfloor/rework", {
-        bundle_no: rework.bundle_no.trim(),
-        defect_id: Number(rework.defect_id),
-        qty: Number(rework.qty),
-        operation_id: rework.operation_id ? Number(rework.operation_id) : undefined,
-        notes: rework.notes || undefined,
-      });
-      setReworkRecord(r);
-      setRework({ bundle_no: "", defect_id: "", qty: "", operation_id: "", notes: "" });
-      setFeedback({ ok: true, message: `Rework #${r.id} tercatat` });
-    } catch (error) {
-      setFeedback({ ok: false, message: error instanceof Error ? error.message : "Gagal mencatat rework" });
-    } finally {
-      setReworkBusy(false);
-    }
-  }
-
-  async function resolveRework() {
-    if (!reworkRecord) return;
-    setReworkBusy(true);
-    try {
-      await api.post(`/shopfloor/rework/${reworkRecord.id}/resolve`, {});
-      setFeedback({ ok: true, message: `Rework #${reworkRecord.id} selesai (resolved).` });
-      setReworkRecord(null);
-    } catch (error) {
-      setFeedback({ ok: false, message: error instanceof Error ? error.message : "Gagal resolve rework" });
-    } finally {
-      setReworkBusy(false);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-xl font-bold">{stage === "FINISHING" ? "Finishing" : "Sewing"} / Shop Floor / WIP</h1>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border bg-white p-4">
-          <h2 className="mb-3 font-semibold">Bundle eligible untuk {stage === "FINISHING" ? "Finishing" : "Sewing"}</h2>
-          <div className="max-h-64 overflow-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-left"><th>Bundle</th><th>Qty</th><th>Source</th></tr></thead>
-              <tbody>
-                {eligible.map((bundle) => (
-                  <tr key={bundle.bundle_no} className="border-t">
-                    <td><button type="button" className="py-2 font-mono text-blue-700" onClick={() => inspect(bundle.bundle_no)}>{bundle.bundle_no}</button></td>
-                    <td>{bundle.available_qty ?? bundle.qty}</td>
-                    <td>{stage === "FINISHING" ? `WIP #${bundle.source_wip_transfer_id}` : (bundle.lineage_complete ? "Cut Output" : "Legacy")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-white p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-sm">
-              <span className="block font-medium">Operasi *</span>
-              <select value={operationId} onChange={(e) => setOperationId(e.target.value)} className="w-full rounded border p-2">
-                <option value="">— pilih operasi —</option>
-                {operations.map((operation) => <option key={operation.id} value={operation.id}>{operation.code} — {operation.name}</option>)}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="block font-medium">Line</span>
-              <select value={lineId} onChange={(e) => setLineId(e.target.value)} className="w-full rounded border p-2">
-                <option value="">— default MO —</option>
-                {lines.map((line) => <option key={line.id} value={line.id}>{line.name}</option>)}
-              </select>
-            </label>
-            <div className="flex gap-2">
-              {(["IN", "OUT"] as const).map((value) => <button type="button" key={value} onClick={() => setDirection(value)} className={`flex-1 rounded py-2 ${direction === value ? "bg-slate-900 text-white" : "bg-slate-100"}`}>{value}</button>)}
-            </div>
-            <div className="flex gap-2">
-              {(["SEWING", "FINISHING"] as const).map((value) => <button type="button" key={value} onClick={() => setStage(value)} className={`flex-1 rounded py-2 text-sm ${stage === value ? "bg-slate-900 text-white" : "bg-slate-100"}`}>{value}</button>)}
-            </div>
-          </div>
-
-          <form onSubmit={submit} className="mt-4">
-            <input ref={inputRef} value={bundleNo} onChange={(e) => setBundleNo(e.target.value)} className="w-full rounded border-2 p-3 font-mono" placeholder="Scan / pilih Bundle No" autoComplete="off" />
-            <div className="mt-2 text-sm">Available qty: <b>{selected?.available_qty ?? selected?.qty ?? "—"}</b></div>
-            <button className="mt-3 w-full rounded bg-blue-600 py-2 font-semibold text-white">Catat transaksi</button>
-          </form>
-
-          {feedback && <div className={`mt-3 rounded p-3 ${feedback.ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{feedback.message}</div>}
-        </section>
-      </div>
-
-      {lineage && (
-        <section className="rounded-xl border bg-white p-4">
-          <h2 className="font-semibold">Lineage & WIP result</h2>
-          <p className="mt-2 text-sm">Bundle → Sewing IN ({lineage.sewing_inputs.length}) → Sewing OUT ({lineage.sewing_outputs.length}) → WIP Transfer ({lineage.wip_transfers.length}) → Finishing IN ({lineage.finishing_inputs.length}) → Finishing OUT ({lineage.finishing_outputs.length})</p>
-          <p className="mt-1 text-sm">Cut Output: {lineage.bundle.cut_output_id ?? "Legacy / NULL"} · Current stage: {lineage.bundle.current_stage} · Source Finishing WIP: {lineage.finishing_source ? `#${lineage.finishing_source.id}` : "—"}</p>
-          <div className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-800">
-            Packing boundary: Finishing output {lineage.packing_boundary.finishing_output_available ? "tersedia" : "belum tersedia"}; QC FINAL PASS {lineage.packing_boundary.qc_final_pass ? "tersedia" : "wajib dipenuhi"}. Direct Bundle→Carton authority: ⚪ NOT DEFINED.
-          </div>
-        </section>
-      )}
-
-      <section className="rounded-xl border bg-white p-4">
-        <h2 className="font-semibold">Rework</h2>
-        <p className="mt-1 text-xs text-slate-500">Catat bundle bermasalah ke daftar rework; tandai selesai setelah perbaikan.</p>
-        <form onSubmit={submitRework} className="mt-3 grid gap-2 sm:grid-cols-5">
-          <input value={rework.bundle_no} onChange={(e) => setRework({ ...rework, bundle_no: e.target.value })} className="rounded border p-2 text-sm" placeholder="Bundle No *" required />
-          <select value={rework.defect_id} onChange={(e) => setRework({ ...rework, defect_id: e.target.value })} className="rounded border p-2 text-sm" required>
-            <option value="">Defect *</option>
-            {defects.map((d) => <option key={d.id} value={d.id}>[{d.code}] {d.name}</option>)}
-          </select>
-          <input type="number" min="1" step="any" value={rework.qty} onChange={(e) => setRework({ ...rework, qty: e.target.value })} className="rounded border p-2 text-sm" placeholder="Qty *" required />
-          <select value={rework.operation_id} onChange={(e) => setRework({ ...rework, operation_id: e.target.value })} className="rounded border p-2 text-sm">
-            <option value="">Operasi (opsional)</option>
-            {operations.map((o) => <option key={o.id} value={o.id}>{o.code}</option>)}
-          </select>
-          <button disabled={reworkBusy} className="rounded bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-50">Catat Rework</button>
-          <input value={rework.notes} onChange={(e) => setRework({ ...rework, notes: e.target.value })} className="rounded border p-2 text-sm sm:col-span-4" placeholder="Catatan (opsional)" />
-        </form>
-        {reworkRecord && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded bg-amber-50 p-3 text-sm text-amber-800">
-            <span>Rework #{reworkRecord.id} {reworkRecord.bundle_no ? `(${reworkRecord.bundle_no})` : ""} - status {reworkRecord.status ?? "OPEN"}</span>
-            <button type="button" onClick={resolveRework} disabled={reworkBusy} className="rounded border border-amber-300 px-3 py-1.5 text-xs font-medium">Tandai Selesai</button>
-          </div>
-        )}
-      </section>
-      {recent.length > 0 && (
-        <section className="rounded-xl border bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-slate-500">10 scan terakhir</h2>
-          <ul className="space-y-1 font-mono text-sm">{recent.map((item, index) => <li key={index}>{item}</li>)}</ul>
-        </section>
-      )}
-    </div>
-  );
+export default function ScanStationPage(){
+ const searchParams=useSearchParams();const requestedStage:ProductionStage=searchParams.get("stage")==="FINISHING"?"FINISHING":"SEWING";
+ const[operations,setOperations]=useState<Opt[]>([]);const[lines,setLines]=useState<Opt[]>([]);const[eligible,setEligible]=useState<EligibleBundle[]>([]);const[completionEligible,setCompletionEligible]=useState<CompletionEligible[]>([]);const[operationId,setOperationId]=useState("");const[lineId,setLineId]=useState("");const[direction,setDirection]=useState<"IN"|"OUT">("IN");const[stage,setStage]=useState<ProductionStage>(requestedStage);const[bundleNo,setBundleNo]=useState("");const[feedback,setFeedback]=useState<{ok:boolean;message:string}|null>(null);const[recent,setRecent]=useState<string[]>([]);const[lineage,setLineage]=useState<Lineage|null>(null);const inputRef=useRef<HTMLInputElement>(null);const[defects,setDefects]=useState<{id:number;code:string;name:string}[]>([]);const[rework,setRework]=useState({bundle_no:"",defect_id:"",qty:"",operation_id:"",notes:""});const[reworkRecord,setReworkRecord]=useState<{id:number;bundle_no?:string;status?:string}|null>(null);const[reworkBusy,setReworkBusy]=useState(false);const[completionBusy,setCompletionBusy]=useState(false);
+ useEffect(()=>{api.get<{data:{id:number;code:string;name:string}[]}>("/master/defect-library?per_page=200").then(r=>setDefects(r.data)).catch(()=>{});},[]);
+ const refreshEligible=(selectedStage=stage)=>{const endpoint=selectedStage==="FINISHING"?"/shopfloor/finishing/eligible":"/shopfloor/bundles/eligible";const primary=api.get<{data:EligibleBundle[]}>(endpoint).then(r=>setEligible(r.data)).catch(()=>{});if(selectedStage==="FINISHING")api.get<{data:CompletionEligible[]}>("/shopfloor/finishing/completion-eligible").then(r=>setCompletionEligible(r.data)).catch(()=>setCompletionEligible([]));else setCompletionEligible([]);return primary;};
+ useEffect(()=>{api.get<{data:Opt[]}>("/master/operations?per_page=100").then(r=>setOperations(r.data)).catch(()=>{});api.get<{data:Opt[]}>("/master/lines?per_page=100").then(r=>setLines(r.data)).catch(()=>{});refreshEligible(requestedStage);inputRef.current?.focus();},[]);
+ useEffect(()=>{setStage(requestedStage);},[requestedStage]);useEffect(()=>{setBundleNo("");setLineage(null);refreshEligible(stage);},[stage]);
+ async function inspect(no:string){setBundleNo(no);try{const response=await api.get<{data:Lineage}>(`/shopfloor/bundles/${encodeURIComponent(no)}/lineage`);setLineage(response.data);}catch{setLineage(null);}}
+ async function submit(event:React.FormEvent){event.preventDefault();if(!bundleNo.trim()||!operationId)return;const scannedBundle=bundleNo.trim();try{await api.post("/shopfloor/scans",{bundle_no:scannedBundle,operation_id:Number(operationId),direction,stage,line_id:lineId?Number(lineId):undefined});setFeedback({ok:true,message:`✔ ${scannedBundle} — ${stage} ${direction} tercatat`});setRecent(items=>[`${scannedBundle} ${stage} ${direction}`,...items].slice(0,10));await inspect(scannedBundle);refreshEligible(stage);}catch(error:any){setFeedback({ok:false,message:`✘ ${error.message}`});}inputRef.current?.focus();}
+ async function completeFinishing(){if(!bundleNo.trim())return;setCompletionBusy(true);try{await api.post(`/shopfloor/finishing/bundles/${encodeURIComponent(bundleNo.trim())}/complete`,{});setFeedback({ok:true,message:`✔ ${bundleNo} — FINISHING_OUT canonical tercatat dan bundle masuk QC`});await inspect(bundleNo.trim());refreshEligible(stage);}catch(error){setFeedback({ok:false,message:error instanceof Error?error.message:"Gagal complete Finishing"});}finally{setCompletionBusy(false);}}
+ const selected=eligible.find(bundle=>bundle.bundle_no===bundleNo);const canComplete=completionEligible.some(bundle=>bundle.bundle_no===bundleNo);
+ async function submitRework(e:React.FormEvent){e.preventDefault();if(!rework.bundle_no.trim()||!rework.defect_id)return;setReworkBusy(true);try{const r=await api.post<{id:number;bundle_no?:string;status?:string}>("/shopfloor/rework",{bundle_no:rework.bundle_no.trim(),defect_id:Number(rework.defect_id),qty:Number(rework.qty),operation_id:rework.operation_id?Number(rework.operation_id):undefined,notes:rework.notes||undefined});setReworkRecord(r);setRework({bundle_no:"",defect_id:"",qty:"",operation_id:"",notes:""});setFeedback({ok:true,message:`Rework #${r.id} tercatat`});refreshEligible(stage);}catch(error){setFeedback({ok:false,message:error instanceof Error?error.message:"Gagal mencatat rework"});}finally{setReworkBusy(false);}}
+ async function resolveRework(){if(!reworkRecord)return;setReworkBusy(true);try{await api.post(`/shopfloor/rework/${reworkRecord.id}/resolve`,{});setFeedback({ok:true,message:`Rework #${reworkRecord.id} selesai (resolved).`});setReworkRecord(null);refreshEligible(stage);}catch(error){setFeedback({ok:false,message:error instanceof Error?error.message:"Gagal resolve rework"});}finally{setReworkBusy(false);}}
+ return <div className="mx-auto max-w-5xl space-y-6">
+  <div><h1 className="text-xl font-bold">{stage==="FINISHING"?"Finishing":"Sewing"} / Shop Floor / WIP</h1><p className="mt-1 text-sm text-slate-500">Final Sewing OUT membentuk output line harian. FINISHING_OUT hanya terbentuk melalui completion eksplisit.</p></div>
+  <div className="grid gap-4 lg:grid-cols-2">
+   <section className="rounded-xl border bg-white p-4"><h2 className="mb-3 font-semibold">Bundle eligible untuk {stage==="FINISHING"?"Finishing":"Sewing"}</h2><div className="max-h-64 overflow-auto"><table className="w-full text-sm"><thead><tr className="text-left"><th>Bundle</th><th>Qty</th><th>Source</th></tr></thead><tbody>{eligible.map(bundle=><tr key={bundle.bundle_no} className="border-t"><td><button type="button" className="py-2 font-mono text-blue-700" onClick={()=>inspect(bundle.bundle_no)}>{bundle.bundle_no}</button></td><td>{bundle.available_qty??bundle.qty}</td><td>{stage==="FINISHING"?`WIP #${bundle.source_wip_transfer_id}`:(bundle.lineage_complete?"Cut Output":"Legacy")}</td></tr>)}</tbody></table></div></section>
+   <section className="rounded-xl border bg-white p-4"><div className="grid grid-cols-2 gap-3"><label className="text-sm"><span className="block font-medium">Operasi *</span><select value={operationId} onChange={e=>setOperationId(e.target.value)} className="w-full rounded border p-2"><option value="">— pilih operasi —</option>{operations.map(o=><option key={o.id} value={o.id}>{o.code} — {o.name}</option>)}</select></label><label className="text-sm"><span className="block font-medium">Line</span><select value={lineId} onChange={e=>setLineId(e.target.value)} className="w-full rounded border p-2"><option value="">— default MO —</option>{lines.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label><div className="flex gap-2">{(["IN","OUT"]as const).map(v=><button type="button" key={v} onClick={()=>setDirection(v)} className={`flex-1 rounded py-2 ${direction===v?"bg-slate-900 text-white":"bg-slate-100"}`}>{v}</button>)}</div><div className="flex gap-2">{(["SEWING","FINISHING"]as const).map(v=><button type="button" key={v} onClick={()=>setStage(v)} className={`flex-1 rounded py-2 text-sm ${stage===v?"bg-slate-900 text-white":"bg-slate-100"}`}>{v}</button>)}</div></div>
+    <form onSubmit={submit} className="mt-4"><input ref={inputRef} value={bundleNo} onChange={e=>setBundleNo(e.target.value)} className="w-full rounded border-2 p-3 font-mono" placeholder="Scan / pilih Bundle No" autoComplete="off"/><div className="mt-2 text-sm">Available qty: <b>{selected?.available_qty??selected?.qty??"—"}</b></div><button className="mt-3 w-full rounded bg-blue-600 py-2 font-semibold text-white">Catat transaksi</button></form>
+    {stage==="FINISHING"&&<div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-sm text-amber-800">Completion aktif setelah latest Finishing scan OUT dan tidak ada rework terbuka.</p><button type="button" onClick={completeFinishing} disabled={!canComplete||completionBusy} className="mt-2 w-full rounded bg-amber-600 py-2 text-sm font-semibold text-white disabled:opacity-40">{completionBusy?"Memproses…":"Complete Finishing → QC"}</button></div>}
+    {feedback&&<div className={`mt-3 rounded p-3 ${feedback.ok?"bg-green-50 text-green-700":"bg-red-50 text-red-700"}`}>{feedback.message}</div>}
+   </section>
+  </div>
+  {lineage&&<section className="rounded-xl border bg-white p-4"><h2 className="font-semibold">Lineage & WIP result</h2><p className="mt-2 text-sm">Bundle → Sewing IN ({lineage.sewing_inputs.length}) → Sewing OUT ({lineage.sewing_outputs.length}) → WIP Transfer ({lineage.wip_transfers.length}) → Finishing IN ({lineage.finishing_inputs.length}) → Finishing OUT scan ({lineage.finishing_outputs.length})</p><p className="mt-1 text-sm">Cut Output: {lineage.bundle.cut_output_id??"Legacy / NULL"} · Current stage: {lineage.bundle.current_stage} · Source Finishing WIP: {lineage.finishing_source?`#${lineage.finishing_source.id}`:"—"}</p><div className={`mt-3 rounded p-3 text-sm ${lineage.finishing_completion?"bg-green-50 text-green-800":"bg-amber-50 text-amber-800"}`}>{lineage.finishing_completion?`Canonical FINISHING_OUT tersedia: ${lineage.finishing_completion.qty} pcs.`:"Canonical FINISHING_OUT belum tersedia."} QC FINAL PASS {lineage.packing_boundary.qc_final_pass?"tersedia":"wajib dipenuhi"}. Direct Bundle→Carton authority: ⚪ NOT DEFINED.</div></section>}
+  <section className="rounded-xl border bg-white p-4"><h2 className="font-semibold">Rework</h2><p className="mt-1 text-xs text-slate-500">Rework terbuka memblokir completion Finishing.</p><form onSubmit={submitRework} className="mt-3 grid gap-2 sm:grid-cols-5"><input value={rework.bundle_no} onChange={e=>setRework({...rework,bundle_no:e.target.value})} className="rounded border p-2 text-sm" placeholder="Bundle No *" required/><select value={rework.defect_id} onChange={e=>setRework({...rework,defect_id:e.target.value})} className="rounded border p-2 text-sm" required><option value="">Defect *</option>{defects.map(d=><option key={d.id} value={d.id}>[{d.code}] {d.name}</option>)}</select><input type="number" min="1" step="any" value={rework.qty} onChange={e=>setRework({...rework,qty:e.target.value})} className="rounded border p-2 text-sm" placeholder="Qty *" required/><select value={rework.operation_id} onChange={e=>setRework({...rework,operation_id:e.target.value})} className="rounded border p-2 text-sm"><option value="">Operasi (opsional)</option>{operations.map(o=><option key={o.id} value={o.id}>{o.code}</option>)}</select><button disabled={reworkBusy} className="rounded bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-50">Catat Rework</button><input value={rework.notes} onChange={e=>setRework({...rework,notes:e.target.value})} className="rounded border p-2 text-sm sm:col-span-4" placeholder="Catatan (opsional)"/></form>{reworkRecord&&<div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded bg-amber-50 p-3 text-sm text-amber-800"><span>Rework #{reworkRecord.id} {reworkRecord.bundle_no?`(${reworkRecord.bundle_no})`:""} - status {reworkRecord.status??"OPEN"}</span><button type="button" onClick={resolveRework} disabled={reworkBusy} className="rounded border border-amber-300 px-3 py-1.5 text-xs font-medium">Tandai Selesai</button></div>}</section>
+  {recent.length>0&&<section className="rounded-xl border bg-white p-4"><h2 className="mb-2 text-sm font-semibold text-slate-500">10 scan terakhir</h2><ul className="space-y-1 font-mono text-sm">{recent.map((item,index)=><li key={index}>{item}</li>)}</ul></section>}
+ </div>;
 }
