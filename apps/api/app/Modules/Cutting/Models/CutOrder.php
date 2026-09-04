@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Planning\Models\CutPlan;
 use Modules\Production\Models\ProductionOrder;
 
 class CutOrder extends Model
@@ -15,12 +16,13 @@ class CutOrder extends Model
     public const STATUSES = ['DRAFT','IN_PROGRESS','COMPLETED','CANCELLED'];
 
     protected $fillable = [
-        'company_id', 'doc_no', 'production_order_id', 'cut_date',
+        'company_id', 'doc_no', 'production_order_id', 'cut_plan_id', 'cut_date',
         'status', 'created_by', 'updated_by',
     ];
 
     protected function casts(): array { return ['cut_date' => 'date']; }
     public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
+    public function cutPlan(): BelongsTo { return $this->belongsTo(CutPlan::class); }
     public function lines(): HasMany { return $this->hasMany(CutOrderLine::class); }
     public function markerLogs(): HasMany { return $this->hasMany(MarkerLog::class); }
     public function lays(): HasMany { return $this->hasMany(Lay::class); }

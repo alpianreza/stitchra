@@ -15,12 +15,13 @@ class CuttingService
 {
     public function __construct(private NumberingService $numbering, private AuditService $audit) {}
 
-    public function create(ProductionOrder $mo, array $lines, User $user): CutOrder
+    public function create(ProductionOrder $mo, array $lines, User $user, ?int $cutPlanId = null): CutOrder
     {
-        return DB::transaction(function () use ($mo, $lines, $user): CutOrder {
+        return DB::transaction(function () use ($mo, $lines, $user, $cutPlanId): CutOrder {
             if ($lines === []) throw new RuntimeException('Cut order wajib punya minimal 1 line.');
             $locked = ProductionOrder::withoutGlobalScopes()->whereKey($mo->id)->lockForUpdate()->firstOrFail(); $this->access($user, (int) $locked->company_id);
             if (! in_array($locked->status, ['RELEASED', 'CUTTING'], true)) throw new RuntimeException('Status MO tidak mengizinkan cut order.');
+            if ($cutPlanId !== null && ! DB::table('cut_plans')->where('id', $cutPlanId)->where('company_id', $locked->company_id)->where('production_order_id', $locked->id)->exists()) throw new RuntimeException('Cut Plan tidak valid untuk MO.');
             $hasMoMatrix = DB::table('mo_lines')->where('production_order_id', $locked->id)->exists();
             $seen = [];
             foreach ($lines as $line) { $qty = (float) ($line['qty_cut'] ?? 0); if ($qty <= 0) throw new RuntimeException('Qty cut wajib lebih besar dari nol.');
@@ -33,10 +34,10 @@ class CuttingService
                     ->where('cut_order_lines.colorway_id', $line['colorway_id'])->where('cut_order_lines.size_id', $line['size_id'])->sum('cut_order_lines.qty_cut');
                 if ($ordered <= 0 || $cut + $qty - $ordered > 0.0001) throw new RuntimeException($hasMoMatrix ? 'Qty cut melebihi matrix MO.' : 'Qty cut melebihi legacy matrix SO.'); }
             $cutOrder = CutOrder::create(['company_id' => $locked->company_id, 'doc_no' => $this->numbering->next($locked->company_id, 'CUT'),
-                'production_order_id' => $locked->id, 'cut_date' => now()->toDateString(), 'status' => 'IN_PROGRESS', 'created_by' => $user->id]);
+                'production_order_id' => $locked->id, 'cut_plan_id' => $cutPlanId, 'cut_date' => now()->toDateString(), 'status' => 'IN_PROGRESS', 'created_by' => $user->id]);
             foreach ($lines as $line) $cutOrder->lines()->create($line);
             if ($locked->status === 'RELEASED') $locked->update(['status' => 'CUTTING', 'actual_start' => now()->toDateString(), 'updated_by' => $user->id]);
-            $this->audit->record('create', $cutOrder, after: ['doc_no' => $cutOrder->doc_no, 'mo' => $locked->doc_no, 'matrix_source' => $hasMoMatrix ? 'MO_LINES' : 'LEGACY_SO_LINES']); return $cutOrder->load('lines');
+            $this->audit->record('create', $cutOrder, after: ['doc_no' => $cutOrder->doc_no, 'mo' => $locked->doc_no, 'cut_plan_id' => $cutPlanId, 'planning_source' => $cutPlanId ? 'CUT_PLAN' : 'LEGACY_DIRECT_MO', 'matrix_source' => $hasMoMatrix ? 'MO_LINES' : 'LEGACY_SO_LINES']); return $cutOrder->load('lines');
         });
     }
 
