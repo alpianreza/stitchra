@@ -2,7 +2,8 @@
 
 Date: 4 September 2026  
 Baseline: `af80ec7e4002a6712c499e3f450d0482aa14da22`  
-Status: IMPLEMENTED / STATIC VERIFICATION PENDING / RUNTIME NOT RUN
+Implementation HEAD before closure: `ae40ba692b1aca1938f0b70926cce21549ef72a3`  
+Status: IMPLEMENTED / STATIC READBACK PASS / RUNTIME NOT RUN
 
 ## Requirement authority
 
@@ -10,6 +11,12 @@ Status: IMPLEMENTED / STATIC VERIFICATION PENDING / RUNTIME NOT RUN
 - `ERP_GARMENT_DATABASE_BLUEPRINT.md` §3.5: `production_plans` and `line_loading`.
 - `ERP_GARMENT_PROCESS_FLOW.md` PF-01 step 6: PPIC composes production plan and line loading before production execution.
 - Existing permissions are reused: `planning.production.view|create|update`.
+
+## Implementation commits
+
+- `417d5e1340bac7cb80cd20ba277cbac0d2993c5a` — schema, models, service, controller, routes, and relationships.
+- `5bc0039e302edfbfe3df395b1b66d13c10ccbfc4` — PPIC workbench, safe planning options, capacity view, and implementation record.
+- `ae40ba692b1aca1938f0b70926cce21549ef72a3` — Planning sidebar navigation.
 
 ## Implemented data flow
 
@@ -48,6 +55,11 @@ Status: IMPLEMENTED / STATIC VERIFICATION PENDING / RUNTIME NOT RUN
 - Daily MO Line Loading entry.
 - Plan target versus loaded quantity.
 - Line loading versus snapshotted capacity with explicit overload warning.
+- Direct navigation under the Planning sidebar group.
+
+## Static verification
+
+PASS by direct source readback for migration, models, relationships, service, controller, route permissions, UI workbench, and sidebar registration. Upstream/downstream identifiers were checked from the current files. This is source verification only and is not runtime evidence.
 
 ## Deliberate boundaries
 
