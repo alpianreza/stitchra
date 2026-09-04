@@ -10,22 +10,14 @@ use RuntimeException;
 class NamedProductionMeasureService
 {
     public const NAMED_MEASURES = [
-        'CUT_OUTPUT',
-        'SEWING_FINAL_OUT',
-        'FINISHING_OUT',
-        'QC_FINAL_PASS',
-        'PACKED_QTY',
-        'FG_RECEIVED_QTY',
-        'SHIPPED_QTY',
+        'CUT_OUTPUT', 'SEWING_FINAL_OUT', 'FINISHING_OUT', 'QC_FINAL_PASS',
+        'PACKED_QTY', 'FG_RECEIVED_QTY', 'SHIPPED_QTY',
     ];
-
-    /** D-04 permits explicit selection from authoritative D-03 named measures; no class-to-stage default is inferred. */
     public const BACKFLUSH_STAGES = self::NAMED_MEASURES;
 
     public function measure(ProductionOrder $productionOrder, string $key): array
     {
-        $mo = ProductionOrder::withoutGlobalScopes()->where('company_id', $productionOrder->company_id)
-            ->whereKey($productionOrder->id)->firstOrFail();
+        $mo = ProductionOrder::withoutGlobalScopes()->where('company_id', $productionOrder->company_id)->whereKey($productionOrder->id)->firstOrFail();
         $key = strtoupper(trim($key));
         if (! in_array($key, self::NAMED_MEASURES, true)) throw new RuntimeException("BR-065/066: named stage {$key} tidak didukung.");
 
@@ -35,9 +27,8 @@ class NamedProductionMeasureService
                 ->where('cut.company_id', $mo->company_id)->where('cut.production_order_id', $mo->id)
                 ->where('lay.status', 'COMPLETED')->where('cut.status', '<>', 'CANCELLED')->sum('output.qty_cut'), 'BR-065:CUT_OUTPUT'),
             'SEWING_FINAL_OUT' => $this->sewingFinalOut($mo),
-            'FINISHING_OUT' => $this->result($key, 'Finishing OUT', (float) DB::table('production_scans')
-                ->where('company_id', $mo->company_id)->where('production_order_id', $mo->id)
-                ->where('stage', 'FINISHING')->where('direction', 'OUT')->sum('qty'), 'BR-065:FINISHING_OUT'),
+            'FINISHING_OUT' => $this->result($key, 'Finishing Output', (float) DB::table('finishing_outputs')
+                ->where('company_id', $mo->company_id)->where('production_order_id', $mo->id)->sum('qty'), 'BR-065:FINISHING_OUT', 'DEFINED', ['source_table'=>'finishing_outputs','deduplication'=>'ONE_PER_BUNDLE']),
             'QC_FINAL_PASS' => $this->qcFinalPass($mo),
             'PACKED_QTY' => $this->result($key, 'Packing Quantity', (float) DB::table('packing_lists as packing')
                 ->join('cartons', 'cartons.packing_list_id', '=', 'packing.id')->join('carton_lines', 'carton_lines.carton_id', '=', 'cartons.id')
@@ -55,10 +46,7 @@ class NamedProductionMeasureService
         };
     }
 
-    public function all(ProductionOrder $mo): array
-    {
-        return collect(self::NAMED_MEASURES)->mapWithKeys(fn (string $key) => [$key => $this->measure($mo, $key)])->all();
-    }
+    public function all(ProductionOrder $mo): array { return collect(self::NAMED_MEASURES)->mapWithKeys(fn (string $key) => [$key => $this->measure($mo, $key)])->all(); }
 
     private function sewingFinalOut(ProductionOrder $mo): array
     {
@@ -73,18 +61,12 @@ class NamedProductionMeasureService
     {
         $latest = DB::table('qc_inspections')->where('company_id', $mo->company_id)->where('production_order_id', $mo->id)
             ->where('stage', 'FINAL')->orderByDesc('cycle')->orderByDesc('id')->first(['id', 'cycle', 'lot_qty', 'verdict']);
-        if ($latest === null) {
-            return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', ['reason'=>'NO_FINAL_CYCLE']);
-        }
+        if ($latest === null) return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', ['reason'=>'NO_FINAL_CYCLE']);
         $source = ['qc_inspection_id'=>(int)$latest->id,'cycle'=>(int)$latest->cycle,'verdict'=>(string)$latest->verdict];
-        if ($latest->verdict !== 'PASS') {
-            return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', $source + ['reason'=>'LATEST_FINAL_CYCLE_NOT_PASS']);
-        }
+        if ($latest->verdict !== 'PASS') return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', null, 'BR-065:QC_FINAL_PASS', 'NOT_AVAILABLE', $source + ['reason'=>'LATEST_FINAL_CYCLE_NOT_PASS']);
         return $this->result('QC_FINAL_PASS', 'QC FINAL PASS Lot Quantity', (float)$latest->lot_qty, 'BR-065:QC_FINAL_PASS', 'DEFINED', $source);
     }
 
     private function result(string $key, string $label, ?float $qty, string $authority, string $status='DEFINED', array $source=[]): array
-    {
-        return ['key'=>$key,'label'=>$label,'qty'=>$qty===null?null:round($qty,4),'status'=>$status,'authority'=>$authority,'source'=>$source];
-    }
+    { return ['key'=>$key,'label'=>$label,'qty'=>$qty===null?null:round($qty,4),'status'=>$status,'authority'=>$authority,'source'=>$source]; }
 }
