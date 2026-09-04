@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Core\Models\Concerns\BelongsToCompany;
+use Modules\Planning\Models\LineLoading;
+use Modules\Planning\Models\ProductionPlan;
 
 class Line extends Model
 {
@@ -29,5 +31,15 @@ class Line extends Model
     public function costRates(): HasMany
     {
         return $this->hasMany(LineCostRate::class);
+    }
+
+    public function productionPlans(): HasMany
+    {
+        return $this->hasMany(ProductionPlan::class);
+    }
+
+    public function lineLoadings(): HasMany
+    {
+        return $this->hasMany(LineLoading::class);
     }
 }
