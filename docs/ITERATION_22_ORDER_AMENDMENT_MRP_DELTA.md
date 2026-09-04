@@ -2,13 +2,19 @@
 
 Date: 4 September 2026  
 Baseline: `da28268120abe9864b6fb28f43ca81f69d0ca725`  
-Status: IMPLEMENTED / STATIC VERIFICATION PENDING / RUNTIME NOT RUN
+Implementation HEAD before closure: `f0e25ffebea5ae0d8e89b3a36922805854ba4539`  
+Status: IMPLEMENTED / STATIC READBACK PASS / RUNTIME NOT RUN
 
 ## Authority
 
 - BR-022 / OBD-021 default: amendment is allowed before cutting starts and triggers MRP delta.
 - PF-01a / BP-08: SO quantity, ratio, or ex-factory change must be traceable and followed by MRP delta.
 - Historical transactions must not be rewritten.
+
+## Commit sequence
+
+- `1b66dd3271f87e9a31b1bae0b356496d323b11ee` — schema, normalized amendment lines, service, MRP delta fields, and models.
+- `f0e25ffebea5ae0d8e89b3a36922805854ba4539` — API, frontend workbench, and implementation document.
 
 ## Implementation
 
@@ -28,6 +34,10 @@ Status: IMPLEMENTED / STATIC VERIFICATION PENDING / RUNTIME NOT RUN
 - `POST /sales/amendments/{orderAmendment}/apply`
 - Frontend `/sales/amendments` supports draft quantity/date changes, apply, and material delta review.
 
+## Static verification
+
+Static source readback covered migration ordering and FK teardown, amendment models, MRP models, transactional service, concurrency conflict flags, controller validation, routes, and frontend payload/result mapping. The persisted before/after MRP chain is internally consistent.
+
 ## Boundary
 
-MRP delta is persisted evidence only. PR, PO, Production Plan, MO, and Cut Plan are not automatically mutated because adjustment, cancellation, supplier communication, and released-MO reconciliation rules are not defined. No test, migration, build, or E2E execution was run per Business Owner instruction.
+MRP delta is persisted evidence only. PR, PO, Production Plan, MO, and Cut Plan are not automatically mutated because adjustment, cancellation, supplier communication, and released-MO reconciliation rules are not defined. Existing matrix combinations can change quantity; adding/removing SKU combinations is deferred. No test, migration, build, or E2E execution was run per Business Owner instruction.
