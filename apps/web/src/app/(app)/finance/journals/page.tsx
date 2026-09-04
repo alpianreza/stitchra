@@ -236,10 +236,31 @@ export default function JournalsPage() {
         <div className="space-y-4">
           {authority && (
             <section className="rounded-[var(--radius-surface)] border bg-white p-4 shadow-[var(--shadow-raised)]">
-              <div className="flex justify-between gap-2"><h2 className="font-semibold">Event operasional mana yang boleh masuk GL</h2><span className="text-xs text-slate-500">{authority.company.code} - {authority.company.base_currency}</span></div>
-              <div className="mt-2 overflow-x-auto"><table className="w-full text-xs"><thead><tr className="border-b text-left"><th>Event operasional</th><th>Event akuntansi</th><th>Status</th><th>Mapping</th><th>Implementasi</th></tr></thead><tbody>
-                {authority.rows.map((row) => <tr key={row.operational_event} className="border-b align-top"><td className="py-2 pr-2">{row.operational_event}</td><td className="pr-2">{row.accounting_event ?? "- NOT DEFINED"}</td><td className={`${tone(row.status)} pr-2 font-medium`}>{row.status}</td><td className="pr-2">{row.mapping_configured ? "configured" : "belum"}</td><td>{row.implementation}</td></tr>)}
-              </tbody></table></div>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="font-semibold">Event operasional mana yang boleh masuk GL</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-[var(--color-text-muted)]">
+                    Cara membaca: <b>DEFINED</b> = jurnal otomatis sudah berjalan; <b>PARTIAL</b> = berjalan dengan syarat; <b>BLOCKED</b> / <b>NOT DEFINED</b> = sistem sengaja menahan posting otomatis sampai aturan costing dan mapping resminya ditetapkan - ini disengaja, bukan gangguan. Sementara itu, jurnal tetap bisa dibuat manual di tab Jurnal Manual.
+                  </p>
+                </div>
+                <span className="rounded-full bg-[var(--color-primary-soft)] px-3 py-0.5 text-xs font-bold text-[var(--color-primary)]">Mata uang perusahaan: {authority.company.base_currency}</span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {authority.rows.map((row) => (
+                  <div key={row.operational_event} className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{row.operational_event}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold ${tone(row.status)}`}>{row.status}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${row.mapping_configured ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"}`}>{row.mapping_configured ? "mapping tersedia" : "mapping belum ada"}</span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      Event akuntansi: {row.accounting_event ?? "belum ditetapkan"} - {row.implementation}
+                    </p>
+                  </div>
+                ))}
+              </div>
               <p className="mt-2 text-xs text-amber-700">{authority.late_transaction_treatment}</p>
             </section>
           )}
