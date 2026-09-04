@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button, DataTable, FilterBar, FilterSelect, Modal, PageHeader, Select, StatusBadge, type DataTableColumn } from "@/components/ui";
 
-interface Mo { id: number; doc_no: string; status: string; qty_planned: string; qty_produced: string; style?: { style_no: string }; sales_order?: { doc_no: string }; line?: { name: string } | null }
+interface Mo { id: number; doc_no: string; status: string; qty_planned: string; qty_produced: string; matrix_lines_count?: number; style?: { style_no: string }; sales_order?: { doc_no: string }; line?: { name: string } | null }
 interface Page { data: Mo[]; total: number }
 interface So { id: number; doc_no: string; status: string }
 
@@ -48,7 +48,7 @@ export default function ProductionOrdersPage() {
     setCreating(true); setError(null); setMessage(null);
     try {
       const r = await api.post<{ count: number; data: Mo[] }>(`/production/orders/from-so/${fromSo}`, {});
-      setMessage(`${r.count} manufacturing order dibuat dari SO #${fromSo}.`);
+      setMessage(`${r.count} manufacturing order dibuat dari SO #${fromSo} beserta matrix colorway × size.`);
       setCreateOpen(false); setFromSo("");
       load();
     } catch (e) {
@@ -61,6 +61,9 @@ export default function ProductionOrdersPage() {
     { key: "so", header: "SO", cell: (mo) => mo.sales_order?.doc_no ?? "-" },
     { key: "style", header: "Style", cell: (mo) => mo.style?.style_no ?? "-" },
     { key: "planned", header: "Qty Plan", align: "right", cell: (mo) => fmt(mo.qty_planned) },
+    { key: "matrix", header: "MO Matrix", cell: (mo) => (mo.matrix_lines_count ?? 0) > 0
+      ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-800">{mo.matrix_lines_count} lines</span>
+      : <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Legacy SO</span> },
     { key: "produced", header: "qty_produced (Legacy)", align: "right", cell: (mo) => <span className="text-amber-700" title="Bukan authority/fallback">{fmt(mo.qty_produced)}</span> },
     { key: "authority", header: "Output Policy", cell: () => <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-800">BR-065 - Named Measures</span> },
     { key: "status", header: "Status", cell: (mo) => <StatusBadge status={mo.status} /> },
@@ -71,7 +74,7 @@ export default function ProductionOrdersPage() {
       <PageHeader
         eyebrow="Manufacturing"
         title="Manufacturing Order"
-        description="Output memakai Separate Named Measures. qty_produced hanya legacy compatibility dan tidak dipakai sebagai fallback."
+        description="MO baru menyimpan matrix colorway × size dari SO. Output memakai Separate Named Measures; qty_produced hanya legacy compatibility."
         actions={<Button size="sm" onClick={() => setCreateOpen(true)}>+ Buat MO dari SO</Button>}
       />
 
@@ -97,11 +100,11 @@ export default function ProductionOrdersPage() {
         error={error}
         onRetry={load}
         emptyTitle="Belum ada manufacturing order"
-        minWidth="1050px"
+        minWidth="1150px"
         mobileCard={(mo) => (
           <Link href={`/production/orders/${mo.id}`} className="block p-4">
             <b>{mo.doc_no}</b>
-            <p>{mo.status} - BR-065 Named Measures</p>
+            <p>{mo.status} · {(mo.matrix_lines_count ?? 0) > 0 ? `${mo.matrix_lines_count} matrix lines` : "Legacy SO matrix"}</p>
           </Link>
         )}
       />
@@ -109,7 +112,7 @@ export default function ProductionOrdersPage() {
       <Modal
         open={createOpen}
         title="Buat MO dari Sales Order"
-        description="Hanya SO berstatus CONFIRMED yang bisa diproses. Sistem membuat MO per line SO."
+        description="Sistem membuat satu MO per style dan menyalin matrix colorway × size dari SO CONFIRMED."
         size="md"
         onClose={() => { if (!creating) setCreateOpen(false); }}
         closeDisabled={creating}
