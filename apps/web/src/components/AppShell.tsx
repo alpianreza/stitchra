@@ -49,7 +49,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "planning",
     label: "Planning",
-    items: [{ href: "/planning/mrp", label: "MRP", icon: "planning" }],
+    items: [
+      { href: "/planning/mrp", label: "MRP", icon: "planning" },
+      { href: "/planning/production-plans", label: "Production Plan & Line Loading", icon: "planning" },
+    ],
   },
   {
     id: "purchasing",
@@ -396,7 +399,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   Company #{companyId}
                 </span>
               )}
-              <span className="flex size-8 items-center justify-center rounded-full bg-[var(--color-primary-soft)] text-xs font-bold text-[var(--color-primary)]">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-soft)] text-xs font-bold text-[var(--color-primary)]">
                 {userInitial}
               </span>
               <div className="max-w-40">
