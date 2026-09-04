@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 interface Opt { id: number; code: string; name: string }
@@ -32,14 +33,18 @@ interface Lineage {
   };
 }
 
+type ProductionStage = "SEWING" | "FINISHING";
+
 export default function ScanStationPage() {
+  const searchParams = useSearchParams();
+  const requestedStage: ProductionStage = searchParams.get("stage") === "FINISHING" ? "FINISHING" : "SEWING";
   const [operations, setOperations] = useState<Opt[]>([]);
   const [lines, setLines] = useState<Opt[]>([]);
   const [eligible, setEligible] = useState<EligibleBundle[]>([]);
   const [operationId, setOperationId] = useState("");
   const [lineId, setLineId] = useState("");
   const [direction, setDirection] = useState<"IN" | "OUT">("IN");
-  const [stage, setStage] = useState<"SEWING" | "FINISHING">("SEWING");
+  const [stage, setStage] = useState<ProductionStage>(requestedStage);
   const [bundleNo, setBundleNo] = useState("");
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
@@ -62,9 +67,13 @@ export default function ScanStationPage() {
   useEffect(() => {
     api.get<{ data: Opt[] }>("/master/operations?per_page=100").then((r) => setOperations(r.data)).catch(() => {});
     api.get<{ data: Opt[] }>("/master/lines?per_page=100").then((r) => setLines(r.data)).catch(() => {});
-    refreshEligible("SEWING");
+    refreshEligible(requestedStage);
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setStage(requestedStage);
+  }, [requestedStage]);
 
   useEffect(() => {
     setBundleNo("");
@@ -125,6 +134,8 @@ export default function ScanStationPage() {
       setFeedback({ ok: true, message: `Rework #${r.id} tercatat` });
     } catch (error) {
       setFeedback({ ok: false, message: error instanceof Error ? error.message : "Gagal mencatat rework" });
+    } finally {
+      setReworkBusy(false);
     }
   }
 
@@ -144,7 +155,7 @@ export default function ScanStationPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-xl font-bold">Sewing / Shop Floor / WIP / Finishing</h1>
+      <h1 className="text-xl font-bold">{stage === "FINISHING" ? "Finishing" : "Sewing"} / Shop Floor / WIP</h1>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-white p-4">
