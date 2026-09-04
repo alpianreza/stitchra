@@ -8,43 +8,26 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\MasterData\Models\Material;
 use Modules\MasterData\Models\Uom;
 
-/** Hasil netting per material per run (BR-043). converted_to_pr = trace BR-120. */
 class MrpRequirement extends Model
 {
     protected $fillable = [
-        'mrp_run_id', 'material_id', 'gross_qty', 'safety_stock_qty',
-        'available_qty', 'on_order_qty', 'net_qty', 'uom_id',
-        'need_date', 'converted_to_pr',
+        'mrp_run_id', 'material_id', 'gross_qty', 'baseline_gross_qty', 'gross_delta_qty',
+        'safety_stock_qty', 'available_qty', 'on_order_qty', 'net_qty',
+        'baseline_net_qty', 'net_delta_qty', 'uom_id', 'need_date', 'converted_to_pr',
     ];
 
     protected function casts(): array
     {
         return [
-            'gross_qty' => 'decimal:4', 'safety_stock_qty' => 'decimal:4',
-            'available_qty' => 'decimal:4', 'on_order_qty' => 'decimal:4',
-            'net_qty' => 'decimal:4', 'need_date' => 'date',
-            'converted_to_pr' => 'boolean',
+            'gross_qty' => 'decimal:4', 'baseline_gross_qty' => 'decimal:4', 'gross_delta_qty' => 'decimal:4',
+            'safety_stock_qty' => 'decimal:4', 'available_qty' => 'decimal:4', 'on_order_qty' => 'decimal:4',
+            'net_qty' => 'decimal:4', 'baseline_net_qty' => 'decimal:4', 'net_delta_qty' => 'decimal:4',
+            'need_date' => 'date', 'converted_to_pr' => 'boolean',
         ];
     }
 
-    public function run(): BelongsTo
-    {
-        return $this->belongsTo(MrpRun::class, 'mrp_run_id');
-    }
-
-    public function material(): BelongsTo
-    {
-        return $this->belongsTo(Material::class);
-    }
-
-    public function uom(): BelongsTo
-    {
-        return $this->belongsTo(Uom::class);
-    }
-
-    /** BR-121: kontribusi gross per SO line × BOM line */
-    public function traceLines(): HasMany
-    {
-        return $this->hasMany(MrpTraceLine::class, 'mrp_requirement_id');
-    }
+    public function run(): BelongsTo { return $this->belongsTo(MrpRun::class, 'mrp_run_id'); }
+    public function material(): BelongsTo { return $this->belongsTo(Material::class); }
+    public function uom(): BelongsTo { return $this->belongsTo(Uom::class); }
+    public function traceLines(): HasMany { return $this->hasMany(MrpTraceLine::class, 'mrp_requirement_id'); }
 }
