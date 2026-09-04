@@ -5,6 +5,7 @@ namespace Modules\Sales\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Modules\Core\Approval\ApprovalEngine;
+use Modules\Core\Models\Company;
 use Modules\Core\Models\User;
 use Modules\Core\Services\NumberingService;
 use Modules\Core\Support\CurrentCompany;
@@ -39,6 +40,7 @@ class SalesOrderService
         $this->assertCreatorCanUseCompany($creator, $companyId);
         $this->assertHeaderBelongsToCompany($header, $companyId);
         $this->assertMatrixLines($lines, $companyId);
+        $header = $this->normalizeCurrencySnapshot($companyId, $header);
 
         return DB::transaction(function () use ($companyId, $header, $lines, $creator): SalesOrder {
             $so = SalesOrder::create(array_merge($header, [
@@ -52,7 +54,7 @@ class SalesOrderService
                 $so->lines()->create($line);
             }
 
-            return $so->load('lines');
+            return $so->load(['lines', 'currency']);
         });
     }
 
@@ -65,12 +67,8 @@ class SalesOrderService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($locked->status !== 'DRAFT') {
-                throw new RuntimeException('Hanya SO DRAFT yang bisa disubmit.');
-            }
-            if (! $locked->lines()->exists()) {
-                throw new RuntimeException('SO wajib punya minimal satu line.');
-            }
+            if ($locked->status !== 'DRAFT') throw new RuntimeException('Hanya SO DRAFT yang bisa disubmit.');
+            if (! $locked->lines()->exists()) throw new RuntimeException('SO wajib punya minimal satu line.');
 
             $locked->update(['status' => 'SUBMITTED']);
             $this->approval->submit($locked, 'SO', $submitter);
@@ -81,9 +79,7 @@ class SalesOrderService
     {
         DB::transaction(function () use ($so): void {
             $locked = SalesOrder::withoutGlobalScopes()->whereKey($so->id)->lockForUpdate()->firstOrFail();
-            if ($locked->status !== 'SUBMITTED') {
-                throw new RuntimeException('SO harus berstatus SUBMITTED sebelum APPROVED.');
-            }
+            if ($locked->status !== 'SUBMITTED') throw new RuntimeException('SO harus berstatus SUBMITTED sebelum APPROVED.');
             $locked->update(['status' => 'APPROVED']);
         });
     }
@@ -92,50 +88,66 @@ class SalesOrderService
     {
         return DB::transaction(function () use ($so): SalesOrder {
             $locked = SalesOrder::withoutGlobalScopes()->whereKey($so->id)->lockForUpdate()->firstOrFail();
-            if ($locked->status !== 'APPROVED') {
-                throw new RuntimeException('Hanya SO APPROVED yang bisa di-confirm.');
-            }
+            if ($locked->status !== 'APPROVED') throw new RuntimeException('Hanya SO APPROVED yang bisa di-confirm.');
 
             $missing = [];
             foreach ($locked->lines()->distinct()->pluck('style_id') as $styleId) {
-                if ($this->boms->activeVersion($styleId) === null) {
-                    $missing[] = "Style #{$styleId}: BOM belum APPROVED";
-                }
-                if ($this->routings->activeVersion($styleId) === null) {
-                    $missing[] = "Style #{$styleId}: Routing belum APPROVED";
-                }
+                if ($this->boms->activeVersion($styleId) === null) $missing[] = "Style #{$styleId}: BOM belum APPROVED";
+                if ($this->routings->activeVersion($styleId) === null) $missing[] = "Style #{$styleId}: Routing belum APPROVED";
             }
-
-            if ($missing !== []) {
-                throw new RuntimeException('BR-023: SO tidak bisa di-confirm — '.implode('; ', $missing));
-            }
+            if ($missing !== []) throw new RuntimeException('BR-023: SO tidak bisa di-confirm — '.implode('; ', $missing));
 
             $locked->update(['status' => 'CONFIRMED']);
-
             return $locked->fresh();
         });
     }
 
     public function cuttingStarted(SalesOrder $so): bool
     {
-        if (! Schema::hasTable('production_orders')) {
-            return false;
-        }
-
+        if (! Schema::hasTable('production_orders')) return false;
         return DB::table('production_orders')
             ->where('sales_order_id', $so->id)
             ->whereIn('status', ['CUTTING', 'SEWING', 'FINISHING', 'QC', 'PACKED', 'CLOSED'])
             ->exists();
     }
 
+    private function normalizeCurrencySnapshot(int $companyId, array $header): array
+    {
+        $baseCurrency = strtoupper((string) Company::query()->whereKey($companyId)->value('base_currency'));
+        $providedRate = $header['exchange_rate'] ?? null;
+
+        // currency_id NULL berarti memakai base currency company. Instalasi baru memakai USD.
+        if (empty($header['currency_id'])) {
+            if ($providedRate !== null && abs((float) $providedRate - 1.0) > 0.000000000001) {
+                throw new RuntimeException("SO {$baseCurrency} wajib menggunakan exchange rate 1.");
+            }
+            $header['currency_id'] = null;
+            $header['exchange_rate'] = 1;
+            return $header;
+        }
+
+        $currency = Currency::query()->where('company_id', $companyId)->findOrFail($header['currency_id']);
+        if (strtoupper($currency->code) === $baseCurrency) {
+            if ($providedRate !== null && abs((float) $providedRate - 1.0) > 0.000000000001) {
+                throw new RuntimeException("SO {$baseCurrency} wajib menggunakan exchange rate 1.");
+            }
+            $header['exchange_rate'] = 1;
+            return $header;
+        }
+
+        $rate = $providedRate !== null ? (float) $providedRate : $currency->rateAt($header['order_date']);
+        if (! $rate || $rate <= 0) {
+            throw new RuntimeException("Exchange rate {$currency->code} ke {$baseCurrency} belum tersedia pada {$header['order_date']}.");
+        }
+        $header['exchange_rate'] = $rate;
+        return $header;
+    }
+
     private function assertCreatorCanUseCompany(User $creator, int $companyId): void
     {
         $allowed = (int) $creator->company_id === $companyId
             || $creator->companies()->where('companies.id', $companyId)->exists();
-
-        if (! $allowed) {
-            throw new RuntimeException('Creator tidak memiliki akses ke company SO.');
-        }
+        if (! $allowed) throw new RuntimeException('Creator tidak memiliki akses ke company SO.');
     }
 
     private function assertHeaderBelongsToCompany(array $header, int $companyId): void
@@ -143,7 +155,6 @@ class SalesOrderService
         if (! Customer::query()->where('company_id', $companyId)->whereKey($header['customer_id'] ?? null)->exists()) {
             throw new RuntimeException('Customer tidak ditemukan pada company aktif.');
         }
-
         if (! empty($header['currency_id'])
             && ! Currency::query()->where('company_id', $companyId)->whereKey($header['currency_id'])->exists()) {
             throw new RuntimeException('Currency tidak ditemukan pada company aktif.');
@@ -153,23 +164,17 @@ class SalesOrderService
     private function assertMatrixLines(array $lines, int $companyId): void
     {
         $seen = [];
-
         foreach ($lines as $line) {
             $styleId = (int) ($line['style_id'] ?? 0);
             $colorwayId = (int) ($line['colorway_id'] ?? 0);
             $sizeId = (int) ($line['size_id'] ?? 0);
             $key = "{$styleId}:{$colorwayId}:{$sizeId}";
-
-            if (isset($seen[$key])) {
-                throw new RuntimeException('Matrix SO tidak boleh memiliki kombinasi style×colorway×size duplikat.');
-            }
+            if (isset($seen[$key])) throw new RuntimeException('Matrix SO tidak boleh memiliki kombinasi style×colorway×size duplikat.');
             $seen[$key] = true;
 
             $validStyle = Style::query()->where('company_id', $companyId)->whereKey($styleId)->exists();
-            $validColorway = Colorway::query()->where('company_id', $companyId)
-                ->where('style_id', $styleId)->whereKey($colorwayId)->exists();
+            $validColorway = Colorway::query()->where('company_id', $companyId)->where('style_id', $styleId)->whereKey($colorwayId)->exists();
             $validSize = Size::query()->where('company_id', $companyId)->whereKey($sizeId)->exists();
-
             if (! $validStyle || ! $validColorway || ! $validSize) {
                 throw new RuntimeException('Matrix SO harus memakai style, colorway, dan size dari company/style yang sama.');
             }
