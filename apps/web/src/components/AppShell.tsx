@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { clearAuth, getToken, getUser } from "@/lib/auth";
 import { api } from "@/lib/api";
@@ -52,36 +52,83 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/planning/mrp", label: "MRP", icon: "planning" }],
   },
   {
-    id: "manufacturing",
-    label: "Manufacturing",
-    items: [
-      { href: "/production/orders", label: "Manufacturing Order", icon: "production" },
-      { href: "/production/cutting", label: "Cutting", icon: "production" },
-      { href: "/shopfloor/scan", label: "Stasiun Scan", icon: "scan" },
-      { href: "/shopfloor/monitor", label: "Monitor Shop Floor", icon: "scan" },
-    ],
-  },
-  {
-    id: "supply-chain",
-    label: "Supply Chain",
+    id: "purchasing",
+    label: "Purchasing",
     items: [
       { href: "/purchasing/prs", label: "Purchase Request", icon: "purchasing" },
       { href: "/purchasing/pos", label: "Purchase Order", icon: "purchasing" },
-      { href: "/receiving/grs", label: "Goods Receipt", icon: "receiving" },
-      { href: "/inventory/stock", label: "Inquiry Stok", icon: "inventory" },
-      { href: "/inventory/ops", label: "Operasi Stok", icon: "inventory" },
-      { href: "/packing/lists", label: "Packing List", icon: "packing" },
-      { href: "/shipping/shipments", label: "Shipment", icon: "shipping" },
-      { href: "/subcon/orders", label: "Subcontracting", icon: "subcon" },
     ],
   },
   {
-    id: "quality",
-    label: "Quality",
+    id: "receiving",
+    label: "Receiving",
     items: [
+      { href: "/receiving/grs", label: "Goods Receipt", icon: "receiving" },
       { href: "/receiving/inspections", label: "Inward QC (FQC)", icon: "quality" },
+    ],
+  },
+  {
+    id: "warehouse",
+    label: "Warehouse & Inventory",
+    items: [
+      { href: "/inventory/stock", label: "Inquiry Stok", icon: "inventory" },
+      { href: "/inventory/ops", label: "Operasi Stok", icon: "inventory" },
+    ],
+  },
+  {
+    id: "manufacturing-orders",
+    label: "Manufacturing Order",
+    items: [{ href: "/production/orders", label: "Manufacturing Order", icon: "production" }],
+  },
+  {
+    id: "cutting",
+    label: "Cutting",
+    items: [{ href: "/production/cutting", label: "Eksekusi Cutting", icon: "production" }],
+  },
+  {
+    id: "sewing",
+    label: "Sewing",
+    items: [
+      { href: "/shopfloor/scan?stage=SEWING", label: "Sewing Scan", icon: "scan" },
+      { href: "/shopfloor/monitor", label: "Monitor Sewing & WIP", icon: "scan" },
+    ],
+  },
+  {
+    id: "finishing",
+    label: "Finishing",
+    items: [{ href: "/shopfloor/scan?stage=FINISHING", label: "Finishing Scan", icon: "scan" }],
+  },
+  {
+    id: "quality-control",
+    label: "Quality Control",
+    items: [
       { href: "/qc/inspections", label: "Inspeksi QC", icon: "quality" },
       { href: "/qc/ncrs", label: "NCR & Disposition", icon: "quality" },
+    ],
+  },
+  {
+    id: "packing-fg",
+    label: "Packing & FG",
+    items: [{ href: "/packing/lists", label: "Packing List & FG Receipt", icon: "packing" }],
+  },
+  {
+    id: "shipping",
+    label: "Shipping",
+    items: [{ href: "/shipping/shipments", label: "Shipment", icon: "shipping" }],
+  },
+  {
+    id: "subcontracting",
+    label: "Subcontracting",
+    items: [{ href: "/subcon/orders", label: "Subcontracting Order", icon: "subcon" }],
+  },
+  {
+    id: "costing",
+    label: "Costing",
+    items: [
+      { href: "/finance/costing", label: "Costing Aktual", icon: "finance" },
+      { href: "/finance/costing/valuation", label: "Valuasi Produksi", icon: "finance" },
+      { href: "/finance/bep", label: "BEP", icon: "finance" },
+      { href: "/shipping/shipments/valuation", label: "Valuasi Shipment", icon: "inventory" },
     ],
   },
   {
@@ -89,17 +136,14 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Finance",
     items: [
       { href: "/finance/ar-ap", label: "AR / AP", icon: "finance" },
+      { href: "/finance/currencies", label: "Currency & Kurs", icon: "finance" },
       { href: "/finance/closing", label: "Tutup Buku & FX", icon: "finance" },
       { href: "/finance/bank-recon", label: "Bank Reconciliation", icon: "finance" },
       { href: "/finance/valuation", label: "Valuasi Manufaktur", icon: "finance" },
       { href: "/finance/tax-mappings", label: "Pajak & Mapping", icon: "admin" },
       { href: "/finance/journals", label: "Jurnal", icon: "finance" },
-      { href: "/finance/costing", label: "Costing Aktual", icon: "finance" },
-      { href: "/finance/costing/valuation", label: "Valuasi Produksi", icon: "finance" },
-      { href: "/finance/bep", label: "BEP", icon: "finance" },
       { href: "/finance/cogs", label: "Shipment COGS", icon: "finance" },
       { href: "/finance/corrections", label: "Koreksi Akuntansi", icon: "finance" },
-      { href: "/shipping/shipments/valuation", label: "Valuasi Shipment", icon: "inventory" },
     ],
   },
   {
@@ -125,31 +169,39 @@ const NAV_GROUPS: NavGroup[] = [
 
 const ALL_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 
-function matchesPath(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function matchesPath(pathname: string, search: string, href: string) {
+  const [hrefPath, hrefQuery = ""] = href.split("?");
+  if (pathname !== hrefPath && !pathname.startsWith(`${hrefPath}/`)) return false;
+  if (!hrefQuery) return true;
+
+  const expected = new URLSearchParams(hrefQuery);
+  const current = new URLSearchParams(search);
+  return Array.from(expected.entries()).every(([key, value]) => current.get(key) === value);
 }
 
-function useActiveItem(pathname: string) {
+function useActiveItem(pathname: string, search: string) {
   return useMemo(
-    () => ALL_ITEMS.filter((item) => matchesPath(pathname, item.href)).sort((a, b) => b.href.length - a.href.length)[0],
-    [pathname],
+    () => ALL_ITEMS.filter((item) => matchesPath(pathname, search, item.href)).sort((a, b) => b.href.length - a.href.length)[0],
+    [pathname, search],
   );
 }
 
 function SidebarContent({
   pathname,
+  search,
   collapsed,
   openGroups,
   onToggleGroup,
   onNavigate,
 }: {
   pathname: string;
+  search: string;
   collapsed: boolean;
   openGroups: Record<string, boolean>;
   onToggleGroup: (id: string) => void;
   onNavigate?: () => void;
 }) {
-  const activeItem = useActiveItem(pathname);
+  const activeItem = useActiveItem(pathname, search);
 
   return (
     <nav aria-label="Navigasi utama" className="flex-1 overflow-y-auto px-2 pb-4">
@@ -205,7 +257,8 @@ function SidebarContent({
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const activeItem = useActiveItem(pathname);
+  const search = useSearchParams().toString();
+  const activeItem = useActiveItem(pathname, search);
   const [user, setUser] = useState<{ name: string; roles?: string[] } | null>(null);
   const [ready, setReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -226,7 +279,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMobileOpen(false);
-  }, [pathname]);
+  }, [pathname, search]);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -298,6 +351,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <SidebarContent
           pathname={pathname}
+          search={search}
           collapsed={collapsed && !mobileOpen}
           openGroups={openGroups}
           onToggleGroup={toggleGroup}
