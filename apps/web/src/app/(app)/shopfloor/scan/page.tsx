@@ -45,6 +45,14 @@ export default function ScanStationPage() {
   const [recent, setRecent] = useState<string[]>([]);
   const [lineage, setLineage] = useState<Lineage | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [defects, setDefects] = useState<{ id: number; code: string; name: string }[]>([]);
+  const [rework, setRework] = useState({ bundle_no: "", defect_id: "", qty: "", operation_id: "", notes: "" });
+  const [reworkRecord, setReworkRecord] = useState<{ id: number; bundle_no?: string; status?: string } | null>(null);
+  const [reworkBusy, setReworkBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<{ data: { id: number; code: string; name: string }[] }>("/master/defect-library?per_page=200").then((r) => setDefects(r.data)).catch(() => {});
+  }, []);
 
   const refreshEligible = (selectedStage = stage) => {
     const endpoint = selectedStage === "FINISHING" ? "/shopfloor/finishing/eligible" : "/shopfloor/bundles/eligible";
@@ -99,6 +107,40 @@ export default function ScanStationPage() {
   }
 
   const selected = eligible.find((bundle) => bundle.bundle_no === bundleNo);
+
+  async function submitRework(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rework.bundle_no.trim() || !rework.defect_id) return;
+    setReworkBusy(true);
+    try {
+      const r = await api.post<{ id: number; bundle_no?: string; status?: string }>("/shopfloor/rework", {
+        bundle_no: rework.bundle_no.trim(),
+        defect_id: Number(rework.defect_id),
+        qty: Number(rework.qty),
+        operation_id: rework.operation_id ? Number(rework.operation_id) : undefined,
+        notes: rework.notes || undefined,
+      });
+      setReworkRecord(r);
+      setRework({ bundle_no: "", defect_id: "", qty: "", operation_id: "", notes: "" });
+      setFeedback({ ok: true, message: `Rework #${r.id} tercatat` });
+    } catch (error) {
+      setFeedback({ ok: false, message: error instanceof Error ? error.message : "Gagal mencatat rework" });
+    }
+  }
+
+  async function resolveRework() {
+    if (!reworkRecord) return;
+    setReworkBusy(true);
+    try {
+      await api.post(`/shopfloor/rework/${reworkRecord.id}/resolve`, {});
+      setFeedback({ ok: true, message: `Rework #${reworkRecord.id} selesai (resolved).` });
+      setReworkRecord(null);
+    } catch (error) {
+      setFeedback({ ok: false, message: error instanceof Error ? error.message : "Gagal resolve rework" });
+    } finally {
+      setReworkBusy(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -168,6 +210,30 @@ export default function ScanStationPage() {
         </section>
       )}
 
+      <section className="rounded-xl border bg-white p-4">
+        <h2 className="font-semibold">Rework</h2>
+        <p className="mt-1 text-xs text-slate-500">Catat bundle bermasalah ke daftar rework; tandai selesai setelah perbaikan.</p>
+        <form onSubmit={submitRework} className="mt-3 grid gap-2 sm:grid-cols-5">
+          <input value={rework.bundle_no} onChange={(e) => setRework({ ...rework, bundle_no: e.target.value })} className="rounded border p-2 text-sm" placeholder="Bundle No *" required />
+          <select value={rework.defect_id} onChange={(e) => setRework({ ...rework, defect_id: e.target.value })} className="rounded border p-2 text-sm" required>
+            <option value="">Defect *</option>
+            {defects.map((d) => <option key={d.id} value={d.id}>[{d.code}] {d.name}</option>)}
+          </select>
+          <input type="number" min="1" step="any" value={rework.qty} onChange={(e) => setRework({ ...rework, qty: e.target.value })} className="rounded border p-2 text-sm" placeholder="Qty *" required />
+          <select value={rework.operation_id} onChange={(e) => setRework({ ...rework, operation_id: e.target.value })} className="rounded border p-2 text-sm">
+            <option value="">Operasi (opsional)</option>
+            {operations.map((o) => <option key={o.id} value={o.id}>{o.code}</option>)}
+          </select>
+          <button disabled={reworkBusy} className="rounded bg-slate-900 py-2 text-sm font-medium text-white disabled:opacity-50">Catat Rework</button>
+          <input value={rework.notes} onChange={(e) => setRework({ ...rework, notes: e.target.value })} className="rounded border p-2 text-sm sm:col-span-4" placeholder="Catatan (opsional)" />
+        </form>
+        {reworkRecord && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded bg-amber-50 p-3 text-sm text-amber-800">
+            <span>Rework #{reworkRecord.id} {reworkRecord.bundle_no ? `(${reworkRecord.bundle_no})` : ""} - status {reworkRecord.status ?? "OPEN"}</span>
+            <button type="button" onClick={resolveRework} disabled={reworkBusy} className="rounded border border-amber-300 px-3 py-1.5 text-xs font-medium">Tandai Selesai</button>
+          </div>
+        )}
+      </section>
       {recent.length > 0 && (
         <section className="rounded-xl border bg-white p-4">
           <h2 className="mb-2 text-sm font-semibold text-slate-500">10 scan terakhir</h2>

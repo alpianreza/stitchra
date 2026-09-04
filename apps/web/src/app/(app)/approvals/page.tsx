@@ -23,6 +23,29 @@ interface PendingItem {
 
 type Decision = "approve" | "reject" | "revision";
 
+interface ApprovalDetail {
+  id: number;
+  doc_type: string;
+  doc_id: number;
+  status: string;
+  current_step: number;
+  submitted_at: string | null;
+  completed_at: string | null;
+  submitter?: { id?: number; name?: string; email?: string } | null;
+  stepInstances?: Array<{ id?: number; step_no?: number; approver_id?: number; decision?: string | null; note?: string | null; decided_at?: string | null }>;
+  flow?: {
+    id?: number;
+    name?: string;
+    steps?: Array<{ id?: number; step_no?: number; role?: unknown; [key: string]: unknown }>;
+  } | null;
+}
+
+function roleLabel(role: unknown): string {
+  if (typeof role === "string") return role;
+  if (role && typeof role === "object" && "name" in role) return String((role as { name?: unknown }).name);
+  return "-";
+}
+
 const decisionLabels: Record<Decision, string> = {
   approve: "Approve",
   reject: "Reject",
@@ -45,6 +68,9 @@ export default function ApprovalsPage() {
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<PendingItem | null>(null);
+  const [detailData, setDetailData] = useState<ApprovalDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -56,6 +82,16 @@ export default function ApprovalsPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  function openDetail(item: PendingItem) {
+    setDetailItem(item);
+    setDetailData(null);
+    setDetailLoading(true);
+    api.get<ApprovalDetail>(`/approvals/${item.id}`)
+      .then((r) => setDetailData(r))
+      .catch((e) => setDetailData({ id: item.id, doc_type: item.doc_type, doc_id: item.doc_id, status: "LOAD_ERROR", current_step: item.current_step, submitted_at: item.submitted_at, completed_at: null, submitter: null, stepInstances: [], flow: null, __error: e.message } as ApprovalDetail))
+      .finally(() => setDetailLoading(false));
+  }
 
   function openDecision(item: PendingItem, nextDecision: Decision) {
     setSelectedItem(item);
@@ -129,7 +165,7 @@ export default function ApprovalsPage() {
       className: "text-right",
       cell: (item) => (
         <div className="flex justify-end gap-1.5">
-          <Button size="sm" variant="success" onClick={() => openDecision(item, "approve")}>Approve</Button>
+          <Button size="sm" variant="ghost" onClick={() => openDetail(item)}>Detail</Button><Button size="sm" variant="success" onClick={() => openDecision(item, "approve")}>Approve</Button>
           <Button size="sm" onClick={() => openDecision(item, "revision")}>Revisi</Button>
           <Button size="sm" variant="danger" onClick={() => openDecision(item, "reject")}>Reject</Button>
         </div>
@@ -179,7 +215,7 @@ export default function ApprovalsPage() {
               <div><dt className="text-[var(--color-text-muted)]">Waktu</dt><dd className="mt-0.5 font-medium">{new Date(item.submitted_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</dd></div>
             </dl>
             <div className="grid grid-cols-3 gap-2">
-              <Button size="sm" variant="success" onClick={() => openDecision(item, "approve")}>Approve</Button>
+              <Button size="sm" variant="ghost" onClick={() => openDetail(item)}>Detail</Button><Button size="sm" variant="success" onClick={() => openDecision(item, "approve")}>Approve</Button>
               <Button size="sm" onClick={() => openDecision(item, "revision")}>Revisi</Button>
               <Button size="sm" variant="danger" onClick={() => openDecision(item, "reject")}>Reject</Button>
             </div>
@@ -249,6 +285,61 @@ export default function ApprovalsPage() {
           </div>
         )}
       </Modal>
+
+      <Modal
+        open={detailItem !== null}
+        onClose={() => setDetailItem(null)}
+        title={detailItem ? `Detail Approval - ${detailItem.doc_type} #${detailItem.doc_id}` : "Detail Approval"}
+        size="lg"
+      >
+        {detailLoading && <p className="text-sm text-[var(--color-text-muted)]">Memuat detail...</p>}
+        {!detailLoading && detailData && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-lg font-bold">{detailData.doc_type} #{detailData.doc_id}</p>
+              <StatusBadge status={detailData.status} />
+            </div>
+            {detailData.status === "LOAD_ERROR" && (
+              <p role="alert" className="rounded bg-[var(--color-danger-soft)] p-3 text-sm text-[var(--color-danger)]">
+                Gagal memuat detail: {(detailData as unknown as { __error?: string }).__error ?? "unknown"}
+              </p>
+            )}
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Current step</dt><dd className="mt-0.5 font-medium">{detailData.current_step}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Diajukan oleh</dt><dd className="mt-0.5 font-medium">{detailData.submitter?.name ?? "-"}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Waktu pengajuan</dt><dd className="mt-0.5 font-medium">{detailData.submitted_at ? new Date(detailData.submitted_at).toLocaleString("id-ID") : "-"}</dd></div>
+              <div><dt className="text-xs text-[var(--color-text-muted)]">Selesai</dt><dd className="mt-0.5 font-medium">{detailData.completed_at ? new Date(detailData.completed_at).toLocaleString("id-ID") : "-"}</dd></div>
+            </dl>
+            {detailData.flow?.steps && detailData.flow.steps.length > 0 && (
+              <section>
+                <h3 className="text-sm font-semibold">Approval flow</h3>
+                <ul className="mt-1 space-y-1 text-sm text-[var(--color-text-muted)]">
+                  {detailData.flow.steps.map((step, i) => <li key={step.id ?? i}>Step {step.step_no ?? i + 1} - role {roleLabel(step.role)}</li>)}
+                </ul>
+              </section>
+            )}
+            {detailData.stepInstances && detailData.stepInstances.length > 0 && (
+              <section>
+                <h3 className="text-sm font-semibold">Riwayat step</h3>
+                <table className="mt-1 w-full text-sm">
+                  <thead><tr className="border-b text-left text-xs text-[var(--color-text-muted)]"><th className="py-1">Step</th><th className="py-1">Approver</th><th className="py-1">Keputusan</th><th className="py-1">Catatan</th></tr></thead>
+                  <tbody>
+                    {detailData.stepInstances.map((si, i) => (
+                      <tr key={si.id ?? i} className="border-b last:border-0">
+                        <td className="py-1.5">{si.step_no ?? "-"}</td>
+                        <td className="py-1.5">{si.approver_id ?? "-"}</td>
+                        <td className="py-1.5">{si.decision ? <StatusBadge status={si.decision} /> : "menunggu"}</td>
+                        <td className="py-1.5 text-xs text-[var(--color-text-muted)]">{si.note ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 }

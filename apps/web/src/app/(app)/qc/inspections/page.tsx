@@ -46,6 +46,15 @@ export default function QcInspectionsPage() {
     finally { setBusy(false); }
   }
 
+  async function createNcr() {
+    if (!inspection) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      const ncr = await api.post<{ id?: number; doc_no?: string }>(`/qc/inspections/${inspection.id}/ncr`, {});
+      setMessage(`NCR ${ncr.doc_no ?? `#${ncr.id ?? ""}`} dibuat dari inspeksi ${inspection.doc_no} - lanjutkan disposition di menu NCR & Disposition.`);
+    } catch (requestError: any) { setError(requestError.message); }
+    finally { setBusy(false); }
+  }
   async function finalize() {
     if (!inspection) return;
     setBusy(true); setError(null); setMessage(null);
@@ -93,7 +102,7 @@ export default function QcInspectionsPage() {
               <Button variant="primary" onClick={finalize} loading={busy}>{inspection.stage === "FINAL" ? "Finalisasi · Hitung AQL" : "Finalisasi Inspeksi"}</Button>
               {inspection.stage === "FINAL" && <p className="text-xs text-[var(--color-text-muted)]">Verdict dihitung otomatis dari defect terhadap batas Ac/Re.</p>}
             </section>
-          </> : <section className={`rounded-[var(--radius-surface)] border p-4 ${inspection.verdict === "PASS" ? "border-green-200 bg-[var(--color-success-soft)]" : "border-red-200 bg-[var(--color-danger-soft)]"}`}><p className="font-semibold">{inspection.verdict === "PASS" ? "Inspeksi PASS — MO dapat melanjutkan ke packing." : `${inspection.verdict} — lakukan rework lalu buat inspection cycle baru.`}</p><Button className="mt-3" onClick={() => { setInspection(null); setLotQty(""); setMessage(null); }}>Inspeksi Baru</Button></section>}
+          </> : <section className={`rounded-[var(--radius-surface)] border p-4 ${inspection.verdict === "PASS" ? "border-green-200 bg-[var(--color-success-soft)]" : "border-red-200 bg-[var(--color-danger-soft)]"}`}><p className="font-semibold">{inspection.verdict === "PASS" ? "Inspeksi PASS — MO dapat melanjutkan ke packing." : `${inspection.verdict} — lakukan rework lalu buat inspection cycle baru.`}</p>{inspection.verdict === "FAIL" && <Button className="mt-3" variant="danger" loading={busy} onClick={createNcr}>Buat NCR</Button>}<Button className="mt-3" onClick={() => { setInspection(null); setLotQty(""); setMessage(null); }}>Inspeksi Baru</Button></section>}
         </div>
       )}
     </div>
