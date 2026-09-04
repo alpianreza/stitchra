@@ -43,6 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/pd/boms", label: "BOM", icon: "product" },
       { href: "/pd/routings", label: "Routing", icon: "product" },
       { href: "/pd/cost-sheets", label: "Cost Sheet", icon: "finance" },
+      { href: "/pd/samples", label: "Sample Request", icon: "product" },
     ],
   },
   {
@@ -89,6 +90,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/finance/ar-ap", label: "AR / AP", icon: "finance" },
       { href: "/finance/closing", label: "Tutup Buku & FX", icon: "finance" },
+      { href: "/finance/bank-recon", label: "Bank Reconciliation", icon: "finance" },
+      { href: "/finance/valuation", label: "Valuasi Manufaktur", icon: "finance" },
+      { href: "/finance/tax-mappings", label: "Pajak & Mapping", icon: "admin" },
       { href: "/finance/journals", label: "Jurnal", icon: "finance" },
       { href: "/finance/costing", label: "Costing Aktual", icon: "finance" },
       { href: "/finance/costing/valuation", label: "Valuasi Produksi", icon: "finance" },
