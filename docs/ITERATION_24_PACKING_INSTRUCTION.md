@@ -1,6 +1,6 @@
 # Iteration 24 — Packing Instruction from Sales Order
 
-Status: **IMPLEMENTED / STATIC READBACK PENDING / RUNTIME NOT RUN**
+Status: **IMPLEMENTED / STATIC READBACK PASS / RUNTIME NOT RUN**
 
 ## Locked implementation scope
 
@@ -23,10 +23,12 @@ Migration `2026_09_04_000041_add_packing_instructions.php` adds versioned instru
 
 API endpoints expose eligible SOs, active instruction read/create, instruction-aware Packing List creation, carton creation, and finalization using existing packing permissions.
 
+The `/packing/instructions` workbench lets operators select a confirmed/in-progress SO, define SOLID/RATIO/MIXED matrix quantities, review the active version, and publish a new immutable version. Packing pages share navigation between instruction setup and Packing List execution.
+
 ## Deliberate boundary
 
 No Bundle, Finishing Output, FIFO, or piece allocation is created. Traceability remains QC FINAL PASS → Packing Instruction snapshot → Carton matrix → FG receipt.
 
 ## Verification
 
-Runtime migration, Pest, TypeScript, Next build, API/E2E, and concurrency verification are NOT RUN and must not be claimed passed.
+Static readback passed for migration, models, service, controllers, routes, Packing List snapshot relation, workbench, and navigation. Runtime migration, Pest, TypeScript, Next build, API/E2E, and concurrency verification are NOT RUN and must not be claimed passed.

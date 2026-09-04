@@ -21,7 +21,7 @@ class PackingListController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate(['status' => ['nullable', Rule::in(PackingList::STATUSES)], 'per_page' => 'nullable|integer|min:1|max:100']);
-        $query = PackingList::with('salesOrder.customer', 'productionOrder', 'qcInspection')->withCount('cartons');
+        $query = PackingList::with('salesOrder.customer', 'productionOrder', 'qcInspection', 'packingInstruction.lines')->withCount('cartons');
         if (!empty($data['status'])) $query->where('status', $data['status']);
         return response()->json($query->orderByDesc('id')->paginate($data['per_page'] ?? 25));
     }
@@ -88,7 +88,7 @@ class PackingListController extends Controller
     public function show(Request $request, PackingList $packingList): JsonResponse
     {
         return response()->json($packingList->load(
-            'cartons.lines', 'salesOrder.customer', 'productionOrder', 'qcInspection',
+            'cartons.lines', 'salesOrder.customer', 'productionOrder', 'qcInspection', 'packingInstruction.lines',
             'sourceAttachments.qcInspection', 'sourceAttachments.approvalRequest', 'shipment',
         ));
     }
