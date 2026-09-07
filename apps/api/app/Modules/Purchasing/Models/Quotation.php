@@ -9,11 +9,17 @@ use Modules\MasterData\Models\Supplier;
 
 class Quotation extends Model
 {
-    protected $fillable = ['rfq_id', 'supplier_id', 'currency', 'lead_time_days', 'payment_term', 'is_selected'];
+    protected $fillable = [
+        'rfq_id', 'supplier_id', 'currency', 'currency_id', 'exchange_rate', 'base_currency', 'quotation_no',
+        'quoted_date', 'valid_until', 'lead_time_days', 'payment_term', 'is_selected', 'created_by',
+    ];
 
     protected function casts(): array
     {
-        return ['is_selected' => 'boolean'];
+        return [
+            'is_selected' => 'boolean', 'exchange_rate' => 'decimal:12',
+            'quoted_date' => 'date', 'valid_until' => 'date',
+        ];
     }
 
     public function rfq(): BelongsTo

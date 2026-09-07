@@ -38,6 +38,7 @@ class PurchasingService
             foreach ($lines as $line) {
                 $pr->lines()->create($line);
             }
+
             return $pr->load('lines');
         });
     }
@@ -77,7 +78,12 @@ class PurchasingService
             $total = 0.0;
             foreach ($lines as $i => $line) {
                 $total += (float) $line['qty'] * (float) $line['unit_price'];
-                $lines[$i]['line_no'] = $i + 1;
+                // Request arrays must not set received_qty or forge sourcing provenance.
+                $lines[$i] = [
+                    'line_no' => $i + 1, 'material_id' => $line['material_id'],
+                    'qty' => $line['qty'], 'uom_id' => $line['uom_id'], 'unit_price' => $line['unit_price'],
+                    'pr_line_id' => $line['pr_line_id'] ?? null,
+                ];
             }
 
             $po = PurchaseOrder::create([
@@ -96,6 +102,7 @@ class PurchasingService
             foreach ($lines as $line) {
                 $po->lines()->create($line);
             }
+
             return $po->load('lines');
         });
     }

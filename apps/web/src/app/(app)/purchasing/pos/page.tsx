@@ -12,6 +12,7 @@ interface Po {
   order_date: string;
   expected_date: string | null;
   total_amount: string;
+  rfq?: { id: number; doc_no: string } | null;
   supplier?: { name: string };
 }
 interface Page { data: Po[]; total: number }
@@ -115,6 +116,7 @@ export default function PurchaseOrdersPage() {
   const fmt = (value: string) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(Number(value));
   const columns: DataTableColumn<Po>[] = [
     { key: "document", header: "No. PO", cell: (po) => <span className="font-mono font-semibold">{po.doc_no}</span> },
+    { key: "source", header: "Source RFQ", cell: (po) => po.rfq ? <Link className="font-mono text-blue-700 underline" href={`/purchasing/rfqs?rfq=${po.rfq.id}`}>{po.rfq.doc_no}</Link> : "Manual" },
     { key: "supplier", header: "Supplier", cell: (po) => po.supplier?.name ?? "—" },
     { key: "order", header: "Tgl Order", cell: (po) => po.order_date },
     { key: "expected", header: "Ekspektasi", cell: (po) => po.expected_date ?? "—" },

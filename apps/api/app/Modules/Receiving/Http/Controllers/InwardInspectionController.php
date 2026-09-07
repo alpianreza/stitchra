@@ -6,7 +6,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
-use Modules\Core\Services\AuditService;
 use Modules\Core\Support\CurrentCompany;
 use Modules\Receiving\Models\GoodsReceipt;
 use Modules\Receiving\Models\InwardInspection;
@@ -15,7 +14,7 @@ use RuntimeException;
 
 class InwardInspectionController extends Controller
 {
-    public function __construct(private InwardQcService $service, private AuditService $audit) {}
+    public function __construct(private InwardQcService $service) {}
 
     public function store(Request $request, GoodsReceipt $goodsReceipt): JsonResponse
     {
@@ -32,7 +31,7 @@ class InwardInspectionController extends Controller
 
         try {
             $inspection = $this->service->create($companyId, $goodsReceipt, $data['lines'], $request->user());
-            $this->audit->record('create', $inspection, after: $inspection->toArray(), request: $request);
+
             return response()->json($inspection, 201);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
@@ -43,7 +42,7 @@ class InwardInspectionController extends Controller
     {
         try {
             $this->service->finalize($inwardInspection, [], $request->user());
-            $this->audit->record('finalize', $inwardInspection, request: $request);
+
             return response()->json($inwardInspection->fresh('lines'));
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

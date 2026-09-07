@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class QuotationLine extends Model
 {
-    protected $fillable = ['quotation_id', 'material_id', 'qty', 'uom_id', 'unit_price'];
+    protected $fillable = ['quotation_id', 'rfq_line_id', 'material_id', 'qty', 'uom_id', 'unit_price'];
 
     protected function casts(): array
     {
@@ -17,5 +17,10 @@ class QuotationLine extends Model
     public function quotation(): BelongsTo
     {
         return $this->belongsTo(Quotation::class);
+    }
+
+    public function rfqLine(): BelongsTo
+    {
+        return $this->belongsTo(RfqLine::class);
     }
 }

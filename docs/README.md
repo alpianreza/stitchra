@@ -1,8 +1,8 @@
 ---
 title: Stitchra Documentation Index
 status: ACTIVE
-version: 1.1
-last_updated: 2026-09-01
+version: 1.2
+last_updated: 2026-09-07
 authority: GOVERNANCE
 ---
 
@@ -53,6 +53,14 @@ Keputusan dengan tanggal lebih baru dapat menggantikan keputusan lama hanya jika
 - Mengetahui kondisi saat ini: baca [Project Status](./00-governance/PROJECT_STATUS.md).
 - Menelusuri implementasi lampau: buka [Phase History](./04-phases/README.md).
 - Menjalankan repository: baca [root README](../README.md) dan [Containerization Guide](../CONTAINERIZATION.md).
+
+## Recent Backlog Iteration Records
+
+Label Iteration berikut mengikuti backlog kelengkapan operasional; tidak mengganti penomoran Phase atau authority bisnis yang dikunci.
+
+- [Iteration 25 — Delivery Schedule → Shipment Plan](./ITERATION_25_DELIVERY_SCHEDULE_SHIPMENT_PLAN.md)
+- [Iteration 26 — Commercial Invoice, Export Documents & Container](./ITERATION_26_COMMERCIAL_EXPORT_CONTAINER.md)
+- [Iteration 27 — Purchasing & Receiving Completeness](./ITERATION_27_PURCHASING_RECEIVING_COMPLETENESS.md): targeted runtime PASS; full regression belum hijau dan production tetap NO-GO.
 
 ## Governance Rules
 
