@@ -57,3 +57,19 @@ export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
+/** Download private attachments with the same tenant/auth headers as API calls. */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const h = new Headers(headers());
+  h.delete("Content-Type");
+  const res = await fetch(`${API_URL}/api${path}`, { headers: h });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try { const data = await res.json(); message = data.message ?? message; } catch {}
+    throw new Error(message);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; document.body.appendChild(link);
+  link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

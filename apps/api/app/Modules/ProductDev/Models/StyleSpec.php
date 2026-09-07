@@ -8,7 +8,7 @@ use Modules\MasterData\Models\Style;
 
 class StyleSpec extends Model
 {
-    protected $fillable = ['style_id', 'version', 'description', 'construction_notes'];
+    protected $fillable = ['style_id', 'version', 'description', 'construction_notes', 'revision_notes', 'created_by'];
 
     public function style(): BelongsTo
     {

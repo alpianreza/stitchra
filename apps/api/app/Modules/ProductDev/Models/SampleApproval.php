@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SampleApproval extends Model
 {
-    protected $fillable = ['sample_id', 'status', 'comment', 'by_name'];
+    protected $fillable = ['sample_id', 'status', 'comment', 'by_name', 'recorded_by', 'response_reference', 'request_key'];
+
+    protected $hidden = ['request_key'];
 
     public function sample(): BelongsTo
     {

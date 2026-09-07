@@ -2,6 +2,16 @@
 
 Style development: spec, measurement chart, tech pack, sample cycle, BOM/routing versioned, dan pre-production cost sheet.
 
+## Iteration 28 completeness
+
+- Style Spec dan Measurement/Size Spec memiliki read/history/create-new-version endpoints dan UI. Parent-style lock, existing unique version keys, dan `expected_version` menjaga revisi tidak menimpa data lama.
+- Measurement memakai normalized POM × size, unit eksplisit, dan tolerance nullable; unit legacy tidak ditebak.
+- Tech Pack mendukung private binary upload/download, versi baru, hash/MIME/size snapshot, dan upload replay key. File lama tidak ditimpa; metadata legacy yang belum lengkap memerlukan rekonsiliasi.
+- Sample mendukung list/detail/search, source-version references, revisi per stage, dan append-only buyer responses dengan nama buyer, referensi bukti, serta internal recorder. Status baru selalu PENDING.
+- `pd.sample.submit` menjadi permission tunggal untuk endpoint respons buyer existing; pemeriksaan tambahan `pd.sample.update` yang tidak selaras sudah dihapus.
+- MO memilih sample APPROVED secara eksplisit dan memvalidasi ulang respons/versi pada release. Tidak ada hardcoded stage PP, otomatisasi buyer approval, atau PSO definition.
+- Konfigurasi, API mapping, rollout impact, dan batas bisnis: [Iteration 28](../../../../../docs/ITERATION_28_PRODUCT_DEVELOPMENT_COMPLETENESS.md).
+
 ## Endpoint
 
 | Method | Path | Permission | Rule |
@@ -42,4 +52,4 @@ Style development: spec, measurement chart, tech pack, sample cycle, BOM/routing
 
 ## Verification status
 
-Regression tests tersedia untuk versioning, approval rollback, missing material price/rate, matrix mismatch, exact costing formula, dan SO confirmation gate. Hasil belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan dari clean checkout.
+Regression tests existing tersedia untuk versioning, approval rollback, missing material price/rate, matrix mismatch, exact costing formula, dan SO confirmation gate. Iteration 28 hanya source review: migration, PHP lint, test suites, TypeScript, Next build, storage/API/browser runtime, dan concurrency **NOT RUN atas permintaan user**. Tidak ada hasil runtime hijau atau production approval yang diklaim.

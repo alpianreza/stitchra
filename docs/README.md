@@ -1,7 +1,7 @@
 ---
 title: Stitchra Documentation Index
 status: ACTIVE
-version: 1.2
+version: 1.3
 last_updated: 2026-09-07
 authority: GOVERNANCE
 ---
@@ -61,6 +61,7 @@ Label Iteration berikut mengikuti backlog kelengkapan operasional; tidak menggan
 - [Iteration 25 — Delivery Schedule → Shipment Plan](./ITERATION_25_DELIVERY_SCHEDULE_SHIPMENT_PLAN.md)
 - [Iteration 26 — Commercial Invoice, Export Documents & Container](./ITERATION_26_COMMERCIAL_EXPORT_CONTAINER.md)
 - [Iteration 27 — Purchasing & Receiving Completeness](./ITERATION_27_PURCHASING_RECEIVING_COMPLETENESS.md): targeted runtime PASS; full regression belum hijau dan production tetap NO-GO.
+- [Iteration 28 — Product Development Completeness](./ITERATION_28_PRODUCT_DEVELOPMENT_COMPLETENESS.md): implementasi dan source review; seluruh test/runtime/build ditunda atas permintaan user.
 
 ## Governance Rules
 

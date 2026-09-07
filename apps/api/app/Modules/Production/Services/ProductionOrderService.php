@@ -17,7 +17,7 @@ use RuntimeException;
 
 class ProductionOrderService
 {
-    public function __construct(private NumberingService $numbering, private ApprovalEngine $approval, private AuditService $audit, private StandardCostSnapshotService $costSnapshots) {}
+    public function __construct(private NumberingService $numbering, private ApprovalEngine $approval, private AuditService $audit, private StandardCostSnapshotService $costSnapshots, private SampleGateService $sampleGate) {}
 
     public function createFromSalesOrder(SalesOrder $so, User $creator): array
     {
@@ -59,6 +59,7 @@ class ProductionOrderService
             $this->access($user, (int) $locked->company_id);
             if ($locked->status !== 'PLANNED') throw new RuntimeException('Hanya MO PLANNED yang bisa di-release.');
             if ($locked->matrixLines->isNotEmpty() && abs((float) $locked->matrixLines->sum('qty_planned') - (float) $locked->qty_planned) > 0.0001) throw new RuntimeException('BR-020: total matrix MO tidak sama dengan qty planned MO.');
+            $locked = $this->sampleGate->verifyAndSnapshot($locked, $user);
             $locked = $this->costSnapshots->requireForRelease($locked)->load('bomVersion.lines.material');
             if (! DB::table('warehouses')->where('id', $warehouseId)->where('company_id', $locked->company_id)->exists()) throw new RuntimeException('Warehouse tidak ditemukan pada company MO.');
             if (StockReservation::withoutGlobalScopes()->where('mo_id', $locked->id)->whereIn('status', ['ACTIVE', 'PARTIAL_ISSUED'])->exists()) throw new RuntimeException('MO masih memiliki reservasi aktif.');
@@ -93,7 +94,7 @@ class ProductionOrderService
                 'uom_id' => $need['uom_id'], 'qty_required' => $required, 'qty_reserved' => $required, 'qty_issued' => 0,
                 'is_backflush' => $need['is_backflush'], 'backflush_stage' => $need['is_backflush'] ? $need['backflush_stage'] : null]); }
             $locked->update(['status' => 'RELEASED', 'updated_by' => $user->id]);
-            $this->audit->record('update', $locked, after: ['status' => 'RELEASED', 'reservations' => count($plans), 'consumption_policy' => 'BR-066']);
+            $this->audit->record('update', $locked, after: ['status' => 'RELEASED', 'reservations' => count($plans), 'consumption_policy' => 'BR-066', 'sample_gate' => $locked->sample_gate_snapshot]);
             return $locked->fresh('materialAllocations');
         });
     }

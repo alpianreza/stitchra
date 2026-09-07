@@ -9,7 +9,7 @@ use Modules\MasterData\Models\Style;
 
 class MeasurementChart extends Model
 {
-    protected $fillable = ['style_id', 'version'];
+    protected $fillable = ['style_id', 'version', 'unit', 'revision_notes', 'created_by'];
 
     public function style(): BelongsTo
     {
