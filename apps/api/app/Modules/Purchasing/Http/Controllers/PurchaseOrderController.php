@@ -22,14 +22,17 @@ class PurchaseOrderController extends Controller
             'status' => ['nullable', Rule::in(PurchaseOrder::STATUSES)],
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
-        $query = PurchaseOrder::with('supplier');
-        if (! empty($filters['status'])) $query->where('status', $filters['status']);
+        $query = PurchaseOrder::with('supplier', 'rfq:id,doc_no');
+        if (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
         return response()->json($query->orderByDesc('id')->paginate($filters['per_page'] ?? 25));
     }
 
     public function show(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
     {
-        return response()->json($purchaseOrder->load('lines.material', 'supplier'));
+        return response()->json($purchaseOrder->load('lines.material', 'lines.quotationLine', 'supplier', 'rfq', 'quotation'));
     }
 
     public function store(Request $request): JsonResponse
@@ -50,6 +53,7 @@ class PurchaseOrderController extends Controller
         try {
             $po = $this->service->createPo($companyId, $data, $data['lines'], $request->user());
             $this->audit->record('create', $po, after: $po->toArray(), request: $request);
+
             return response()->json($po, 201);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
@@ -61,6 +65,7 @@ class PurchaseOrderController extends Controller
         try {
             $this->service->submitPo($purchaseOrder, $request->user());
             $this->audit->record('submit', $purchaseOrder, request: $request);
+
             return response()->json($purchaseOrder->fresh());
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

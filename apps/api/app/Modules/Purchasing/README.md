@@ -1,6 +1,15 @@
 # Modul Purchasing
 
-Alur purchasing mencakup PR → PO → supplier invoice → 3-way match.
+Alur purchasing mencakup PR opsional → RFQ → supplier quotation → comparison/award manual → PO DRAFT → approval existing → supplier invoice → 3-way match. Pembuatan PO langsung tetap tersedia.
+
+## RFQ & sourcing
+
+- Requirement RFQ disimpan per material/UOM/qty, dengan daftar supplier undangan dan referensi PR APPROVED opsional.
+- Quotation wajib mencakup seluruh requirement; quantity/UOM tidak dapat ditimpa klien. Currency/rate, tanggal/validity, harga, lead time, dan terms disimpan sebagai snapshot.
+- Comparison tidak menentukan auto-winner. Award wajib alasan, source valid, dan permission RFQ update serta PO create.
+- Satu RFQ menghasilkan satu PO DRAFT dari satu quotation. Row lock dan unique source menjaga replay; payload award berbeda ditolak.
+- PO header/line mempertahankan RFQ/quotation/PR lineage. Approval tetap melalui flow PO existing.
+- Legacy quotation dengan snapshot tidak lengkap tidak ditebak. Split award, partial quotation, quote revision, dan cumulative PR allocation tidak ditambahkan.
 
 ## Invariants
 
@@ -21,4 +30,4 @@ Alur purchasing mencakup PR → PO → supplier invoice → 3-way match.
 
 ## Verification status
 
-Regression tests tersedia untuk approval rollback, full/partial receiving, match/mismatch, dan invoice sebelum receipt. Runtime result belum dinyatakan hijau sampai lockfile tersedia dan CI dijalankan.
+Regression tests tersedia untuk approval rollback, full/partial receiving, match/mismatch, dan invoice sebelum receipt. [Iteration 27](../../../../../docs/ITERATION_27_PURCHASING_RECEIVING_COMPLETENESS.md) mencatat 28 targeted backend cases PASS, targeted UI PASS, serta TypeScript/Next build PASS. Full Pest masih 42 kegagalan yang juga muncul pada baseline; bukan global green atau production approval.

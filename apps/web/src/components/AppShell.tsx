@@ -60,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Purchasing",
     items: [
       { href: "/purchasing/prs", label: "Purchase Request", icon: "purchasing" },
+      { href: "/purchasing/rfqs", label: "RFQ & Comparison", icon: "purchasing" },
       { href: "/purchasing/pos", label: "Purchase Order", icon: "purchasing" },
     ],
   },
@@ -68,6 +69,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Receiving",
     items: [
       { href: "/receiving/grs", label: "Goods Receipt", icon: "receiving" },
+      { href: "/receiving/supplier-returns", label: "Supplier Return", icon: "receiving" },
+      { href: "/receiving/putaway", label: "Putaway & Trace Lokasi", icon: "inventory" },
       { href: "/receiving/inspections", label: "Inward QC (FQC)", icon: "quality" },
     ],
   },

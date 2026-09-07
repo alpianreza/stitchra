@@ -4,6 +4,7 @@ namespace Modules\Receiving\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Concerns\BelongsToCompany;
 use Modules\MasterData\Models\Supplier;
 
@@ -12,16 +13,16 @@ class SupplierReturn extends Model
 {
     use BelongsToCompany;
 
-    public const STATUSES = ['DRAFT','SUBMITTED','APPROVED','SHIPPED','CLOSED','CANCELLED'];
+    public const STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'SHIPPED', 'CLOSED', 'CANCELLED'];
 
     protected $fillable = [
         'company_id', 'doc_no', 'goods_receipt_id', 'supplier_id',
-        'reason', 'claim_amount', 'status', 'created_by', 'updated_by',
+        'reason', 'claim_amount', 'status', 'created_by', 'updated_by', 'posted_at',
     ];
 
     protected function casts(): array
     {
-        return ['claim_amount' => 'decimal:4'];
+        return ['claim_amount' => 'decimal:4', 'posted_at' => 'datetime'];
     }
 
     public function goodsReceipt(): BelongsTo
@@ -32,5 +33,10 @@ class SupplierReturn extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function lines(): HasMany
+    {
+        return $this->hasMany(SupplierReturnLine::class);
     }
 }

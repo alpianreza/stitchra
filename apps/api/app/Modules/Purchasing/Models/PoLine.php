@@ -10,7 +10,7 @@ class PoLine extends Model
 {
     protected $fillable = [
         'purchase_order_id', 'line_no', 'material_id', 'qty', 'uom_id',
-        'unit_price', 'received_qty', 'pr_line_id',
+        'unit_price', 'received_qty', 'pr_line_id', 'quotation_line_id',
     ];
 
     protected function casts(): array
@@ -26,5 +26,10 @@ class PoLine extends Model
     public function material(): BelongsTo
     {
         return $this->belongsTo(Material::class);
+    }
+
+    public function quotationLine(): BelongsTo
+    {
+        return $this->belongsTo(QuotationLine::class);
     }
 }

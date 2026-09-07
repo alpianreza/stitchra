@@ -19,6 +19,7 @@ export default function GoodsReceiptsPage() {
   }, []);
   useEffect(load, [load]);
 
+  const operations = (gr: Gr) => <div className="flex flex-wrap gap-2 text-xs"><Link className="text-blue-700 underline" href={`/receiving/inspections?gr=${gr.id}`}>FQC</Link><Link className="text-blue-700 underline" href={`/receiving/putaway?gr=${gr.id}`}>Putaway / trace</Link><Link className="text-blue-700 underline" href={`/receiving/supplier-returns?gr=${gr.id}`}>Supplier return</Link></div>;
   const columns: DataTableColumn<Gr>[] = [
     { key: "document", header: "No. GR", cell: (gr) => <span className="font-mono font-semibold">{gr.doc_no}</span> },
     { key: "po", header: "PO", cell: (gr) => <span className="font-mono">{gr.purchase_order?.doc_no ?? "—"}</span> },
@@ -26,14 +27,14 @@ export default function GoodsReceiptsPage() {
     { key: "received", header: "Tgl Terima", cell: (gr) => gr.received_date },
     { key: "delivery", header: "Surat Jalan", cell: (gr) => gr.delivery_note_no ?? "—" },
     { key: "status", header: "Status", cell: (gr) => <StatusBadge status={gr.status} /> },
-    { key: "action", header: "Aksi", align: "right", cell: (gr) => gr.status === "POSTED" ? <Link href={`/receiving/inspections?gr=${gr.id}`} className="inline-flex min-h-8 items-center rounded-[var(--radius-control)] bg-[var(--color-warning)] px-2.5 text-xs font-medium text-white">Inspeksi FQC</Link> : "—" },
+    { key: "action", header: "Aksi", align: "right", cell: (gr) => gr.status === "POSTED" ? operations(gr) : "—" },
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader eyebrow="Receiving" title="Goods Receipt" description="Pantau penerimaan barang dan antrean inward quality control." actions={<Link href="/receiving/grs/new" className="inline-flex min-h-9 items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">Terima Barang</Link>} />
       <DataTable caption="Daftar goods receipt" columns={columns} rows={page?.data ?? []} getRowKey={(gr) => gr.id} loading={loading} error={error} onRetry={load} emptyTitle="Belum ada goods receipt" emptyDescription="Penerimaan dari purchase order akan muncul di sini." minWidth="900px" mobileCard={(gr) => (
-        <article className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono font-semibold">{gr.doc_no}</p><p className="text-xs text-[var(--color-text-muted)]">PO {gr.purchase_order?.doc_no ?? "—"}</p></div><StatusBadge status={gr.status} /></div><p className="text-sm font-medium">{gr.purchase_order?.supplier?.name ?? "—"}</p><div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]"><span>Diterima {gr.received_date}</span><span>SJ {gr.delivery_note_no ?? "—"}</span></div>{gr.status === "POSTED" && <Link href={`/receiving/inspections?gr=${gr.id}`} className="inline-flex min-h-8 w-full items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-warning)] px-2.5 text-xs font-medium text-white">Mulai Inspeksi FQC</Link>}</article>
+        <article className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono font-semibold">{gr.doc_no}</p><p className="text-xs text-[var(--color-text-muted)]">PO {gr.purchase_order?.doc_no ?? "—"}</p></div><StatusBadge status={gr.status} /></div><p className="text-sm font-medium">{gr.purchase_order?.supplier?.name ?? "—"}</p><div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]"><span>Diterima {gr.received_date}</span><span>SJ {gr.delivery_note_no ?? "—"}</span></div>{gr.status === "POSTED" && <Link href={`/receiving/inspections?gr=${gr.id}`} className="inline-flex min-h-8 w-full items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-warning)] px-2.5 text-xs font-medium text-white">Mulai Inspeksi FQC</Link>}{gr.status === "POSTED" && operations(gr)}</article>
       )} />
     </div>
   );

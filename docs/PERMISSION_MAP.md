@@ -53,6 +53,25 @@
 | `/api/receiving/grs*` | `receiving.gr.view/create` |
 | `/api/receiving/*/inspections` POST / finalize | `receiving.inspection.create` / `receiving.inspection.update` |
 
+### Iteration 27 operational endpoints
+
+Mapping implementasi ke kode permission **existing**; tidak menambah role atau menetapkan approval matrix bisnis baru.
+
+| Endpoint | Permission |
+|---|---|
+| GET `/api/purchasing/rfqs`, `/api/purchasing/rfqs/{rfq}`, `/api/purchasing/sourcing/options` | `purchasing.rfq.view` |
+| POST `/api/purchasing/rfqs` | `purchasing.rfq.create` |
+| POST `/api/purchasing/rfqs/{rfq}/quotations`, `/api/purchasing/rfqs/{rfq}/close` | `purchasing.rfq.update` |
+| POST `/api/purchasing/rfqs/{rfq}/quotations/{quotationId}/award` | **Keduanya:** `purchasing.rfq.update` + `purchasing.po.create`; hasil tetap PO DRAFT |
+| GET `/api/receiving/purchase-orders`, `/api/receiving/purchase-orders/{purchaseOrder}`, `/api/receiving/warehouses`, `/api/receiving/locations` | `receiving.gr.create`; PO lookup tidak mengekspos harga |
+| GET `/api/receiving/inspection-grs`, `/api/receiving/inspection-grs/{goodsReceipt}`, `/api/receiving/inspection-defects` | `receiving.inspection.view` |
+| GET `/api/receiving/grs/{goodsReceipt}/stock-trace` | `receiving.gr.view` |
+| POST `/api/receiving/grs/{goodsReceipt}/supplier-returns`, `/api/receiving/grs/{goodsReceipt}/putaways` | `receiving.gr.create` |
+| POST `/api/receiving/supplier-returns/{supplierReturn}/post`, `/api/receiving/putaways/{putaway}/post` | `receiving.gr.submit` |
+| POST `/api/receiving/supplier-returns/{supplierReturn}/cancel`, `/api/receiving/putaways/{putaway}/cancel` | `receiving.gr.update`; hanya DRAFT |
+
+Semua endpoint tetap `auth:sanctum` dan company-scoped. GR/QC response menyembunyikan harga tanpa `purchasing.po.view`; stock trace dan normalized receiving-line response tidak membuka unit cost. Hak post adalah kontrol posting operasional, bukan bukti maker/checker approval. Detail scope dan batas keputusan: [Iteration 27](./ITERATION_27_PURCHASING_RECEIVING_COMPLETENESS.md).
+
 ## QC / Packing / Shipping / Subcon
 | Endpoint | Permission |
 |---|---|

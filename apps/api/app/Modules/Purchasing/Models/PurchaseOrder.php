@@ -12,12 +12,12 @@ class PurchaseOrder extends Model
 {
     use BelongsToCompany;
 
-    public const STATUSES = ['DRAFT','SUBMITTED','APPROVED','PARTIAL_RECEIVED','RECEIVED','CLOSED','REJECTED','CANCELLED'];
+    public const STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PARTIAL_RECEIVED', 'RECEIVED', 'CLOSED', 'REJECTED', 'CANCELLED'];
 
     protected $fillable = [
         'company_id', 'doc_no', 'supplier_id', 'currency_id', 'exchange_rate',
         'order_date', 'expected_date', 'payment_term', 'total_amount',
-        'status', 'created_by', 'updated_by',
+        'status', 'created_by', 'updated_by', 'rfq_id', 'quotation_id',
     ];
 
     protected function casts(): array
@@ -28,14 +28,33 @@ class PurchaseOrder extends Model
         ];
     }
 
-    public function lines(): HasMany { return $this->hasMany(PoLine::class)->orderBy('line_no'); }
-    public function supplier(): BelongsTo { return $this->belongsTo(Supplier::class); }
+    public function lines(): HasMany
+    {
+        return $this->hasMany(PoLine::class)->orderBy('line_no');
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    public function rfq(): BelongsTo
+    {
+        return $this->belongsTo(Rfq::class);
+    }
+
+    public function quotation(): BelongsTo
+    {
+        return $this->belongsTo(Quotation::class);
+    }
 
     public function refreshReceivingStatus(): void
     {
         $totalOrdered = (float) $this->lines()->sum('qty');
         $totalReceived = (float) $this->lines()->sum('received_qty');
-        if ($totalReceived <= 0) return;
+        if ($totalReceived <= 0) {
+            return;
+        }
         $this->status = $totalReceived >= $totalOrdered ? 'RECEIVED' : 'PARTIAL_RECEIVED';
         $this->save();
     }

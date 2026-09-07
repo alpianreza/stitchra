@@ -22,8 +22,10 @@ class DatabaseSeeder extends Seeder
             ['company_id' => $company->id, 'name' => 'Administrator', 'password' => 'ChangeMe!123', 'is_active' => true]
         );
         $superAdmin = Role::where('code', 'super_admin')->first();
-        if ($superAdmin) $admin->roles()->syncWithoutDetaching([$superAdmin->id]);
-        $prefixes = ['SO','PR','PO','RFQ','GR','FQC','MO','MI','CUT','TRF','WIP','QC','NCR','PL','SHP','JW','OUT','ADJ','OPN','INV','CI','PAY','JE','SMPL','COST'];
+        if ($superAdmin) {
+            $admin->roles()->syncWithoutDetaching([$superAdmin->id]);
+        }
+        $prefixes = ['SO', 'PR', 'PO', 'RFQ', 'GR', 'FQC', 'SR', 'PUT', 'MO', 'MI', 'CUT', 'TRF', 'WIP', 'QC', 'NCR', 'PL', 'SHP', 'JW', 'OUT', 'ADJ', 'OPN', 'INV', 'CI', 'PAY', 'JE', 'SMPL', 'COST'];
         foreach ($prefixes as $prefix) {
             DocNumberingConfig::firstOrCreate(
                 ['company_id' => $company->id, 'doc_type' => $prefix],
