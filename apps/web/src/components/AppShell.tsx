@@ -40,10 +40,11 @@ const NAV_GROUPS: NavGroup[] = [
     id: "product-development",
     label: "Product Development",
     items: [
+      { href: "/pd/styles", label: "Style Spec & Tech Pack", icon: "product" },
       { href: "/pd/boms", label: "BOM", icon: "product" },
       { href: "/pd/routings", label: "Routing", icon: "product" },
       { href: "/pd/cost-sheets", label: "Cost Sheet", icon: "finance" },
-      { href: "/pd/samples", label: "Sample Request", icon: "product" },
+      { href: "/pd/samples", label: "Sample & Buyer Approval", icon: "product" },
     ],
   },
   {

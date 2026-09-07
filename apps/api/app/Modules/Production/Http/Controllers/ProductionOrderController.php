@@ -9,12 +9,13 @@ use Illuminate\Validation\Rule;
 use Modules\Core\Support\CurrentCompany;
 use Modules\Production\Models\ProductionOrder;
 use Modules\Production\Services\ProductionOrderService;
+use Modules\Production\Services\SampleGateService;
 use Modules\Sales\Models\SalesOrder;
 use RuntimeException;
 
 class ProductionOrderController extends Controller
 {
-    public function __construct(private ProductionOrderService $service) {}
+    public function __construct(private ProductionOrderService $service, private SampleGateService $sampleGate) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -80,6 +81,22 @@ class ProductionOrderController extends Controller
             $mos = $this->service->createFromSalesOrder($salesOrder, $request->user());
             return response()->json(['data' => $mos, 'count' => count($mos)], 201);
         });
+    }
+
+    public function sampleGate(Request $request, ProductionOrder $productionOrder): JsonResponse
+    {
+        abort_unless((int) $productionOrder->company_id === CurrentCompany::id(), 404);
+        $data = $request->validate(['q' => 'nullable|string|max:128', 'page' => 'nullable|integer|min:1']);
+        return $this->domainResponse(fn () => response()->json($this->sampleGate->read($productionOrder, $request->user(), $data['q'] ?? null)));
+    }
+
+    public function selectSample(Request $request, ProductionOrder $productionOrder): JsonResponse
+    {
+        abort_unless((int) $productionOrder->company_id === CurrentCompany::id(), 404);
+        $data = $request->validate(['sample_id' => 'present|nullable|integer|min:1']);
+        return $this->domainResponse(fn () => response()->json($this->sampleGate->select(
+            $productionOrder, isset($data['sample_id']) ? (int) $data['sample_id'] : null, $request->user(),
+        )));
     }
 
     public function release(Request $request, ProductionOrder $productionOrder): JsonResponse

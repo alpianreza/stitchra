@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
+import { SampleGatePanel } from "./sample-gate-panel";
 
 interface MoDetail {
   id: number;
@@ -195,6 +196,8 @@ export default function MoDetailPage() {
 
       {error && <pre className="whitespace-pre-wrap rounded bg-red-50 p-3 text-sm text-red-700">{error}</pre>}
       {message && <p role="status" aria-live="polite" className="rounded bg-green-50 p-3 text-sm text-green-700">{message}</p>}
+
+      <SampleGatePanel moId={mo.id} moStatus={mo.status} onSaved={load} />
 
       {/* Aksi release (BR-060) */}
       {(mo.status === "PLANNED" || mo.status === "RELEASED") && (

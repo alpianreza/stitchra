@@ -23,6 +23,27 @@
 | `/api/pd/cost-sheets*` | `pd.costing.view/create/update/submit` |
 | `/api/pd/samples*` | `pd.sample.create/update` |
 
+### Iteration 28 Product Development endpoints
+
+Pemetaan granular berikut memperjelas wildcard historis di atas. Semua route tetap membutuhkan authentication dan company scope; tidak ada permission/role baru.
+
+| Endpoint | Permission |
+|---|---|
+| GET `/api/pd/styles` | Salah satu `pd.style.view`, `pd.sample.view`, `pd.sample.create`, `pd.techpack.view`; lookup metadata saja |
+| GET `/api/pd/sizes`, `/api/pd/styles/{style}/development`, `/api/pd/measurement-charts/{measurementChart}` | `pd.style.view`; daftar Tech Pack dalam workbench juga memerlukan `pd.techpack.view` |
+| POST `/api/pd/styles/{style}/specs`, `/api/pd/styles/{style}/measurements` | `pd.style.update`; membuat versi baru pada style existing |
+| POST `/api/pd/styles/{style}/tech-packs` | `pd.techpack.create` |
+| GET `/api/pd/tech-packs/{techPack}/download` | `pd.techpack.view`; file privat, tenant-scoped |
+| GET `/api/pd/styles/{style}/sample-sources` | `pd.sample.create`; metadata versi, bukan download file |
+| GET `/api/pd/samples`, `/api/pd/samples/{sample}` | `pd.sample.view` |
+| POST `/api/pd/samples` | `pd.sample.create` |
+| POST `/api/pd/samples/{sample}/approvals` | `pd.sample.submit`; mencatat respons buyer, bukan approval internal baru |
+| GET `/api/production/orders/{productionOrder}/sample-gate` | `production.mo.view`; lookup sample terbatas pada style/company MO |
+| POST `/api/production/orders/{productionOrder}/sample` | `production.mo.update`; hanya MO PLANNED |
+| POST `/api/production/orders/{productionOrder}/release` | Existing `production.mo.release`; sekarang juga memvalidasi sample terpilih dan respons APPROVED terbaru |
+
+Detail implementasi dan keputusan yang belum ditetapkan: [Iteration 28](./ITERATION_28_PRODUCT_DEVELOPMENT_COMPLETENESS.md). Test/runtime belum dijalankan atas permintaan user.
+
 ## Planning & Production
 | Endpoint | Permission |
 |---|---|

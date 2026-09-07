@@ -36,6 +36,8 @@ Route::middleware(['auth:sanctum', 'company'])->group(function () {
     Route::get('production/orders/{productionOrder}/output-authority', [ProductionOutputAuthorityController::class, 'show'])->middleware('permission:production.mo.view');
     Route::get('production/orders/{productionOrder}/operational-integrity', [OperationalIntegrityController::class, 'show'])->middleware('permission:production.mo.view');
     Route::post('production/orders/from-so/{salesOrder}', [ProductionOrderController::class, 'createFromSo'])->middleware('permission:production.mo.create');
+    Route::get('production/orders/{productionOrder}/sample-gate', [ProductionOrderController::class, 'sampleGate'])->middleware('permission:production.mo.view');
+    Route::post('production/orders/{productionOrder}/sample', [ProductionOrderController::class, 'selectSample'])->middleware('permission:production.mo.update');
     Route::post('production/orders/{productionOrder}/release', [ProductionOrderController::class, 'release'])->middleware('permission:production.mo.release');
     Route::post('production/orders/{productionOrder}/unrelease', [ProductionOrderController::class, 'unrelease'])->middleware('permission:production.mo.update');
 });

@@ -68,3 +68,12 @@ MO menyimpan snapshot BOM/routing dan release menghasilkan hard reservation.
 Feature tests Iteration 16 disiapkan untuk active-company/warehouse blocking, ITS identical/divergent replay, no duplicate movement/ledger/balance mutation, inactive-company Journal blocking, dan GL identical/divergent retry. Existing tenant, permission, lifecycle, quantity, Marker/Lay, `qty_produced`, QC/Packing, FG/Shipment, GR posting, period, reversal, Actual Cost, valuation boundary, dan lineage suites tetap menjadi regression coverage.
 
 Tests: **PREPARED**. Runtime tetap **DEFERRED — FINAL VERIFICATION PHASE**; jangan klaim PASS sebelum fase verifikasi final.
+
+
+## Iteration 28 — explicit sample gate
+
+- MO PLANNED memilih sample APPROVED dari style/company yang sama melalui endpoint `/production/orders/{id}/sample` (`production.mo.update`).
+- Release existing memvalidasi sample terpilih, latest response APPROVED, serta latest unambiguous version pada stage tersebut sebelum costing/reservation. Tidak ada auto-pick atau hardcoded PP-only policy.
+- Release menyimpan sample/approval evidence dalam snapshot dan audit. Pilihan pada MO berjalan tidak dapat diubah; setelah unrelease yang sah, reselection menyimpan evidence sebelumnya di audit.
+- MO yang sudah berjalan tidak di-backfill atau diubah otomatis. PLANNED legacy wajib diberi pilihan sample sebelum release berikutnya.
+- **Runtime/test/build NOT RUN atas permintaan user.** Hasil test Iteration 27 tidak memverifikasi prerequisite baru ini. Detail dan keputusan stage yang masih terbuka: [Iteration 28](../../../../../docs/ITERATION_28_PRODUCT_DEVELOPMENT_COMPLETENESS.md).
